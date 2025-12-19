@@ -49,6 +49,7 @@ export default function FoodRecognitionScreen() {
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   // 1. 自動圖片分析
   useEffect(() => {
@@ -59,7 +60,7 @@ export default function FoodRecognitionScreen() {
         const result = await analyzeFoodImage(imageUri);
         processResult(result);
       } catch (e) {
-        Alert.alert("錯誤", "圖片分析失敗");
+        Alert.alert("錯誤", "圖片分析失敗，請檢查網路或 API Key");
         setMode('MANUAL');
       } finally {
         setIsAnalyzing(false);
@@ -121,10 +122,24 @@ export default function FoodRecognitionScreen() {
     }
   };
 
+  // 輸入框組件
+  const InputField = ({ label, value, onChange, isNum = false }: any) => (
+    <View style={{marginBottom: 12}}>
+      <ThemedText style={{fontSize: 12, color: textSecondary, marginBottom: 4}}>{label}</ThemedText>
+      <TextInput 
+        style={[styles.input, {color: textColor, borderColor: '#ccc', backgroundColor: cardBackground}]}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={isNum ? 'numeric' : 'default'}
+        editable={mode === 'MANUAL'} // 只有手動模式可以編輯
+      />
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20), backgroundColor: cardBackground }]}>
-        <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
+        <Pressable onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
         <ThemedText type="subtitle">食物確認</ThemedText>
         <View style={{ width: 24 }} />
       </View>
@@ -134,20 +149,25 @@ export default function FoodRecognitionScreen() {
 
         <View style={{ padding: 16 }}>
           {/* 狀態與文字分析按鈕 */}
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
              {isAnalyzing ? (
-               <ActivityIndicator color={tintColor} />
+               <View style={{flexDirection: 'row', alignItems: 'center'}}><ActivityIndicator size="small" color={tintColor}/><ThemedText style={{marginLeft: 8}}>AI 分析中...</ThemedText></View>
              ) : (
-               <Pressable onPress={() => setMode(m => m === 'AI' ? 'MANUAL' : 'AI')} style={[styles.btnSmall, {borderColor: tintColor}]}>
-                 <ThemedText style={{color: tintColor}}>{mode === 'AI' ? '切換手動' : '返回 AI'}</ThemedText>
-               </Pressable>
+               <View>
+                 <ThemedText type="subtitle">{mode === 'AI' ? 'AI 分析結果' : '手動輸入模式'}</ThemedText>
+                 {mode === 'AI' && formData.detectedObject && <Text style={{fontSize: 10, color: '#888'}}>偵測到: {formData.detectedObject}</Text>}
+               </View>
              )}
-             {mode === 'MANUAL' && (
-               <Pressable onPress={handleTextAnalyze} style={[styles.btnSmall, {backgroundColor: tintColor}]}>
-                 <ThemedText style={{color: 'white'}}>AI 估算</ThemedText>
-               </Pressable>
-             )}
+             <Pressable onPress={() => setMode(m => m === 'AI' ? 'MANUAL' : 'AI')} style={[styles.modeBtn, {borderColor: tintColor}]}>
+               <ThemedText style={{color: tintColor, fontSize: 12}}>{mode === 'AI' ? '切換手動輸入' : '返回 AI 模式'}</ThemedText>
+             </Pressable>
           </View>
+
+          {mode === 'MANUAL' && (
+             <Pressable onPress={handleTextAnalyze} style={[styles.btn, {backgroundColor: tintColor, marginBottom: 16}]}>
+               <ThemedText style={{color: 'white'}}>以「食物名稱」讓 AI 估算</ThemedText>
+             </Pressable>
+          )}
 
           {/* 餐別 */}
           <View style={[styles.card, { backgroundColor: cardBackground }]}>
@@ -162,14 +182,9 @@ export default function FoodRecognitionScreen() {
 
           {/* 表單 */}
           <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
-            <ThemedText style={styles.label}>食物名稱</ThemedText>
-            <TextInput 
-              style={[styles.input, {color: textColor, backgroundColor: 'white'}]}
-              value={formData.foodName}
-              onChangeText={(t) => setFormData({...formData, foodName: t})}
-            />
+            <InputField label="食物名稱" value={formData.foodName} onChange={(t:string) => setFormData({...formData, foodName: t})} />
             
-            <View style={{flexDirection: 'row', gap: 12, marginTop: 12}}>
+            <View style={{flexDirection: 'row', gap: 12}}>
               <View style={{flex: 1}}><NumberInput label="熱量 (kcal)" value={formData.calories} onChange={(t) => setFormData({...formData, calories: t})} step={10} /></View>
               <View style={{flex: 1}}><NumberInput label="蛋白質 (g)" value={formData.protein} onChange={(t) => setFormData({...formData, protein: t})} /></View>
             </View>
@@ -185,7 +200,7 @@ export default function FoodRecognitionScreen() {
 
       <View style={{ padding: 16, backgroundColor: cardBackground }}>
         <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: tintColor }]}>
-          <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>儲存</ThemedText>
+          <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>確認並儲存</ThemedText>
         </Pressable>
       </View>
     </View>
@@ -194,12 +209,13 @@ export default function FoodRecognitionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   image: { width: '100%', height: 200 },
   card: { padding: 16, borderRadius: 12 },
-  btnSmall: { padding: 8, borderRadius: 8, borderWidth: 1, minWidth: 80, alignItems: 'center' },
-  chip: { padding: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
+  modeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, fontSize: 16 },
-  label: { fontSize: 12, color: '#666', marginBottom: 4 },
+  btnSmall: { padding: 8, borderRadius: 8, borderWidth: 1, minWidth: 80, alignItems: 'center' },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center' }
 });

@@ -8,9 +8,13 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { getDailySummaryLocal, getProfileLocal } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 
-// 設定通知行為
+// 設定通知行為 (在 App 前景時也顯示通知)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
 });
 
 export default function RecipesScreen() {
@@ -41,12 +45,15 @@ export default function RecipesScreen() {
   const handleGenerate = async () => {
     // 請求通知權限
     const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert("提醒", "請開啟通知權限以接收 AI 分析結果");
+    }
     
     setLoading(true);
     setResult(null);
-    Alert.alert("AI 分析中", "您可以稍後再回來查看結果。");
+    Alert.alert("AI 分析中", "您可以稍後再回來查看結果，完成後會發送通知。");
 
-    // 模擬背景執行 (避免畫面卡住)
+    // 模擬背景執行 (避免畫面卡住，這裡用 setTimeout 讓出主執行緒)
     setTimeout(async () => {
        try {
          let res;
@@ -61,13 +68,16 @@ export default function RecipesScreen() {
          
          if (status === 'granted') {
            await Notifications.scheduleNotificationAsync({
-             content: { title: "AI 教練通知", body: "您的建議已生成完畢！" },
-             trigger: null,
+             content: { 
+               title: "AI 教練通知", 
+               body: activeTab === 'RECIPE' ? "您的飲食建議已生成！" : "您的運動建議已生成！" 
+             },
+             trigger: null, // 立即發送
            });
          }
        } catch (e) {
          setLoading(false);
-         Alert.alert("生成失敗", "請檢查網路連線");
+         Alert.alert("生成失敗", "AI 連線逾時，請檢查網路");
        }
     }, 100);
   };
@@ -93,15 +103,28 @@ export default function RecipesScreen() {
           </Pressable>
 
           {result && (
-             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20}]}>
+             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20, marginBottom: 40}]}>
                 <ThemedText type="title">{activeTab==='RECIPE' ? result.title : result.activity}</ThemedText>
                 <ThemedText style={{marginTop: 8}}>
                    {activeTab==='RECIPE' ? `🔥 熱量: ${result.calories} kcal` : `⏱️ 時間: ${result.duration_minutes} 分鐘 (-${result.estimated_calories} kcal)`}
                 </ThemedText>
+                
                 <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 建議原因：</ThemedText>
                 <ThemedText>{result.reason}</ThemedText>
-                {/* 如果是食譜，顯示步驟 */}
-                {result.steps && result.steps.map((s:string, i:number) => <ThemedText key={i} style={{fontSize:12, marginTop:4}}>{i+1}. {s}</ThemedText>)}
+                
+                {/* 如果是食譜，顯示食材與步驟 */}
+                {activeTab === 'RECIPE' && (
+                  <>
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 食材：</ThemedText>
+                    {result.ingredients?.map((item: string, i: number) => (
+                      <ThemedText key={i}>• {item}</ThemedText>
+                    ))}
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 步驟：</ThemedText>
+                    {result.steps?.map((step: string, i: number) => (
+                      <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>
+                    ))}
+                  </>
+                )}
              </View>
           )}
        </ScrollView>

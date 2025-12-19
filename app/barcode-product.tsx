@@ -8,8 +8,20 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveFoodLogLocal } from "@/lib/storage";
 import { NumberInput } from "@/components/NumberInput";
 
-// ... (餐別邏輯與上面相同，省略重複部分) ...
-const getMealTypeByTime = () => { /* ...略... */ return 'snack'; };
+// 餐別邏輯
+const MEAL_OPTIONS = [
+  { k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, { k: 'snack', l: '點心' },
+  { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }
+];
+
+const getMealTypeByTime = () => {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11) return 'breakfast';
+  if (h >= 11 && h < 14) return 'lunch';
+  if (h >= 14 && h < 17) return 'snack';
+  if (h >= 17 && h < 21) return 'dinner';
+  return 'late_night';
+};
 
 export default function BarcodeProductScreen() {
   const router = useRouter();
@@ -22,6 +34,7 @@ export default function BarcodeProductScreen() {
   const [inputMode, setInputMode] = useState<'serving' | 'gram'>('serving');
   const [amount, setAmount] = useState("1"); // 份數
   const [gramAmount, setGramAmount] = useState("100"); // 克數
+  const [mealType, setMealType] = useState(getMealTypeByTime());
 
   // 商品基本資料 (可編輯)
   const [product, setProduct] = useState({
@@ -37,19 +50,26 @@ export default function BarcodeProductScreen() {
   const textColor = useThemeColor({}, "text");
 
   useEffect(() => {
-    async function fetch() {
+    async function fetchProduct() {
+      // [修正] 確保 barcode 是字串
+      const barcodeStr = String(params.barcode);
+      if (!barcodeStr) return;
+
       try {
-        const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${params.barcode}.json`);
+        const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcodeStr}.json`);
         const data = await res.json();
-        if (data.status === 1) {
+        
+        if (data.status === 1 && data.product) {
            const p = data.product;
-           const n = p.nutriments;
+           const n = p.nutriments || {}; // [修正] 加上空值保護
+           
            let w = 100;
-           const match = (p.serving_size || "").match(/(\d+)/);
+           // 嘗試解析 "30 g" 或 "30g" 這樣的字串
+           const match = (p.serving_size || "").match(/(\d+(\.\d+)?)/);
            if (match) w = parseFloat(match[0]);
 
            setProduct({
-             name: p.product_name || "",
+             name: p.product_name || "未知商品",
              brand: p.brands || "",
              stdWeight: w,
              cal: (n["energy-kcal_100g"] || 0).toString(),
@@ -64,11 +84,13 @@ export default function BarcodeProductScreen() {
         }
       } catch (e) {
         setNotFound(true);
+        setProduct(prev => ({...prev, name: "網路錯誤(請輸入)"}));
       } finally {
-        isLoading(false);
+        // [修正] 原本寫成 isLoading(false)，這是錯的，因為 isLoading 是布林值
+        setIsLoading(false); 
       }
     }
-    fetch();
+    fetchProduct();
   }, [params.barcode]);
 
   // 連動計算：份數 <-> 克數
@@ -96,7 +118,7 @@ export default function BarcodeProductScreen() {
   const handleSave = async () => {
     const final = getFinalValues();
     await saveFoodLogLocal({
-      mealType: "snack",
+      mealType,
       foodName: product.name,
       totalCalories: final.cal,
       totalProteinG: final.pro,
@@ -107,16 +129,16 @@ export default function BarcodeProductScreen() {
     router.back(); router.back();
   };
 
-  if (isLoading) return <View style={[styles.container, {backgroundColor, justifyContent:'center'}]}><ActivityIndicator size="large"/></View>;
+  if (isLoading) return <View style={[styles.container, {backgroundColor, justifyContent:'center'}]}><ActivityIndicator size="large" color={tintColor}/></View>;
 
   const final = getFinalValues();
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20), backgroundColor: cardBackground }]}>
-         <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
+         <Pressable onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
          <ThemedText type="subtitle">產品資訊</ThemedText>
-         <View style={{width: 24}}/>
+         <View style={{width: 40}}/>
       </View>
 
       <ScrollView style={{padding: 16}}>
@@ -129,6 +151,25 @@ export default function BarcodeProductScreen() {
               onChangeText={t => setProduct({...product, name: t})}
               editable={notFound}
             />
+            <ThemedText style={{fontSize: 12, color: '#666', marginTop: 8}}>品牌</ThemedText>
+            <TextInput 
+              style={[styles.input, {color: textColor, backgroundColor: 'white'}]} 
+              value={product.brand} 
+              onChangeText={t => setProduct({...product, brand: t})}
+              editable={notFound}
+            />
+         </View>
+
+         {/* 餐別選擇 */}
+         <View style={[styles.card, { backgroundColor: cardBackground }]}>
+            <ThemedText style={{marginBottom: 8, fontSize: 12, color: '#666'}}>用餐時段</ThemedText>
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+              {MEAL_OPTIONS.map(opt => (
+                <Pressable key={opt.k} onPress={() => setMealType(opt.k)} style={[styles.chip, mealType === opt.k && {backgroundColor: tintColor, borderColor: tintColor}]}>
+                  <ThemedText style={mealType === opt.k ? {color: 'white'} : {color: textColor}}>{opt.l}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
          </View>
 
          {/* 份量切換 */}
@@ -165,7 +206,7 @@ export default function BarcodeProductScreen() {
       </ScrollView>
 
       <View style={{padding: 16}}>
-         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>確認加入</ThemedText></Pressable>
+         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white', fontWeight:'bold'}}>確認加入</ThemedText></Pressable>
       </View>
     </View>
   );
@@ -173,8 +214,10 @@ export default function BarcodeProductScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   card: { padding: 16, borderRadius: 12, marginBottom: 16 },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 8, fontSize: 16, marginTop: 4 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center' }
 });
