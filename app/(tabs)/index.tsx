@@ -1,9 +1,10 @@
 import { useRouter, useFocusEffect } from "expo-router";
 import { useState, useCallback } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { ProgressRing } from "@/components/progress-ring";
 import { ThemedText } from "@/components/themed-text";
@@ -30,7 +31,11 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [frequentItems, setFrequentItems] = useState<any[]>([]);
 
-  // 運動 Modal
+  // 日期狀態
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  // 運動 Modal 狀態
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [actType, setActType] = useState(WORKOUT_TYPES[0]);
@@ -39,7 +44,7 @@ export default function HomeScreen() {
   const [dist, setDist] = useState("0");
   const [estCal, setEstCal] = useState(0);
 
-  // 飲食 Modal
+  // 飲食編輯 Modal 狀態
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editName, setEditName] = useState("");
@@ -54,11 +59,12 @@ export default function HomeScreen() {
     const p = await getProfileLocal();
     setProfile(p);
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
-    const s = await getDailySummaryLocal();
+    // 傳入選擇的日期
+    const s = await getDailySummaryLocal(selectedDate);
     setSummary(s);
     const f = await getFrequentFoodItems();
     setFrequentItems(f);
-  }, []);
+  }, [selectedDate]);
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
@@ -76,12 +82,24 @@ export default function HomeScreen() {
     }
   }, [actType, duration, steps, dist, modalVisible]));
 
+  // 日期操作
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) setSelectedDate(date);
+  };
+  const changeDate = (days: number) => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(selectedDate.getDate() + days);
+    setSelectedDate(newDate);
+  };
+
   // 儲存/更新運動
   const handleSaveWorkout = async () => {
     const newLog = {
       activityType: actType,
       caloriesBurned: estCal,
-      details: `${duration}分 / ${steps}步 / ${dist}km`
+      details: `${duration}分 / ${steps}步 / ${dist}km`,
+      loggedAt: selectedDate.toISOString() // 儲存至當前選擇日期
     };
 
     if (editingWorkout) {
@@ -94,6 +112,7 @@ export default function HomeScreen() {
     loadData();
   };
 
+  // 開啟運動編輯
   const handleEditWorkout = (log: any) => {
     setEditingWorkout(log);
     setActType(log.activityType);
@@ -104,6 +123,7 @@ export default function HomeScreen() {
     setModalVisible(true);
   };
 
+  // 開啟飲食編輯
   const handleEditFood = (log: any) => {
     setEditingLog(log);
     setEditName(log.foodName);
@@ -124,19 +144,21 @@ export default function HomeScreen() {
     Alert.alert("快速紀錄", `再吃一次「${item.foodName}」？`, [
       { text: "取消", style: "cancel" },
       { text: "確定", onPress: async () => {
-          await saveFoodLogLocal({ ...item, id: undefined, loggedAt: undefined });
+          await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() });
           loadData();
         } 
       }
     ]);
   };
 
+  // Swipeable 按鈕元件
   const renderRightActions = (id: number, type: 'food'|'activity') => (
     <Pressable onPress={async () => { 
         if(type==='food') await deleteFoodLogLocal(id); 
         else await deleteActivityLogLocal(id); 
         loadData(); 
-      }} style={styles.deleteBtn}>
+      }} 
+      style={styles.deleteBtn}>
       <Ionicons name="trash" size={24} color="white" />
       <ThemedText style={{color:'white', fontSize:12}}>刪除</ThemedText>
     </Pressable>
@@ -159,7 +181,19 @@ export default function HomeScreen() {
              <ThemedText type="title" style={{fontSize: 32}}>今日概覽</ThemedText>
           </View>
 
-          <View style={[styles.progressSection, { backgroundColor: cardBackground }]}>
+          {/* 日期導航欄 */}
+          <View style={[styles.dateNav, {backgroundColor: cardBackground}]}>
+             <Pressable onPress={() => changeDate(-1)} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
+             <Pressable onPress={() => setShowDatePicker(true)}>
+               <ThemedText type="subtitle">{selectedDate.toISOString().split('T')[0]}</ThemedText>
+             </Pressable>
+             <Pressable onPress={() => changeDate(1)} style={styles.dateBtn}><Ionicons name="chevron-forward" size={24} color={tintColor}/></Pressable>
+          </View>
+          {showDatePicker && (
+            <DateTimePicker value={selectedDate} mode="date" display="default" onChange={handleDateChange} />
+          )}
+
+          <View style={[styles.progressSection, { backgroundColor: cardBackground, marginTop: 10 }]}>
             <ProgressRing progress={targetCalories>0?net/targetCalories:0} current={net} target={targetCalories} size={200} />
             <View style={{flexDirection:'row', gap:20, marginTop:10}}>
                <ThemedText style={{fontSize:12, color:textSecondary}}>攝取 {summary?.totalCaloriesIn}</ThemedText>
@@ -167,6 +201,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* 常用項目 */}
           {frequentItems.length > 0 && (
             <View style={{marginBottom: 16}}>
               <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>常用項目</ThemedText>
@@ -187,6 +222,7 @@ export default function HomeScreen() {
             <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
           </View>
 
+          {/* 飲食列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (右滑編輯 / 左滑刪除)</ThemedText>
             {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
@@ -200,6 +236,7 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          {/* 運動列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (右滑編輯 / 左滑刪除)</ThemedText>
             {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
@@ -243,7 +280,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 飲食 Modal */}
+        {/* 飲食編輯 Modal */}
         <Modal visible={editModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -269,6 +306,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 20 },
+  dateNav: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, marginHorizontal: 20, borderRadius: 12 },
+  dateBtn: { padding: 10, marginHorizontal: 20 },
   progressSection: { alignItems: 'center', padding: 20, margin: 16, borderRadius: 20 },
   quickActions: { flexDirection: "row", padding: 16, gap: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },

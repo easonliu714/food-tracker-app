@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert } from "react-native";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking } from "react-native"; // [新增] Linking
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
@@ -8,13 +8,8 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { getDailySummaryLocal, getProfileLocal } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 
-// 設定通知行為 (在 App 前景時也顯示通知)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
 });
 
 export default function RecipesScreen() {
@@ -29,7 +24,6 @@ export default function RecipesScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
 
-  // 同步資料
   useFocusEffect(useCallback(() => {
     async function syncData() {
        const p = await getProfileLocal();
@@ -43,17 +37,11 @@ export default function RecipesScreen() {
   }, []));
 
   const handleGenerate = async () => {
-    // 請求通知權限
     const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert("提醒", "請開啟通知權限以接收 AI 分析結果");
-    }
     
     setLoading(true);
     setResult(null);
-    Alert.alert("AI 分析中", "您可以稍後再回來查看結果，完成後會發送通知。");
-
-    // 模擬背景執行 (避免畫面卡住，這裡用 setTimeout 讓出主執行緒)
+    
     setTimeout(async () => {
        try {
          let res;
@@ -63,23 +51,30 @@ export default function RecipesScreen() {
             res = await suggestWorkout(profile, remaining);
          }
          
-         setResult(res);
-         setLoading(false);
-         
-         if (status === 'granted') {
-           await Notifications.scheduleNotificationAsync({
-             content: { 
-               title: "AI 教練通知", 
-               body: activeTab === 'RECIPE' ? "您的飲食建議已生成！" : "您的運動建議已生成！" 
-             },
-             trigger: null, // 立即發送
-           });
+         // [修正] 檢查 res 是否為 null
+         if (res) {
+           setResult(res);
+           if (status === 'granted') {
+             await Notifications.scheduleNotificationAsync({
+               content: { title: "AI 教練通知", body: "分析完成！" },
+               trigger: null,
+             });
+           }
+         } else {
+           Alert.alert("分析失敗", "AI 暫無回應，請稍後再試");
          }
        } catch (e) {
+         Alert.alert("錯誤", "發生未知錯誤");
+       } finally {
          setLoading(false);
-         Alert.alert("生成失敗", "AI 連線逾時，請檢查網路");
        }
     }, 100);
+  };
+
+  const openVideo = () => {
+    if (result?.video_url) {
+      Linking.openURL(result.video_url);
+    }
   };
 
   return (
@@ -105,6 +100,14 @@ export default function RecipesScreen() {
           {result && (
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20, marginBottom: 40}]}>
                 <ThemedText type="title">{activeTab==='RECIPE' ? result.title : result.activity}</ThemedText>
+                
+                {/* 運動影片連結 */}
+                {activeTab === 'WORKOUT' && result.video_url && (
+                  <Pressable onPress={openVideo} style={{marginVertical: 10}}>
+                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 觀看教學影片</ThemedText>
+                  </Pressable>
+                )}
+
                 <ThemedText style={{marginTop: 8}}>
                    {activeTab==='RECIPE' ? `🔥 熱量: ${result.calories} kcal` : `⏱️ 時間: ${result.duration_minutes} 分鐘 (-${result.estimated_calories} kcal)`}
                 </ThemedText>
@@ -112,17 +115,12 @@ export default function RecipesScreen() {
                 <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 建議原因：</ThemedText>
                 <ThemedText>{result.reason}</ThemedText>
                 
-                {/* 如果是食譜，顯示食材與步驟 */}
                 {activeTab === 'RECIPE' && (
                   <>
                     <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 食材：</ThemedText>
-                    {result.ingredients?.map((item: string, i: number) => (
-                      <ThemedText key={i}>• {item}</ThemedText>
-                    ))}
+                    {result.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
                     <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 步驟：</ThemedText>
-                    {result.steps?.map((step: string, i: number) => (
-                      <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>
-                    ))}
+                    {result.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
                   </>
                 )}
              </View>
