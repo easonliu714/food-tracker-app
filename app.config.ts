@@ -1,21 +1,13 @@
-// Load environment variables with proper priority (system > .env)
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
 
-// Bundle ID format: space.manus.<project_name_dots>.<timestamp>
-// e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
 const bundleId = "space.manus.nutrition_tracker.t20251217000540";
-// Extract timestamp from bundle ID and prefix with "manus" for deep link scheme
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  // App branding - update these values directly (do not use env vars)
   appName: '營養追蹤',
   appSlug: 'nutrition_tracker',
-  // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
-  // Leave empty to use the default icon from assets/images/icon.png
   logoUrl: 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663249409721/lBYRAahQjSJDLaqW.png',
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
@@ -25,19 +17,12 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.0",
+  version: "1.0.1", // [修改] 版本號升級
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
-  // ▼▼▼ 請新增這段 extra 設定 (包含您日誌中的 Project ID) ▼▼▼
-  extra: {
-    eas: {
-      projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2"
-    }
-  },
-  // ▲▲▲ 新增到這裡 ▲▲▲
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
@@ -55,6 +40,7 @@ const config: ExpoConfig = {
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
+    versionCode: 2, // [修改] Android 版本代碼升級
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
@@ -111,6 +97,11 @@ const config: ExpoConfig = {
       },
     ],
   ],
+  extra: {
+    eas: {
+      projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2"
+    }
+  },
   experiments: {
     typedRoutes: true,
     reactCompiler: true,
