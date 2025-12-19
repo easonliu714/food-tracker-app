@@ -4,12 +4,11 @@ import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
 // ⚠️ 請填入您的 API Key
 const API_KEY = "AIzaSyDpGgc9felzsoqEsx9iBKig3DLSnE5l8_E"; 
-
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export interface FoodAnalysisResult {
   foodName: string;
-  detectedObject: string; // 新增：AI 看到的物件
+  detectedObject: string;
   calories: number;
   macros: {
     protein: number;
@@ -34,27 +33,20 @@ export interface WorkoutResult {
   reason: string;
 }
 
-/// 1. 分析食物 (升級版)
+// 1. 分析食物圖片
 export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisResult | null> {
   try {
-    console.log("開始處理圖片...", imageUri);
-    // 1. 壓縮與轉檔：縮小到寬度 800px，轉成 JPEG，品質 0.7
     const manipulatedImage = await manipulateAsync(
       imageUri,
       [{ resize: { width: 800 } }],
       { compress: 0.7, format: SaveFormat.JPEG, base64: true }
     );
     
-    if (!manipulatedImage.base64) throw new Error("圖片處理失敗");
-    console.log("圖片處理完成，開始呼叫 AI...");
-
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    
-    // 修改提示詞：要求回傳 detectedObject
     const prompt = `
       Analyze this food image. Return ONLY a JSON object (no markdown) with this structure:
       {
-        "foodName": "string (Traditional Chinese, e.g. 紅燒牛肉麵)",
+        "foodName": "string (Traditional Chinese)",
         "detectedObject": "string (What main object did you see?)",
         "calories": number (estimated total),
         "macros": { "protein": number, "carbs": number, "fat": number },
@@ -65,75 +57,105 @@ export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisRe
 
     const result = await model.generateContent([
       prompt,
-      { inlineData: { data: manipulatedImage.base64, mimeType: "image/jpeg" } }
+      { inlineData: { data: manipulatedImage.base64 || "", mimeType: "image/jpeg" } }
     ]);
     
-    console.log("AI 回應:", result.response.text());
-
-    const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
-
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    // 可以回傳一個特殊的錯誤物件讓 UI 知道
-    return {
-      foodName: "分析失敗",
-      detectedObject: "Error",
-      calories: 0, macros: { protein: 0, carbs: 0, fat: 0 },
-      suggestion: "請檢查網路或稍後再試。亦可切換至手動輸入模式。"
-    };
-  }
-}
-
-// 2. 食譜建議
-export async function suggestRecipe(remainingCalories: number, type: 'STORE' | 'COOKING'): Promise<RecipeResult | null> {
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-      Suggest a ${type === 'STORE' ? 'Taiwan convenience store combo (7-11/FamilyMart)' : 'simple home-cooked meal'} 
-      for a user with ${remainingCalories} kcal budget.
-      Return ONLY a JSON object (no markdown) with this structure:
-      {
-        "title": "string (Traditional Chinese)",
-        "calories": number,
-        "ingredients": ["string"],
-        "steps": ["string"],
-        "reason": "string (why this fits)"
-      }
-    `;
-    const result = await model.generateContent(prompt);
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Recipe Generation Error:", error);
+    console.error("Gemini Image Analysis Error:", error);
     return null;
   }
 }
 
-// 3. 運動建議 (New)
-export async function suggestWorkout(userProfile: any, remainingCalories: number, currentTime: Date): Promise<WorkoutResult | null> {
+// 2. 分析食物文字 (新增)
+export async function analyzeFoodText(foodName: string): Promise<FoodAnalysisResult | null> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const hour = currentTime.getHours();
-    const timeDesc = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-    
     const prompt = `
-      Suggest a workout activity for a user in Taiwan.
-      Context: Time is ${timeDesc} (${hour}:00), Goal: ${userProfile?.goal || 'stay healthy'}, Remaining Calories today: ${remainingCalories}.
-      Current weight: ${userProfile?.currentWeightKg || 70}kg.
-      Return ONLY a JSON object (no markdown) with:
+      Estimate nutrition for "${foodName}". Return ONLY a JSON object (no markdown) with:
       {
-        "activity": "string (Traditional Chinese, e.g., Jogging, Yoga)",
-        "duration_minutes": number,
-        "estimated_calories": number,
-        "reason": "string (Traditional Chinese, why this fits)"
+        "foodName": "${foodName}",
+        "detectedObject": "Text Input",
+        "calories": number (estimated per serving),
+        "macros": { "protein": number, "carbs": number, "fat": number },
+        "suggestion": "string (short health advice in Traditional Chinese)"
       }
     `;
     const result = await model.generateContent(prompt);
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Workout Suggestion Error:", error);
+    console.error("Gemini Text Analysis Error:", error);
+    return null;
+  }
+}
+
+// 3. 食譜建議
+export async function suggestRecipe(remainingCalories: number, type: 'STORE' | 'COOKING'): Promise<RecipeResult | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `
+      Suggest a ${type === 'STORE' ? 'Taiwan convenience store combo' : 'simple home-cooked meal'} 
+      for a user with ${remainingCalories} kcal budget.
+      Return ONLY a JSON object (no markdown).
+    `;
+    const result = await model.generateContent(prompt);
+    const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Recipe Suggestion Error:", error);
+    return null;
+  }
+}
+
+// 4. 運動建議與計算 (公式優先)
+export function calculateWorkoutCalories(
+  activity: string, 
+  durationMinutes: number, 
+  weightKg: number,
+  distanceKm?: number,
+  steps?: number
+): number {
+  // METs 表 (代謝當量)
+  const METs: Record<string, number> = {
+    '慢走': 3.0, '快走': 4.5, '慢跑': 7.0, '快跑': 11.0, 
+    '跑步機': 5.0, '爬梯': 8.0, '一般運動': 4.0
+  };
+
+  const met = METs[activity] || 4.0;
+  
+  // 公式 A: 基於時間 (Cal = MET * Kg * Hour)
+  let caloriesByTime = met * weightKg * (durationMinutes / 60);
+
+  // 公式 B: 基於距離 (跑步/走路專用, Cal approx = Kg * Km * 1.036)
+  let caloriesByDist = 0;
+  if (distanceKm && distanceKm > 0) {
+    caloriesByDist = weightKg * distanceKm * 1.036;
+  }
+
+  // 公式 C: 基於步數 (粗略估計 1步 = 0.04 kcal)
+  let caloriesBySteps = 0;
+  if (steps && steps > 0) {
+    caloriesBySteps = steps * 0.04;
+  }
+
+  // 優先順序: 距離 > 步數 > 時間
+  return Math.round(caloriesByDist || caloriesBySteps || caloriesByTime);
+}
+
+export async function suggestWorkout(userProfile: any, remainingCalories: number): Promise<WorkoutResult | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `
+      Suggest a workout for a user (${userProfile?.currentWeightKg || 70}kg) to burn approx 300kcal.
+      Remaining budget: ${remainingCalories}.
+      Return ONLY a JSON object (no markdown).
+    `;
+    const result = await model.generateContent(prompt);
+    const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
     return null;
   }
 }

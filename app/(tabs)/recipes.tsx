@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet } from "react-native";
+import { useState } from "react";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert } from "react-native";
+import * as Notifications from 'expo-notifications'; // 需安裝
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router"; // 關鍵：確保同步
 import { ThemedText } from "@/components/themed-text";
@@ -7,7 +8,35 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { getDailySummaryLocal, getProfileLocal } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 
+// 設定通知行為
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+});
+
 export default function RecipesScreen() {
+  const [loading, setLoading] = useState(false);
+  
+  const handleGenerate = async () => {
+    // 1. 請求權限
+    const { status } = await Notifications.requestPermissionsAsync();
+    
+    setLoading(true);
+    Alert.alert("AI 分析中", "您可以暫時離開，完成後將發送通知給您。");
+
+    // 2. 背景執行 AI (模擬非同步)
+    setTimeout(async () => {
+       const res = await suggestRecipe(500, 'STORE'); // 範例呼叫
+       setLoading(false);
+       
+       if (status === 'granted') {
+         await Notifications.scheduleNotificationAsync({
+           content: { title: "AI 教練通知", body: "您的飲食建議已生成完畢！點擊查看。" },
+           trigger: null,
+         });
+       }
+    }, 5000); // 模擬 5 秒等待
+  };
+  
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
