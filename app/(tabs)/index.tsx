@@ -12,7 +12,8 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { 
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, updateFoodLogLocal 
+  deleteActivityLogLocal, updateFoodLogLocal, 
+  updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems
 } from "@/lib/storage";
 import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
@@ -27,16 +28,18 @@ export default function HomeScreen() {
   const [summary, setSummary] = useState<any>(null);
   const [targetCalories, setTargetCalories] = useState(2000);
   const [profile, setProfile] = useState<any>(null);
+  const [frequentItems, setFrequentItems] = useState<any[]>([]);
 
-  // Modal 狀態 (運動)
+  // 運動 Modal 狀態
   const [modalVisible, setModalVisible] = useState(false);
   const [actType, setActType] = useState(WORKOUT_TYPES[0]);
   const [duration, setDuration] = useState("30");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
   const [estCal, setEstCal] = useState(0);
+  const [editingWorkout, setEditingWorkout] = useState<any>(null);
 
-  // Modal 狀態 (編輯食物)
+  // 飲食編輯 Modal 狀態
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editName, setEditName] = useState("");
@@ -53,23 +56,56 @@ export default function HomeScreen() {
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
     const s = await getDailySummaryLocal();
     setSummary(s);
+    const f = await getFrequentFoodItems();
+    setFrequentItems(f);
   }, []);
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
+  // 自動計算運動熱量
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
-      const cal = calculateWorkoutCalories(actType, parseFloat(duration)||0, profile?.currentWeightKg||70, parseFloat(dist), parseFloat(steps));
+      const cal = calculateWorkoutCalories(
+        actType, 
+        parseFloat(duration) || 0, 
+        profile?.currentWeightKg || 70,
+        parseFloat(dist),
+        parseFloat(steps)
+      );
       setEstCal(cal);
     }
   }, [actType, duration, steps, dist, modalVisible]));
 
+  // 儲存/更新運動
   const handleSaveWorkout = async () => {
-    await saveActivityLogLocal({ activityType: actType, caloriesBurned: estCal, details: `${duration}分 / ${steps}步 / ${dist}km` });
+    const newLog = {
+      activityType: actType,
+      caloriesBurned: estCal,
+      details: `${duration}分 / ${steps}步 / ${dist}km`
+    };
+
+    if (editingWorkout) {
+      await updateActivityLogLocal({ ...editingWorkout, ...newLog });
+      setEditingWorkout(null);
+    } else {
+      await saveActivityLogLocal(newLog);
+    }
     setModalVisible(false);
     loadData();
   };
 
+  // 開啟運動編輯
+  const handleEditWorkout = (log: any) => {
+    setEditingWorkout(log);
+    setActType(log.activityType);
+    const parts = (log.details || "").split(' / ');
+    setDuration(parts[0]?.replace('分','') || "0");
+    setSteps(parts[1]?.replace('步','') || "0");
+    setDist(parts[2]?.replace('km','') || "0");
+    setModalVisible(true);
+  };
+
+  // 開啟飲食編輯
   const handleEditFood = (log: any) => {
     setEditingLog(log);
     setEditName(log.foodName);
@@ -86,6 +122,18 @@ export default function HomeScreen() {
     }
   };
 
+  const handleQuickAdd = async (item: any) => {
+    Alert.alert("快速紀錄", `再吃一次「${item.foodName}」？`, [
+      { text: "取消", style: "cancel" },
+      { text: "確定", onPress: async () => {
+          await saveFoodLogLocal({ ...item, id: undefined, loggedAt: undefined });
+          loadData();
+        } 
+      }
+    ]);
+  };
+
+  // Swipeable 按鈕
   const renderRightActions = (id: number, type: 'food'|'activity') => (
     <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}>
       <Ionicons name="trash" size={24} color="white" />
@@ -93,8 +141,8 @@ export default function HomeScreen() {
     </Pressable>
   );
 
-  const renderLeftActions = (log: any) => (
-    <Pressable onPress={() => handleEditFood(log)} style={styles.editBtn}>
+  const renderLeftActions = (item: any, type: 'food'|'activity') => (
+    <Pressable onPress={() => type === 'food' ? handleEditFood(item) : handleEditWorkout(item)} style={styles.editBtn}>
       <Ionicons name="create" size={24} color="white" />
       <ThemedText style={{color:'white', fontSize:12}}>編輯</ThemedText>
     </Pressable>
@@ -118,16 +166,33 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {/* 常用項目 */}
+          {frequentItems.length > 0 && (
+            <View style={{marginBottom: 16}}>
+              <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>常用項目</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{paddingLeft: 16}}>
+                {frequentItems.map((item, index) => (
+                  <Pressable key={index} onPress={() => handleQuickAdd(item)} style={[styles.quickChip, {backgroundColor: cardBackground, marginRight: 10}]}>
+                    <ThemedText>{item.foodName}</ThemedText>
+                    <ThemedText style={{fontSize: 10, color: textSecondary}}>{item.totalCalories} kcal</ThemedText>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.quickActions}>
             <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>拍照</ThemedText></Pressable>
             <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>掃碼</ThemedText></Pressable>
-            <Pressable onPress={() => setModalVisible(true)} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
+            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
           </View>
 
+          {/* 飲食列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (右滑編輯 / 左滑刪除)</ThemedText>
-            {summary?.foodLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log)}>
+            {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
+              summary?.foodLogs?.map((log: any) => (
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log, 'food')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.foodName}</ThemedText>
                   <ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText>
@@ -136,10 +201,12 @@ export default function HomeScreen() {
             ))}
           </View>
 
+          {/* 運動列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (左滑刪除)</ThemedText>
-            {summary?.activityLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')}>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (右滑編輯 / 左滑刪除)</ThemedText>
+            {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
+              summary?.activityLogs?.map((log: any) => (
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')} renderLeftActions={() => renderLeftActions(log, 'activity')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.activityType}</ThemedText>
                   <ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText>
@@ -154,7 +221,7 @@ export default function HomeScreen() {
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
-              <ThemedText type="title">新增運動</ThemedText>
+              <ThemedText type="title">{editingWorkout ? "編輯運動" : "新增運動"}</ThemedText>
               <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}}>
                 {WORKOUT_TYPES.map(t => (
                   <Pressable key={t} onPress={() => setActType(t)} style={[styles.typeChip, actType === t && {backgroundColor: tintColor}]}>
@@ -178,7 +245,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 編輯食物 Modal */}
+        {/* 飲食編輯 Modal */}
         <Modal visible={editModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -216,5 +283,6 @@ const styles = StyleSheet.create({
   modalContent: { padding: 20, borderRadius: 16 },
   typeChip: { padding: 8, borderRadius: 16, borderWidth: 1, borderColor: '#ddd', marginRight: 8 },
   modalBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16 }
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16 },
+  quickChip: { padding: 10, borderRadius: 10, alignItems: 'center', minWidth: 80 }
 });

@@ -5,8 +5,8 @@ const KEYS = {
   PROFILE: 'user_profile',
   FOOD_LOGS: 'food_logs',
   ACTIVITY_LOGS: 'activity_logs',
-  PRODUCTS: 'saved_products', // 新增：條碼商品庫
-  WEIGHTS: 'weight_history',  // 新增：體重歷史
+  PRODUCTS: 'saved_products',
+  WEIGHTS: 'weight_history',
 };
 
 // 1. 使用者 & 個人檔案
@@ -39,7 +39,7 @@ export const saveWeightLog = async (weight: number) => {
     history.push({ date: new Date().toISOString(), weight });
   }
   
-  // 只保留最近 30 筆
+  // 只保留最近 30 筆，避免資料過大
   if (history.length > 30) history.shift();
   
   await AsyncStorage.setItem(KEYS.WEIGHTS, JSON.stringify(history));
@@ -65,11 +65,11 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// 2. 條碼商品庫 (新增)
+// 2. 條碼商品庫
 export const saveProductLocal = async (barcode: string, productData: any) => {
   const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
   const products = data ? JSON.parse(data) : {};
-  products[barcode] = productData; // Key-Value 儲存
+  products[barcode] = productData;
   await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
 };
 
@@ -107,7 +107,7 @@ export const deleteFoodLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.FOOD_LOGS, JSON.stringify(updatedLogs));
 };
 
-// 4. 運動紀錄
+// 4. 運動紀錄 (CRUD)
 export const getActivityLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.ACTIVITY_LOGS);
   return data ? JSON.parse(data) : [];
@@ -121,13 +121,21 @@ export const saveActivityLogLocal = async (log: any) => {
   return newLog;
 };
 
+export const updateActivityLogLocal = async (updatedLog: any) => {
+  const existingLogs = await getActivityLogsLocal();
+  const updatedLogs = existingLogs.map((log: any) => 
+    log.id === updatedLog.id ? { ...log, ...updatedLog } : log
+  );
+  await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
+};
+
 export const deleteActivityLogLocal = async (id: number) => {
   const existingLogs = await getActivityLogsLocal();
   const updatedLogs = existingLogs.filter((log: any) => log.id !== id);
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
-// 5. 每日摘要
+// 5. 每日與歷史摘要
 export const getDailySummaryLocal = async (date: Date = new Date()) => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
@@ -159,6 +167,7 @@ export const getFrequentFoodItems = async () => {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([name]) => {
+      // 找回該食物的詳細資料(取最新一筆)
       return logs.find((l: any) => l.foodName === name);
     });
 };
@@ -183,8 +192,10 @@ export const getHistory7DaysLocal = async () => {
     if (wLog) {
       dayWeight = wLog.weight;
     } else {
-      // 找不到當天，找最近的一筆
-      const recent = weightHistory.filter((w: any) => w.date < dateStr).pop();
+      // 找不到當天，往前找最近的一筆
+      const recent = weightHistory
+        .filter((w: any) => w.date < dateStr)
+        .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
       dayWeight = recent ? recent.weight : 0;
     }
 
