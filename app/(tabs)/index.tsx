@@ -30,16 +30,16 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [frequentItems, setFrequentItems] = useState<any[]>([]);
 
-  // 運動 Modal 狀態
+  // 運動 Modal
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [actType, setActType] = useState(WORKOUT_TYPES[0]);
   const [duration, setDuration] = useState("30");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
   const [estCal, setEstCal] = useState(0);
-  const [editingWorkout, setEditingWorkout] = useState<any>(null);
 
-  // 飲食編輯 Modal 狀態
+  // 飲食 Modal
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editName, setEditName] = useState("");
@@ -94,7 +94,6 @@ export default function HomeScreen() {
     loadData();
   };
 
-  // 開啟運動編輯
   const handleEditWorkout = (log: any) => {
     setEditingWorkout(log);
     setActType(log.activityType);
@@ -105,7 +104,6 @@ export default function HomeScreen() {
     setModalVisible(true);
   };
 
-  // 開啟飲食編輯
   const handleEditFood = (log: any) => {
     setEditingLog(log);
     setEditName(log.foodName);
@@ -133,9 +131,12 @@ export default function HomeScreen() {
     ]);
   };
 
-  // Swipeable 按鈕
   const renderRightActions = (id: number, type: 'food'|'activity') => (
-    <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}>
+    <Pressable onPress={async () => { 
+        if(type==='food') await deleteFoodLogLocal(id); 
+        else await deleteActivityLogLocal(id); 
+        loadData(); 
+      }} style={styles.deleteBtn}>
       <Ionicons name="trash" size={24} color="white" />
       <ThemedText style={{color:'white', fontSize:12}}>刪除</ThemedText>
     </Pressable>
@@ -166,7 +167,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* 常用項目 */}
           {frequentItems.length > 0 && (
             <View style={{marginBottom: 16}}>
               <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>常用項目</ThemedText>
@@ -187,7 +187,6 @@ export default function HomeScreen() {
             <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
           </View>
 
-          {/* 飲食列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (右滑編輯 / 左滑刪除)</ThemedText>
             {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
@@ -201,7 +200,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* 運動列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (右滑編輯 / 左滑刪除)</ThemedText>
             {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>尚無紀錄</ThemedText> :
@@ -245,7 +243,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 飲食編輯 Modal */}
+        {/* 飲食 Modal */}
         <Modal visible={editModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>

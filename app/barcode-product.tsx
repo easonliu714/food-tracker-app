@@ -8,13 +8,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveFoodLogLocal, saveProductLocal, getProductByBarcode } from "@/lib/storage";
 import { NumberInput } from "@/components/NumberInput";
 
-
-// 餐別邏輯
-const MEAL_OPTIONS = [
-  { k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, { k: 'snack', l: '點心' },
-  { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }
-];
-
+const MEAL_OPTIONS = [{ k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, { k: 'snack', l: '點心' }, { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }];
 const getMealTypeByTime = () => {
   const h = new Date().getHours();
   if (h >= 6 && h < 11) return 'breakfast';
@@ -32,16 +26,12 @@ export default function BarcodeProductScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [inputMode, setInputMode] = useState<'serving' | 'gram'>('serving');
-  
-  // 解決輸入問題：使用字串狀態
-  const [amount, setAmount] = useState("1"); 
-  const [gramAmount, setGramAmount] = useState(""); // 預設為空或 API 值
+  const [amount, setAmount] = useState("1");
+  const [gramAmount, setGramAmount] = useState("100");
   const [mealType, setMealType] = useState(getMealTypeByTime());
 
-  // 商品資料 (stdWeight 是一份幾克)
   const [product, setProduct] = useState({
-    name: "", brand: "", stdWeight: "100", 
-    cal: "0", pro: "0", carb: "0", fat: "0", sod: "0" // 新增 sod (鈉)
+    name: "", brand: "", stdWeight: "100", cal: "0", pro: "0", carb: "0", fat: "0", sod: "0"
   });
 
   const backgroundColor = useThemeColor({}, "background");
@@ -69,7 +59,6 @@ export default function BarcodeProductScreen() {
         if (data.status === 1 && data.product) {
            const p = data.product;
            const n = p.nutriments || {};
-           
            let w = 100;
            const match = (p.serving_size || "").match(/(\d+(\.\d+)?)/);
            if (match) w = parseFloat(match[0]);
@@ -82,7 +71,7 @@ export default function BarcodeProductScreen() {
              pro: (n.proteins_100g || 0).toString(),
              carb: (n.carbohydrates_100g || 0).toString(),
              fat: (n.fat_100g || 0).toString(),
-             sod: ((n.sodium_100g || 0) * 1000).toString(), // g 轉 mg
+             sod: ((n.sodium_100g || 0) * 1000).toString(), // g -> mg
            });
            setGramAmount(w.toString());
         } else {
@@ -98,18 +87,22 @@ export default function BarcodeProductScreen() {
     fetchProduct();
   }, [params.barcode]);
 
-  // 連動計算
+  // 單向連動 (防止互鎖)
   useEffect(() => {
     const stdW = parseFloat(product.stdWeight) || 100;
     if (inputMode === 'serving') {
       const g = (parseFloat(amount) || 0) * stdW;
-      // 避免無限迴圈更新，只有數值變動才更新
       if (Math.abs(g - (parseFloat(gramAmount)||0)) > 0.1) setGramAmount(g.toString());
-    } else {
+    }
+  }, [amount, inputMode, product.stdWeight]);
+
+  useEffect(() => {
+    const stdW = parseFloat(product.stdWeight) || 100;
+    if (inputMode === 'gram') {
       const s = (parseFloat(gramAmount) || 0) / stdW;
       if (Math.abs(s - (parseFloat(amount)||0)) > 0.1) setAmount(s.toFixed(1));
     }
-  }, [amount, gramAmount, inputMode]); // 移除 product.stdWeight 避免編輯時跳動
+  }, [gramAmount, inputMode, product.stdWeight]);
 
   const getFinalValues = () => {
     const ratio = (parseFloat(gramAmount) || 0) / 100;
@@ -124,9 +117,7 @@ export default function BarcodeProductScreen() {
 
   const handleSave = async () => {
     const final = getFinalValues();
-    // 儲存商品資料 (含修改過的每份重量)
     await saveProductLocal(String(params.barcode), product);
-    
     await saveFoodLogLocal({
       mealType,
       foodName: product.name,
@@ -134,7 +125,7 @@ export default function BarcodeProductScreen() {
       totalProteinG: final.pro,
       totalCarbsG: final.carb,
       totalFatG: final.fat,
-      totalSodiumMg: final.sod, // 存入鈉
+      totalSodiumMg: final.sod,
       notes: `條碼:${params.barcode}`
     });
     router.back(); router.back();
@@ -157,7 +148,6 @@ export default function BarcodeProductScreen() {
             <TextInput style={[styles.input, {color: textColor, backgroundColor: 'white'}]} value={product.name} onChangeText={t => setProduct({...product, name: t})} />
             
             <ThemedText style={{fontSize: 12, color: '#666', marginTop: 10}}>一份的重量 (g/ml)</ThemedText>
-            {/* 解決問題 4：使用 NumberInput */}
             <NumberInput value={product.stdWeight} onChange={v => setProduct({...product, stdWeight: v})} unit="g" />
          </View>
 
@@ -184,7 +174,7 @@ export default function BarcodeProductScreen() {
          </View>
 
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
-            <ThemedText style={{marginBottom: 10, fontWeight: 'bold'}}>每 100g 營養素</ThemedText>
+            <ThemedText style={{marginBottom: 10, fontWeight: 'bold'}}>每 100g 營養素 (基準)</ThemedText>
             <View style={{flexDirection: 'row', gap: 10}}>
                <View style={{flex:1}}><NumberInput label="熱量" value={product.cal} onChange={v => setProduct({...product, cal: v})} step={10} /></View>
                <View style={{flex:1}}><NumberInput label="蛋白質" value={product.pro} onChange={v => setProduct({...product, pro: v})} /></View>
@@ -193,7 +183,6 @@ export default function BarcodeProductScreen() {
                <View style={{flex:1}}><NumberInput label="碳水" value={product.carb} onChange={v => setProduct({...product, carb: v})} /></View>
                <View style={{flex:1}}><NumberInput label="脂肪" value={product.fat} onChange={v => setProduct({...product, fat: v})} /></View>
             </View>
-            {/* 新增鈉 */}
             <NumberInput label="鈉 (mg)" value={product.sod} onChange={v => setProduct({...product, sod: v})} step={10} />
          </View>
 
