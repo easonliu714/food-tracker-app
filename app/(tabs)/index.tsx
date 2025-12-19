@@ -1,9 +1,9 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import { useState, useCallback, useRef } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, Animated } from "react-native";
+import { useState, useCallback } from "react";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler'; // 記得安裝
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ProgressRing } from "@/components/progress-ring";
 import { ThemedText } from "@/components/themed-text";
@@ -13,7 +13,6 @@ import { getDailySummaryLocal, getProfileLocal, deleteFoodLogLocal, saveActivity
 import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
 
-// 運動選項
 const WORKOUT_TYPES = ['快走', '慢走', '慢跑', '快跑', '跑步機', '爬梯', '一般運動'];
 
 export default function HomeScreen() {
@@ -21,6 +20,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  
   const [summary, setSummary] = useState<any>(null);
   const [targetCalories, setTargetCalories] = useState(2000);
   const [profile, setProfile] = useState<any>(null);
@@ -36,8 +36,8 @@ export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
-  // 載入資料
   const loadData = useCallback(async () => {
     const p = await getProfileLocal();
     setProfile(p);
@@ -48,7 +48,7 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
-  // 自動計算運動熱量
+  // 自動計算熱量 (監聽輸入變化)
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
       const cal = calculateWorkoutCalories(
@@ -62,7 +62,6 @@ export default function HomeScreen() {
     }
   }, [actType, duration, steps, dist, modalVisible]));
 
-  // 儲存運動
   const handleSaveWorkout = async () => {
     await saveActivityLogLocal({
       activityType: actType,
@@ -73,16 +72,22 @@ export default function HomeScreen() {
     loadData();
   };
 
-  // 左滑刪除元件
-  const renderRightActions = (progress: any, dragX: any, onDelete: () => void) => {
-    const trans = dragX.interpolate({ inputRange: [-100, 0], outputRange: [1, 0] });
-    return (
-      <Pressable onPress={onDelete} style={styles.deleteBtn}>
-        <Ionicons name="trash" size={24} color="white" />
-        <ThemedText style={{color:'white', fontSize: 12}}>刪除</ThemedText>
-      </Pressable>
-    );
-  };
+  const renderRightActions = (id: number, type: 'food'|'activity') => (
+    <Pressable 
+      onPress={async () => {
+        if(type==='food') await deleteFoodLogLocal(id);
+        else await deleteActivityLogLocal(id);
+        loadData();
+      }} 
+      style={styles.deleteBtn}
+    >
+      <Ionicons name="trash" size={24} color="white" />
+    </Pressable>
+  );
+
+  const calIn = summary?.totalCaloriesIn || 0;
+  const calOut = summary?.totalCaloriesOut || 0;
+  const net = calIn - calOut;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -92,23 +97,25 @@ export default function HomeScreen() {
              <ThemedText type="title" style={{fontSize: 32}}>今日概覽</ThemedText>
           </View>
 
-          {/* 環狀圖 (維持原樣) */}
           <View style={[styles.progressSection, { backgroundColor: cardBackground }]}>
-            <ProgressRing progress={(summary?.totalCaloriesIn - summary?.totalCaloriesOut)/targetCalories} current={summary?.totalCaloriesIn - summary?.totalCaloriesOut} target={targetCalories} size={200} />
+            <ProgressRing progress={targetCalories > 0 ? net/targetCalories : 0} current={net} target={targetCalories} size={200} />
+            <View style={{flexDirection:'row', gap:20, marginTop:10}}>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>攝取 {calIn}</ThemedText>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>消耗 {calOut}</ThemedText>
+            </View>
           </View>
 
-          {/* 快捷按鈕 */}
           <View style={styles.quickActions}>
-            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1.5}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>拍照</ThemedText></Pressable>
+            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>拍照</ThemedText></Pressable>
             <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>掃碼</ThemedText></Pressable>
             <Pressable onPress={() => setModalVisible(true)} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
           </View>
 
-          {/* 飲食列表 (Swipeable) */}
+          {/* 飲食列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食紀錄 (左滑刪除)</ThemedText>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (左滑刪除)</ThemedText>
             {summary?.foodLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={(p, d) => renderRightActions(p, d, async () => { await deleteFoodLogLocal(log.id); loadData(); })}>
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.foodName}</ThemedText>
                   <ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText>
@@ -117,11 +124,11 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* 運動列表 (Swipeable) */}
+          {/* 運動列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>運動紀錄</ThemedText>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (左滑刪除)</ThemedText>
             {summary?.activityLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={(p, d) => renderRightActions(p, d, async () => { await deleteActivityLogLocal(log.id); loadData(); })}>
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.activityType}</ThemedText>
                   <ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText>
@@ -129,17 +136,13 @@ export default function HomeScreen() {
               </Swipeable>
             ))}
           </View>
-          
           <View style={{height: 100}}/>
         </ScrollView>
 
-        {/* 運動輸入 Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
               <ThemedText type="title">新增運動</ThemedText>
-              
-              {/* 類型選擇 */}
               <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}}>
                 {WORKOUT_TYPES.map(t => (
                   <Pressable key={t} onPress={() => setActType(t)} style={[styles.typeChip, actType === t && {backgroundColor: tintColor}]}>
@@ -147,17 +150,14 @@ export default function HomeScreen() {
                   </Pressable>
                 ))}
               </ScrollView>
-
               <View style={{flexDirection: 'row', gap: 10}}>
                 <View style={{flex:1}}><NumberInput label="時間 (分)" value={duration} onChange={setDuration} step={10} /></View>
                 <View style={{flex:1}}><NumberInput label="距離 (km)" value={dist} onChange={setDist} step={0.5} /></View>
               </View>
               <NumberInput label="步數" value={steps} onChange={setSteps} step={100} />
-
               <View style={{backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, marginVertical: 10}}>
                 <ThemedText style={{textAlign: 'center', color: '#E65100', fontWeight: 'bold'}}>預估消耗: {estCal} kcal</ThemedText>
               </View>
-
               <View style={{flexDirection: 'row', gap: 10}}>
                 <Pressable onPress={() => setModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
                 <Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 20 },
   progressSection: { alignItems: 'center', padding: 20, margin: 16, borderRadius: 20 },
-  quickActions: { flexDirection: 'row', padding: 16, gap: 12 },
+  quickActions: { flexDirection: "row", padding: 16, gap: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
   btnTxt: { color: 'white', fontWeight: 'bold' },
   listSection: { marginHorizontal: 16, padding: 16, borderRadius: 16 },

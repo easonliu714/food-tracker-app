@@ -33,7 +33,7 @@ export interface WorkoutResult {
   reason: string;
 }
 
-// 1. 分析食物圖片
+// 1. 分析食物圖片 (含壓縮)
 export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisResult | null> {
   try {
     const manipulatedImage = await manipulateAsync(
@@ -68,12 +68,12 @@ export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisRe
   }
 }
 
-// 2. 分析食物文字 (新增)
+// 2. 分析食物文字 (修復：讓手動輸入也能用 AI)
 export async function analyzeFoodText(foodName: string): Promise<FoodAnalysisResult | null> {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `
-      Estimate nutrition for "${foodName}". Return ONLY a JSON object (no markdown) with:
+      Estimate nutrition for "${foodName}" (standard serving). Return ONLY a JSON object (no markdown) with:
       {
         "foodName": "${foodName}",
         "detectedObject": "Text Input",
@@ -98,24 +98,41 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE' | '
     const prompt = `
       Suggest a ${type === 'STORE' ? 'Taiwan convenience store combo' : 'simple home-cooked meal'} 
       for a user with ${remainingCalories} kcal budget.
-      Return ONLY a JSON object (no markdown).
+      Return ONLY a JSON object (no markdown) with: { title, calories, ingredients:[], steps:[], reason }.
     `;
     const result = await model.generateContent(prompt);
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Recipe Suggestion Error:", error);
+    console.error("Recipe Error:", error);
     return null;
   }
 }
 
-// 4. 運動建議與計算 (公式優先)
+// 4. 運動建議
+export async function suggestWorkout(userProfile: any, remainingCalories: number): Promise<WorkoutResult | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `
+      Suggest a workout for a user (${userProfile?.currentWeightKg || 70}kg) to burn approx 300kcal.
+      Remaining budget: ${remainingCalories}.
+      Return ONLY a JSON object (no markdown) with: { activity, duration_minutes, estimated_calories, reason }.
+    `;
+    const result = await model.generateContent(prompt);
+    const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    return null;
+  }
+}
+
+// 5. 運動熱量計算公式 (優先使用)
 export function calculateWorkoutCalories(
   activity: string, 
   durationMinutes: number, 
   weightKg: number,
-  distanceKm?: number,
-  steps?: number
+  distanceKm: number = 0,
+  steps: number = 0
 ): number {
   // METs 表 (代謝當量)
   const METs: Record<string, number> = {
@@ -128,34 +145,18 @@ export function calculateWorkoutCalories(
   // 公式 A: 基於時間 (Cal = MET * Kg * Hour)
   let caloriesByTime = met * weightKg * (durationMinutes / 60);
 
-  // 公式 B: 基於距離 (跑步/走路專用, Cal approx = Kg * Km * 1.036)
+  // 公式 B: 基於距離 (粗略: Kg * Km * 1.036)
   let caloriesByDist = 0;
-  if (distanceKm && distanceKm > 0) {
+  if (distanceKm > 0) {
     caloriesByDist = weightKg * distanceKm * 1.036;
   }
 
-  // 公式 C: 基於步數 (粗略估計 1步 = 0.04 kcal)
+  // 公式 C: 基於步數 (粗略: 1步 = 0.04 kcal)
   let caloriesBySteps = 0;
-  if (steps && steps > 0) {
+  if (steps > 0) {
     caloriesBySteps = steps * 0.04;
   }
 
-  // 優先順序: 距離 > 步數 > 時間
-  return Math.round(caloriesByDist || caloriesBySteps || caloriesByTime);
-}
-
-export async function suggestWorkout(userProfile: any, remainingCalories: number): Promise<WorkoutResult | null> {
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-      Suggest a workout for a user (${userProfile?.currentWeightKg || 70}kg) to burn approx 300kcal.
-      Remaining budget: ${remainingCalories}.
-      Return ONLY a JSON object (no markdown).
-    `;
-    const result = await model.generateContent(prompt);
-    const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
-  } catch (error) {
-    return null;
-  }
+  // 優先順序: 距離 > 步數 > 時間 (取最大值或特定邏輯，這裡取最大值以避免低估)
+  return Math.round(Math.max(caloriesByDist, caloriesBySteps, caloriesByTime));
 }
