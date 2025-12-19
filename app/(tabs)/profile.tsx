@@ -7,21 +7,21 @@ import {
   StyleSheet,
   TextInput,
   View,
-  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { trpc } from "@/lib/trpc";
+// [修改] 引入本地存儲工具
+import { saveProfileLocal, getProfileLocal } from "@/lib/storage";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated, logout } = useAuth();
+  const [loading, setLoading] = useState(true);
 
   const [gender, setGender] = useState<"male" | "female" | "other">("male");
   const [birthYear, setBirthYear] = useState("");
@@ -40,27 +40,32 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border");
 
-  const { data: profile, isLoading } = trpc.profile.get.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-
-  const createProfileMutation = trpc.profile.create.useMutation();
-  const updateProfileMutation = trpc.profile.update.useMutation();
-
+  // [修改] 載入本地資料
   useEffect(() => {
-    if (profile) {
-      if (profile.gender) setGender(profile.gender);
-      if (profile.birthDate) {
-        const year = new Date(profile.birthDate).getFullYear();
-        setBirthYear(year.toString());
+    async function loadData() {
+      if (!isAuthenticated) return;
+      try {
+        const profile = await getProfileLocal();
+        if (profile) {
+          if (profile.gender) setGender(profile.gender);
+          if (profile.birthDate) {
+            const year = new Date(profile.birthDate).getFullYear();
+            setBirthYear(year.toString());
+          }
+          if (profile.heightCm) setHeightCm(profile.heightCm.toString());
+          if (profile.currentWeightKg) setCurrentWeight(profile.currentWeightKg.toString());
+          if (profile.targetWeightKg) setTargetWeight(profile.targetWeightKg.toString());
+          if (profile.activityLevel) setActivityLevel(profile.activityLevel);
+          if (profile.goal) setGoal(profile.goal);
+        }
+      } catch (e) {
+        console.error("Failed to load profile", e);
+      } finally {
+        setLoading(false);
       }
-      if (profile.heightCm) setHeightCm((profile.heightCm / 1).toString());
-      if (profile.currentWeightKg) setCurrentWeight((profile.currentWeightKg / 10).toString());
-      if (profile.targetWeightKg) setTargetWeight((profile.targetWeightKg / 10).toString());
-      if (profile.activityLevel) setActivityLevel(profile.activityLevel);
-      if (profile.goal) setGoal(profile.goal);
     }
-  }, [profile]);
+    loadData();
+  }, [isAuthenticated]);
 
   const calculateAge = () => {
     const year = parseInt(birthYear);
@@ -104,36 +109,29 @@ export default function ProfileScreen() {
     return Math.round(tdee);
   };
 
+  // [修改] 儲存到本地
   const handleSave = async () => {
     const dailyCalorieTarget = calculateBMR();
     const year = parseInt(birthYear);
     const birthDate = year && year >= 1900 && year <= new Date().getFullYear()
-      ? new Date(year, 0, 1)
+      ? new Date(year, 0, 1).toISOString() // 轉成字串存
       : undefined;
 
     const data = {
       gender,
       birthDate,
       heightCm: parseInt(heightCm) || undefined,
-      currentWeightKg: Math.round(parseFloat(currentWeight) * 10) || undefined,
-      targetWeightKg: Math.round(parseFloat(targetWeight) * 10) || undefined,
+      currentWeightKg: parseFloat(currentWeight) || undefined,
+      targetWeightKg: parseFloat(targetWeight) || undefined,
       activityLevel,
       goal,
       dailyCalorieTarget,
     };
 
     try {
-      if (profile) {
-        await updateProfileMutation.mutateAsync(data);
-      } else {
-        await createProfileMutation.mutateAsync(data);
-      }
+      await saveProfileLocal(data);
       alert("個人檔案已儲存");
     } catch (error: any) {
-      if (error.data?.code === "UNAUTHORIZED") {
-        router.push("/");
-        return;
-      }
       console.error("Error saving profile:", error);
       alert("儲存失敗,請稍後再試");
     }
@@ -141,7 +139,7 @@ export default function ProfileScreen() {
 
   if (!isAuthenticated) {
     return (
-      <ThemedView style={[styles.container, styles.centerContent]}>
+      <View style={[styles.container, styles.centerContent, { backgroundColor }]}>
         <Ionicons name="person-circle-outline" size={80} color={tintColor} style={{ marginBottom: 24 }} />
         <ThemedText type="title" style={{ marginBottom: 16, fontSize: 28, lineHeight: 34 }}>
           個人檔案
@@ -155,7 +153,7 @@ export default function ProfileScreen() {
         >
           <ThemedText style={styles.loginPromptText}>登入</ThemedText>
         </Pressable>
-      </ThemedView>
+      </View>
     );
   }
 
@@ -169,7 +167,7 @@ export default function ProfileScreen() {
           </ThemedText>
         </View>
 
-        {isLoading ? (
+        {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={tintColor} />
           </View>
@@ -182,9 +180,9 @@ export default function ProfileScreen() {
                   <Ionicons name="person" size={40} color={tintColor} />
                 </View>
                 <View style={styles.userDetails}>
-                  <ThemedText type="subtitle">{user?.name || user?.email || "使用者"}</ThemedText>
+                  <ThemedText type="subtitle">{user?.name || "使用者"}</ThemedText>
                   <ThemedText style={[styles.userEmail, { color: textSecondary }]}>
-                    {user?.email}
+                    {user?.email || "本地帳號"}
                   </ThemedText>
                 </View>
               </View>
@@ -382,19 +380,9 @@ export default function ProfileScreen() {
             <View style={styles.buttonContainer}>
               <Pressable
                 onPress={handleSave}
-                disabled={createProfileMutation.isPending || updateProfileMutation.isPending}
-                style={[
-                  styles.saveButton,
-                  { backgroundColor: tintColor },
-                  (createProfileMutation.isPending || updateProfileMutation.isPending) &&
-                    styles.buttonDisabled,
-                ]}
+                style={[styles.saveButton, { backgroundColor: tintColor }]}
               >
-                {createProfileMutation.isPending || updateProfileMutation.isPending ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.saveButtonText}>儲存設定</ThemedText>
-                )}
+                <ThemedText style={styles.saveButtonText}>儲存設定</ThemedText>
               </Pressable>
 
               <Pressable onPress={logout} style={[styles.logoutButton, { borderColor: "#FF3B30" }]}>
@@ -574,9 +562,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     lineHeight: 22,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
   },
   loginPromptButton: {
     paddingVertical: 16,

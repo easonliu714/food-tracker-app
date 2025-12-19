@@ -31,6 +31,13 @@ const config: ExpoConfig = {
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
+  // ▼▼▼ 請新增這段 extra 設定 (包含您日誌中的 Project ID) ▼▼▼
+  extra: {
+    eas: {
+      projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2"
+    }
+  },
+  // ▲▲▲ 新增到這裡 ▲▲▲
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
