@@ -25,12 +25,13 @@ export const getLocalUser = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// 體重歷史
+// 體重歷史紀錄
 export const saveWeightLog = async (weight: number) => {
   const data = await AsyncStorage.getItem(KEYS.WEIGHTS);
   const history = data ? JSON.parse(data) : [];
   const today = new Date().toISOString().split('T')[0];
   
+  // 更新或新增今日體重
   const existingIndex = history.findIndex((h: any) => h.date.startsWith(today));
   if (existingIndex >= 0) {
     history[existingIndex].weight = weight;
@@ -60,7 +61,7 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// 2. 條碼商品
+// 2. 條碼商品庫
 export const saveProductLocal = async (barcode: string, productData: any) => {
   const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
   const products = data ? JSON.parse(data) : {};
@@ -130,24 +131,16 @@ export const deleteActivityLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
-// 5. 摘要
+// 5. 每日摘要
 export const getDailySummaryLocal = async (date: Date = new Date()) => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
   
-  // 修正：使用本地時間字串比較，避免時區問題導致日期偏移
-  // 簡單解法：都轉成 YYYY-MM-DD
-  const dateStr = date.toLocaleDateString('en-CA'); // format: YYYY-MM-DD
+  // 使用本地日期字串比對，避免時區問題
+  const dateStr = date.toLocaleDateString('en-CA'); // YYYY-MM-DD
   
-  const todayFood = foodLogs.filter((log: any) => {
-    const logDate = new Date(log.loggedAt).toLocaleDateString('en-CA');
-    return logDate === dateStr;
-  });
-  
-  const todayActivity = activityLogs.filter((log: any) => {
-    const logDate = new Date(log.loggedAt).toLocaleDateString('en-CA');
-    return logDate === dateStr;
-  });
+  const todayFood = foodLogs.filter((log: any) => new Date(log.loggedAt).toLocaleDateString('en-CA') === dateStr);
+  const todayActivity = activityLogs.filter((log: any) => new Date(log.loggedAt).toLocaleDateString('en-CA') === dateStr);
   
   return {
     totalCaloriesIn: todayFood.reduce((sum: number, log: any) => sum + (log.totalCalories || 0), 0),
@@ -155,6 +148,7 @@ export const getDailySummaryLocal = async (date: Date = new Date()) => {
     totalProtein: todayFood.reduce((sum: number, log: any) => sum + (log.totalProteinG || 0), 0),
     totalCarbs: todayFood.reduce((sum: number, log: any) => sum + (log.totalCarbsG || 0), 0),
     totalFat: todayFood.reduce((sum: number, log: any) => sum + (log.totalFatG || 0), 0),
+    totalSodium: todayFood.reduce((sum: number, log: any) => sum + (log.totalSodiumMg || 0), 0), // [新增]
     foodLogs: todayFood,
     activityLogs: todayActivity
   };
@@ -165,17 +159,16 @@ export const getFrequentFoodItems = async () => {
   const frequency: Record<string, number> = {};
   logs.forEach((log: any) => {
     const name = log.foodName;
-    if(name) frequency[name] = (frequency[name] || 0) + 1;
+    if (name) frequency[name] = (frequency[name] || 0) + 1;
   });
   
   return Object.entries(frequency)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([name]) => {
-      return logs.find((l: any) => l.foodName === name);
-    });
+    .map(([name]) => logs.find((l: any) => l.foodName === name));
 };
 
+// 6. 歷史趨勢 (7天)
 export const getHistory7DaysLocal = async () => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
@@ -190,7 +183,7 @@ export const getHistory7DaysLocal = async () => {
     const dayFood = foodLogs.filter((l: any) => new Date(l.loggedAt).toLocaleDateString('en-CA') === dateStr);
     const dayActivity = activityLogs.filter((l: any) => new Date(l.loggedAt).toLocaleDateString('en-CA') === dateStr);
     
-    // 找當天或最近一次的體重
+    // 找當天體重，找不到則找最近一筆
     let dayWeight = 0;
     const wLog = weightHistory.find((w: any) => w.date.startsWith(dateStr));
     if (wLog) {
@@ -206,10 +199,11 @@ export const getHistory7DaysLocal = async () => {
       date: d,
       caloriesIn: dayFood.reduce((s: number, l: any) => s + (l.totalCalories || 0), 0),
       caloriesOut: dayActivity.reduce((s: number, l: any) => s + (l.caloriesBurned || 0), 0),
-      // [新增] 統計三大營養素
+      // [新增] 統計三大營養素 + 鈉 (注意: food-recognition 存的是 totalSodiumMg)
       protein: dayFood.reduce((s: number, l: any) => s + (l.totalProteinG || 0), 0),
       carbs: dayFood.reduce((s: number, l: any) => s + (l.totalCarbsG || 0), 0),
       fat: dayFood.reduce((s: number, l: any) => s + (l.totalFatG || 0), 0),
+      sodium: dayFood.reduce((s: number, l: any) => s + (l.totalSodiumMg || 0), 0), // 關鍵！
       weight: dayWeight
     });
   }
