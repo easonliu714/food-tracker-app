@@ -4,7 +4,9 @@ const KEYS = {
   USER_SESSION: 'user_session',
   PROFILE: 'user_profile',
   FOOD_LOGS: 'food_logs',
-  ACTIVITY_LOGS: 'activity_logs', // 新增運動紀錄 Key
+  ACTIVITY_LOGS: 'activity_logs',
+  PRODUCTS: 'saved_products', // 新增：條碼商品庫
+  WEIGHTS: 'weight_history',  // 新增：體重歷史
 };
 
 // 1. 使用者 & 個人檔案
@@ -23,8 +25,38 @@ export const getLocalUser = async () => {
   return data ? JSON.parse(data) : null;
 };
 
+// 體重歷史紀錄
+export const saveWeightLog = async (weight: number) => {
+  const data = await AsyncStorage.getItem(KEYS.WEIGHTS);
+  const history = data ? JSON.parse(data) : [];
+  const today = new Date().toISOString().split('T')[0];
+  
+  // 如果今天已經記過，就更新；否則新增
+  const existingIndex = history.findIndex((h: any) => h.date.startsWith(today));
+  if (existingIndex >= 0) {
+    history[existingIndex].weight = weight;
+  } else {
+    history.push({ date: new Date().toISOString(), weight });
+  }
+  
+  // 只保留最近 30 筆
+  if (history.length > 30) history.shift();
+  
+  await AsyncStorage.setItem(KEYS.WEIGHTS, JSON.stringify(history));
+};
+
+export const getWeightHistory = async () => {
+  const data = await AsyncStorage.getItem(KEYS.WEIGHTS);
+  return data ? JSON.parse(data) : [];
+};
+
 export const saveProfileLocal = async (profileData: any) => {
   await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(profileData));
+  
+  // 如果有更新體重，同步寫入歷史紀錄
+  if (profileData.currentWeightKg) {
+    await saveWeightLog(profileData.currentWeightKg);
+  }
   return profileData;
 };
 
@@ -33,7 +65,21 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// 2. 飲食紀錄 (CRUD)
+// 2. 條碼商品庫 (新增)
+export const saveProductLocal = async (barcode: string, productData: any) => {
+  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+  const products = data ? JSON.parse(data) : {};
+  products[barcode] = productData; // Key-Value 儲存
+  await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
+};
+
+export const getProductByBarcode = async (barcode: string) => {
+  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+  const products = data ? JSON.parse(data) : {};
+  return products[barcode] || null;
+};
+
+// 3. 飲食紀錄 (CRUD)
 export const getFoodLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.FOOD_LOGS);
   return data ? JSON.parse(data) : [];
@@ -61,7 +107,7 @@ export const deleteFoodLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.FOOD_LOGS, JSON.stringify(updatedLogs));
 };
 
-// 3. 運動紀錄 (New)
+// 4. 運動紀錄
 export const getActivityLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.ACTIVITY_LOGS);
   return data ? JSON.parse(data) : [];
@@ -81,7 +127,7 @@ export const deleteActivityLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
-// 4. 進階查詢功能
+// 5. 每日摘要
 export const getDailySummaryLocal = async (date: Date = new Date()) => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
@@ -105,25 +151,22 @@ export const getFrequentFoodItems = async () => {
   const logs = await getFoodLogsLocal();
   const frequency: Record<string, number> = {};
   logs.forEach((log: any) => {
-    // 簡單用名稱分組
     const name = log.foodName;
-    frequency[name] = (frequency[name] || 0) + 1;
+    if (name) frequency[name] = (frequency[name] || 0) + 1;
   });
   
-  // 取前 5 名
   return Object.entries(frequency)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([name]) => {
-      // 找回該食物的詳細資料(取最新一筆)
-      const refLog = logs.find((l: any) => l.foodName === name);
-      return refLog;
+      return logs.find((l: any) => l.foodName === name);
     });
 };
 
 export const getHistory7DaysLocal = async () => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
+  const weightHistory = await getWeightHistory();
   const history = [];
 
   for (let i = 6; i >= 0; i--) {
@@ -133,11 +176,23 @@ export const getHistory7DaysLocal = async () => {
 
     const dayFood = foodLogs.filter((l: any) => l.loggedAt.startsWith(dateStr));
     const dayActivity = activityLogs.filter((l: any) => l.loggedAt.startsWith(dateStr));
+    
+    // 找當天或最近一次的體重
+    let dayWeight = 0;
+    const wLog = weightHistory.find((w: any) => w.date.startsWith(dateStr));
+    if (wLog) {
+      dayWeight = wLog.weight;
+    } else {
+      // 找不到當天，找最近的一筆
+      const recent = weightHistory.filter((w: any) => w.date < dateStr).pop();
+      dayWeight = recent ? recent.weight : 0;
+    }
 
     history.push({
       date: d,
       caloriesIn: dayFood.reduce((s: number, l: any) => s + (l.totalCalories || 0), 0),
       caloriesOut: dayActivity.reduce((s: number, l: any) => s + (l.caloriesBurned || 0), 0),
+      weight: dayWeight
     });
   }
   return history;

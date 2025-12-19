@@ -14,7 +14,7 @@ interface Props {
 export function NumberInput({ value, onChange, label, unit, step = 1 }: Props) {
   const handleAdjust = (delta: number) => {
     const current = parseFloat(value) || 0;
-    const next = Math.max(0, current + delta);
+    const next = Math.max(0, parseFloat((current + delta).toFixed(1))); // 修正：處理小數點精度
     onChange(next.toString());
   };
 
@@ -44,10 +44,10 @@ export function NumberInput({ value, onChange, label, unit, step = 1 }: Props) {
 
 const styles = StyleSheet.create({
   container: { marginBottom: 16 },
-  label: { fontSize: 12, color: '#666', marginBottom: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  btn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#0a7ea4', justifyContent: 'center', alignItems: 'center' },
-  inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, height: 40, backgroundColor: 'white' },
-  input: { flex: 1, fontSize: 16, textAlign: 'center' },
-  unit: { fontSize: 12, color: '#888', marginLeft: 4 }
+  label: { fontSize: 14, color: '#666', marginBottom: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  btn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#0a7ea4', justifyContent: 'center', alignItems: 'center' },
+  inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, height: 48, backgroundColor: 'white' }, // 增加高度
+  input: { flex: 1, fontSize: 18, textAlign: 'center', color: '#000' }, // 增大字體
+  unit: { fontSize: 14, color: '#888', marginLeft: 4 }
 });

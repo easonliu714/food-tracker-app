@@ -9,7 +9,11 @@ import { ProgressRing } from "@/components/progress-ring";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { getDailySummaryLocal, getProfileLocal, deleteFoodLogLocal, saveActivityLogLocal, deleteActivityLogLocal } from "@/lib/storage";
+import { 
+  getDailySummaryLocal, getProfileLocal, 
+  deleteFoodLogLocal, saveActivityLogLocal, 
+  deleteActivityLogLocal, updateFoodLogLocal 
+} from "@/lib/storage";
 import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
 
@@ -20,18 +24,23 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
-  
   const [summary, setSummary] = useState<any>(null);
   const [targetCalories, setTargetCalories] = useState(2000);
   const [profile, setProfile] = useState<any>(null);
 
-  // Modal 狀態
+  // Modal 狀態 (運動)
   const [modalVisible, setModalVisible] = useState(false);
   const [actType, setActType] = useState(WORKOUT_TYPES[0]);
   const [duration, setDuration] = useState("30");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
   const [estCal, setEstCal] = useState(0);
+
+  // Modal 狀態 (編輯食物)
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingLog, setEditingLog] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editCal, setEditCal] = useState("");
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -48,46 +57,50 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
-  // 自動計算熱量 (監聽輸入變化)
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
-      const cal = calculateWorkoutCalories(
-        actType, 
-        parseFloat(duration) || 0, 
-        profile?.currentWeightKg || 70,
-        parseFloat(dist),
-        parseFloat(steps)
-      );
+      const cal = calculateWorkoutCalories(actType, parseFloat(duration)||0, profile?.currentWeightKg||70, parseFloat(dist), parseFloat(steps));
       setEstCal(cal);
     }
   }, [actType, duration, steps, dist, modalVisible]));
 
   const handleSaveWorkout = async () => {
-    await saveActivityLogLocal({
-      activityType: actType,
-      caloriesBurned: estCal,
-      details: `${duration}分 / ${steps}步 / ${dist}km`
-    });
+    await saveActivityLogLocal({ activityType: actType, caloriesBurned: estCal, details: `${duration}分 / ${steps}步 / ${dist}km` });
     setModalVisible(false);
     loadData();
   };
 
+  const handleEditFood = (log: any) => {
+    setEditingLog(log);
+    setEditName(log.foodName);
+    setEditCal(log.totalCalories.toString());
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEditFood = async () => {
+    if (editingLog) {
+      await updateFoodLogLocal({ ...editingLog, foodName: editName, totalCalories: parseInt(editCal) || 0 });
+      setEditModalVisible(false);
+      setEditingLog(null);
+      loadData();
+    }
+  };
+
   const renderRightActions = (id: number, type: 'food'|'activity') => (
-    <Pressable 
-      onPress={async () => {
-        if(type==='food') await deleteFoodLogLocal(id);
-        else await deleteActivityLogLocal(id);
-        loadData();
-      }} 
-      style={styles.deleteBtn}
-    >
+    <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}>
       <Ionicons name="trash" size={24} color="white" />
+      <ThemedText style={{color:'white', fontSize:12}}>刪除</ThemedText>
     </Pressable>
   );
 
-  const calIn = summary?.totalCaloriesIn || 0;
-  const calOut = summary?.totalCaloriesOut || 0;
-  const net = calIn - calOut;
+  const renderLeftActions = (log: any) => (
+    <Pressable onPress={() => handleEditFood(log)} style={styles.editBtn}>
+      <Ionicons name="create" size={24} color="white" />
+      <ThemedText style={{color:'white', fontSize:12}}>編輯</ThemedText>
+    </Pressable>
+  );
+
+  const net = (summary?.totalCaloriesIn || 0) - (summary?.totalCaloriesOut || 0);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -98,10 +111,10 @@ export default function HomeScreen() {
           </View>
 
           <View style={[styles.progressSection, { backgroundColor: cardBackground }]}>
-            <ProgressRing progress={targetCalories > 0 ? net/targetCalories : 0} current={net} target={targetCalories} size={200} />
+            <ProgressRing progress={targetCalories>0?net/targetCalories:0} current={net} target={targetCalories} size={200} />
             <View style={{flexDirection:'row', gap:20, marginTop:10}}>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>攝取 {calIn}</ThemedText>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>消耗 {calOut}</ThemedText>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>攝取 {summary?.totalCaloriesIn}</ThemedText>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>消耗 {summary?.totalCaloriesOut}</ThemedText>
             </View>
           </View>
 
@@ -111,11 +124,10 @@ export default function HomeScreen() {
             <Pressable onPress={() => setModalVisible(true)} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
           </View>
 
-          {/* 飲食列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (左滑刪除)</ThemedText>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (右滑編輯 / 左滑刪除)</ThemedText>
             {summary?.foodLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')}>
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log)}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.foodName}</ThemedText>
                   <ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText>
@@ -124,7 +136,6 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* 運動列表 */}
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (左滑刪除)</ThemedText>
             {summary?.activityLogs?.map((log: any) => (
@@ -139,6 +150,7 @@ export default function HomeScreen() {
           <View style={{height: 100}}/>
         </ScrollView>
 
+        {/* 運動 Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -165,6 +177,25 @@ export default function HomeScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* 編輯食物 Modal */}
+        <Modal visible={editModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
+              <ThemedText type="title">編輯飲食</ThemedText>
+              <View style={{marginVertical: 20}}>
+                <ThemedText style={{marginBottom: 5, color: textSecondary}}>食物名稱</ThemedText>
+                <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white'}]} value={editName} onChangeText={setEditName} />
+                <View style={{height: 10}}/>
+                <NumberInput label="熱量 (kcal)" value={editCal} onChange={setEditCal} step={10} />
+              </View>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <Pressable onPress={() => setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
+                <Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -178,10 +209,12 @@ const styles = StyleSheet.create({
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
   btnTxt: { color: 'white', fontWeight: 'bold' },
   listSection: { marginHorizontal: 16, padding: 16, borderRadius: 16 },
-  listItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', justifyContent: 'space-between' },
-  deleteBtn: { backgroundColor: 'red', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
+  listItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10 },
+  deleteBtn: { backgroundColor: 'red', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', borderTopRightRadius: 16, borderBottomRightRadius: 16 },
+  editBtn: { backgroundColor: '#2196F3', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modalContent: { padding: 20, borderRadius: 16 },
   typeChip: { padding: 8, borderRadius: 16, borderWidth: 1, borderColor: '#ddd', marginRight: 8 },
-  modalBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' }
+  modalBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16 }
 });
