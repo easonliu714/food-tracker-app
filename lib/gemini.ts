@@ -2,7 +2,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as FileSystem from "expo-file-system";
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
-// 使用您提供的 Key
 const API_KEY = "AIzaSyDpGgc9felzsoqEsx9iBKig3DLSnE5l8_E"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
@@ -14,6 +13,7 @@ export interface FoodAnalysisResult {
     protein: number;
     carbs: number;
     fat: number;
+    sodium: number; // [新增]
   };
   suggestion: string;
 }
@@ -36,12 +36,15 @@ export interface WorkoutResult {
 // 1. 分析食物圖片
 export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisResult | null> {
   try {
+    console.log("Compressing image...");
+    // [優化] 縮得更小 (512px) 以確保上傳成功
     const manipulatedImage = await manipulateAsync(
       imageUri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.7, format: SaveFormat.JPEG, base64: true }
+      [{ resize: { width: 512 } }],
+      { compress: 0.5, format: SaveFormat.JPEG, base64: true }
     );
     
+    console.log("Calling Gemini API...");
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `
       Analyze this food image. Return ONLY a JSON object (no markdown) with this structure:
@@ -49,7 +52,12 @@ export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisRe
         "foodName": "string (Traditional Chinese)",
         "detectedObject": "string (What main object did you see?)",
         "calories": number (estimated total),
-        "macros": { "protein": number, "carbs": number, "fat": number },
+        "macros": { 
+          "protein": number, 
+          "carbs": number, 
+          "fat": number,
+          "sodium": number (mg) 
+        },
         "suggestion": "string (short health advice in Traditional Chinese)"
       }
       If it's not food, set "foodName" to "無法識別為食物".
@@ -60,6 +68,7 @@ export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisRe
       { inlineData: { data: manipulatedImage.base64 || "", mimeType: "image/jpeg" } }
     ]);
     
+    console.log("Gemini Response:", result.response.text());
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
@@ -77,9 +86,9 @@ export async function analyzeFoodText(foodName: string): Promise<FoodAnalysisRes
       {
         "foodName": "${foodName}",
         "detectedObject": "Text Input",
-        "calories": number (estimated per serving),
-        "macros": { "protein": number, "carbs": number, "fat": number },
-        "suggestion": "string (short health advice in Traditional Chinese)"
+        "calories": number,
+        "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number },
+        "suggestion": "string (Traditional Chinese)"
       }
     `;
     const result = await model.generateContent(prompt);
@@ -104,7 +113,6 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE' | '
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Recipe Suggestion Error:", error);
     return null;
   }
 }
@@ -122,31 +130,21 @@ export async function suggestWorkout(userProfile: any, remainingCalories: number
     const jsonStr = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error("Workout Suggestion Error:", error);
     return null;
   }
 }
 
 // 5. 運動熱量計算
 export function calculateWorkoutCalories(
-  activity: string, 
-  durationMinutes: number, 
-  weightKg: number,
-  distanceKm: number = 0,
-  steps: number = 0
+  activity: string, durationMinutes: number, weightKg: number, distanceKm: number = 0, steps: number = 0
 ): number {
   const METs: Record<string, number> = {
     '慢走': 3.0, '快走': 4.5, '慢跑': 7.0, '快跑': 11.0, 
     '跑步機': 5.0, '爬梯': 8.0, '一般運動': 4.0
   };
-
   const met = METs[activity] || 4.0;
-  
-  let caloriesByTime = met * weightKg * (durationMinutes / 60);
-  let caloriesByDist = 0;
-  if (distanceKm > 0) caloriesByDist = weightKg * distanceKm * 1.036;
-  let caloriesBySteps = 0;
-  if (steps > 0) caloriesBySteps = steps * 0.04;
-
-  return Math.round(Math.max(caloriesByDist, caloriesBySteps, caloriesByTime));
+  let val = met * weightKg * (durationMinutes / 60);
+  if (distanceKm > 0) val = Math.max(val, weightKg * distanceKm * 1.036);
+  if (steps > 0) val = Math.max(val, steps * 0.04);
+  return Math.round(val);
 }
