@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as FileSystem from "expo-file-system";
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 
+// ⚠️ 使用您的有效 API Key
 const API_KEY = "AIzaSyDpGgc9felzsoqEsx9iBKig3DLSnE5l8_E"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
@@ -37,15 +38,16 @@ export interface WorkoutResult {
 export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisResult | null> {
   try {
     console.log("Compressing image...");
-    // [優化] 縮得更小 (512px) 以確保上傳成功
+    // 縮圖到 800px, 壓縮率 0.7
     const manipulatedImage = await manipulateAsync(
       imageUri,
-      [{ resize: { width: 512 } }],
-      { compress: 0.5, format: SaveFormat.JPEG, base64: true }
+      [{ resize: { width: 800 } }],
+      { compress: 0.7, format: SaveFormat.JPEG, base64: true }
     );
     
-    console.log("Calling Gemini API...");
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // [修正] 改用 gemini-2.5-flash
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    
     const prompt = `
       Analyze this food image. Return ONLY a JSON object (no markdown) with this structure:
       {
@@ -80,7 +82,8 @@ export async function analyzeFoodImage(imageUri: string): Promise<FoodAnalysisRe
 // 2. 分析食物文字
 export async function analyzeFoodText(foodName: string): Promise<FoodAnalysisResult | null> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // [修正] 改用 gemini-2.5-flash
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
       Estimate nutrition for "${foodName}" (standard serving). Return ONLY a JSON object (no markdown) with:
       {
@@ -103,7 +106,7 @@ export async function analyzeFoodText(foodName: string): Promise<FoodAnalysisRes
 // 3. 食譜建議
 export async function suggestRecipe(remainingCalories: number, type: 'STORE' | 'COOKING'): Promise<RecipeResult | null> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
       Suggest a ${type === 'STORE' ? 'Taiwan convenience store combo' : 'simple home-cooked meal'} 
       for a user with ${remainingCalories} kcal budget.
@@ -120,7 +123,7 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE' | '
 // 4. 運動建議
 export async function suggestWorkout(userProfile: any, remainingCalories: number): Promise<WorkoutResult | null> {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `
       Suggest a workout for a user (${userProfile?.currentWeightKg || 70}kg) to burn approx 300kcal.
       Remaining budget: ${remainingCalories}.
