@@ -47,7 +47,7 @@ export default function HomeScreen() {
   const [floors, setFloors] = useState("0");
   const [estCal, setEstCal] = useState(0);
 
-  // 飲食 Modal
+  // 飲食編輯 Modal
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editName, setEditName] = useState("");
@@ -97,14 +97,12 @@ export default function HomeScreen() {
   const handleSaveWorkout = async () => {
     const type = isCustomAct ? customActType : actType;
     if (!type) return Alert.alert("請輸入項目");
-
     const newLog = {
       activityType: type,
       caloriesBurned: estCal,
       details: `${duration}分 / ${steps}步 / ${dist}km / ${floors}樓`,
       loggedAt: selectedDate.toISOString()
     };
-
     if (editingWorkout) {
       await updateActivityLogLocal({ ...editingWorkout, ...newLog });
       setEditingWorkout(null);
