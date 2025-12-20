@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { View, StyleSheet, Image, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Text, Platform } from "react-native";
+import { View, StyleSheet, Image, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
@@ -9,44 +9,53 @@ import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
 import { saveFoodLogLocal, saveProductLocal, getProductByBarcode, getSettings } from "@/lib/storage";
 import { NumberInput } from "@/components/NumberInput";
 
-// 餐別選項
-const MEAL_OPTIONS = [{ k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, { k: 'snack', l: '點心' }, { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }];
-const getMealTypeByTime = () => { const h = new Date().getHours(); if (h < 11) return 'breakfast'; if (h < 14) return 'lunch'; if (h < 17) return 'snack'; if (h < 21) return 'dinner'; return 'late_night'; };
+const MEAL_OPTIONS = [
+  { k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, 
+  { k: 'snack', l: '點心' }, { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }
+];
+
+const getMealTypeByTime = () => {
+  const h = new Date().getHours();
+  if (h < 11) return 'breakfast';
+  if (h < 14) return 'lunch';
+  if (h < 17) return 'snack';
+  if (h < 21) return 'dinner';
+  return 'late_night';
+};
 
 export default function FoodRecognitionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   
-  // 圖片 Uri (可能是裁切過的)
-  const [imageUri, setImageUri] = useState<string | null>(params.imageUri as string);
+  const imageUri = params.imageUri as string;
   const initialMode = params.mode === 'MANUAL' ? 'MANUAL' : 'AI';
 
-  const [isAnalyzing, setIsAnalyzing] = useState(false); // 預設不自動跑，等待使用者確認裁切或輸入
+  const [isAnalyzing, setIsAnalyzing] = useState(initialMode === 'AI' && !!imageUri);
   const [isSaving, setIsSaving] = useState(false);
   const [mode, setMode] = useState<'AI' | 'MANUAL'>(initialMode);
   const [mealType, setMealType] = useState(getMealTypeByTime());
   const [lang, setLang] = useState('zh-TW');
 
-  // [修改] 資料結構分離：Input (食用量) vs Standard (標準值)
-  // Standard Data (每 100g/ml)
+  // 標準數據 (每 100g 或 每份)
   const [stdData, setStdData] = useState({ 
     name: "", cal: "0", pro: "0", carb: "0", fat: "0", sod: "0", stdWeight: "100" 
   });
   
-  // Intake Input
+  // 使用者輸入 (份數或克數)
   const [inputType, setInputType] = useState<'serving'|'gram'>('serving');
-  const [inputAmount, setInputAmount] = useState("1"); // 1份
-  const [inputGram, setInputGram] = useState("100"); // 100g
+  const [inputAmount, setInputAmount] = useState("1"); 
+  const [inputGram, setInputGram] = useState("100");
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   useEffect(() => { getSettings().then(s => { if(s.language) setLang(s.language); }); }, []);
 
-  // 1. 自動分析 (僅當有圖片且尚未分析過)
+  // 1. 自動分析圖片
   useEffect(() => {
     async function autoAnalyze() {
       if (imageUri && mode === 'AI' && !stdData.name) {
@@ -56,7 +65,7 @@ export default function FoodRecognitionScreen() {
           if (result && result.foodName !== "分析失敗") {
             fillStdData(result);
           } else {
-            Alert.alert("分析失敗", "請嘗試手動輸入");
+            Alert.alert("分析失敗", "請手動輸入");
             setMode('MANUAL');
           }
         } catch(e) {
@@ -67,9 +76,9 @@ export default function FoodRecognitionScreen() {
       }
     }
     autoAnalyze();
-  }, [imageUri]); // 依賴 imageUri
+  }, [imageUri]);
 
-  // 填入數據 (AI 回傳的是總量預估，我們將其視為 "一份" 的標準值)
+  // 填入資料 helper
   const fillStdData = (data: any) => {
     setStdData({
       name: data.foodName || "",
@@ -78,15 +87,14 @@ export default function FoodRecognitionScreen() {
       carb: data.macros?.carbs?.toString() || "0",
       fat: data.macros?.fat?.toString() || "0",
       sod: data.macros?.sodium?.toString() || "0",
-      stdWeight: data.estimated_weight_g?.toString() || "100" // AI 估計的這份重量
+      stdWeight: data.estimated_weight_g?.toString() || "100"
     });
-    // 重置輸入為 1 份
     setInputType('serving');
     setInputAmount("1");
     setInputGram(data.estimated_weight_g?.toString() || "100");
   };
 
-  // 名稱模糊查詢 (手輸模式)
+  // 名稱輸入後自動查庫
   const handleNameBlur = async () => {
     if (!stdData.name) return;
     const saved = await getProductByBarcode(stdData.name);
@@ -100,23 +108,25 @@ export default function FoodRecognitionScreen() {
         sod: saved.sod?.toString() || "0",
         stdWeight: saved.stdWeight?.toString() || "100"
       });
-      Alert.alert("已載入", "發現資料庫中有此食物，已自動帶入數值。");
+      // Alert.alert("已載入", "發現資料庫中有此食物");
     }
   };
 
-  // AI 文字估算
+  // 手動 AI 估算
   const handleTextAnalyze = async () => {
     if (!stdData.name) return Alert.alert("請輸入食物名稱");
     setIsAnalyzing(true);
     try {
       const result = await analyzeFoodText(stdData.name, lang);
       if (result) fillStdData(result);
+    } catch {
+      Alert.alert("AI 無回應");
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // 連動計算：份數 <-> 克數
+  // 連動計算
   useEffect(() => {
     const stdW = parseFloat(stdData.stdWeight) || 100;
     if (inputType === 'serving') {
@@ -128,20 +138,8 @@ export default function FoodRecognitionScreen() {
     }
   }, [inputAmount, inputGram, inputType, stdData.stdWeight]);
 
-  // 最終計算
   const getFinal = () => {
-    // 假設 stdData 是 "每份(stdWeight)" 的數值 (AI 邏輯) 或是 "每100g" 的數值 (掃碼邏輯)
-    // 這裡統一邏輯：stdData 顯示的是 "一份" (User defined standard portion) 的數值
-    // 使用者輸入幾份，就乘幾倍。
-    // 如果使用者改克數，則 ratio = 輸入克數 / 標準份量克數
     const ratio = (parseFloat(inputAmount) || 0); 
-    
-    // 備註：如果 stdData 的 cal 是 per 100g，那這裡邏輯要改。
-    // 根據需求 2，希望像掃碼一樣。掃碼通常是：下方顯示 "每 100g 數值"，上方輸入 "克數"。
-    // 但 AI 估算通常給的是 "這一碗 (300g) 多少卡"。
-    // 折衷：我們把 stdData 當作 "基準單位資料"。
-    // 為了符合需求 2，我們將介面顯示為 "基準值 (可編輯為 100g 或 1份)"。
-    
     return {
       cal: Math.round((parseFloat(stdData.cal)||0) * ratio),
       pro: Math.round((parseFloat(stdData.pro)||0) * ratio),
@@ -153,13 +151,14 @@ export default function FoodRecognitionScreen() {
 
   const handleSave = async () => {
     const final = getFinal();
+    // 存入產品庫
     await saveProductLocal(stdData.name, {
       name: stdData.name,
       brand: "User Input",
       stdWeight: parseFloat(stdData.stdWeight)||100,
       cal: stdData.cal, pro: stdData.pro, carb: stdData.carb, fat: stdData.fat, sod: stdData.sod
     });
-
+    // 存入日誌
     await saveFoodLogLocal({
       mealType,
       foodName: stdData.name,
@@ -190,12 +189,12 @@ export default function FoodRecognitionScreen() {
         ) : (
           <View style={[styles.image, {backgroundColor: '#eee', justifyContent:'center', alignItems:'center'}]}>
              <Ionicons name="fast-food" size={50} color="#ccc"/>
-             <ThemedText style={{color:'#999'}}>無圖片</ThemedText>
+             <ThemedText style={{color:'#999'}}>手動輸入模式</ThemedText>
           </View>
         )}
 
         <View style={{ padding: 16 }}>
-          {/* 模式與 AI 狀態 */}
+          {/* AI 狀態與切換 */}
           <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:16}}>
              {isAnalyzing && <ActivityIndicator color={tintColor} />}
              <Pressable onPress={() => setMode(m => m==='AI'?'MANUAL':'AI')} style={[styles.modeBtn, {borderColor:tintColor}]}>
@@ -228,7 +227,7 @@ export default function FoodRecognitionScreen() {
             </View>
           </View>
 
-          {/* 2. 份量輸入區 (對齊 Barcode 介面) */}
+          {/* 2. 份量輸入 */}
           <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:10}}>
                 <Pressable onPress={()=>setInputType('serving')}><ThemedText style={{color:inputType==='serving'?tintColor:'#999', fontWeight:'bold'}}>輸入份數</ThemedText></Pressable>
@@ -247,7 +246,7 @@ export default function FoodRecognitionScreen() {
              </View>
           </View>
 
-          {/* 3. 標準值設定 (基準) */}
+          {/* 3. 標準值設定 */}
           <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
              <ThemedText style={{fontWeight:'bold', marginBottom:10}}>基準數值 (每 1 份)</ThemedText>
              <NumberInput label="一份重量 (g)" value={stdData.stdWeight} onChange={v => setStdData({...stdData, stdWeight: v})} step={10} />
@@ -262,7 +261,6 @@ export default function FoodRecognitionScreen() {
              </View>
              <NumberInput label="鈉 (mg)" value={stdData.sod} onChange={v => setStdData({...stdData, sod: v})} step={10}/>
           </View>
-
         </View>
       </ScrollView>
 

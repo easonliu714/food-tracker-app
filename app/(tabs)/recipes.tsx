@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Share, Platform } from "react-native";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Platform } from "react-native";
 import * as Notifications from 'expo-notifications';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -12,11 +12,11 @@ import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
-// [修正] 通知的標準寫法，消除警示
+// [修正] 設定通知處理器，確保回傳正確的 NotificationBehavior 物件
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldPlaySound: false,
     shouldSetBadge: false,
   }),
 });
@@ -32,15 +32,19 @@ export default function RecipesScreen() {
   const [result, setResult] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
-  const [lang, setLang] = useState("zh-TW"); // 預設語言
+  const [lang, setLang] = useState("zh-TW");
 
   // 初始化：讀取上次建議與語言
   useEffect(() => {
      async function init() {
-       const advice = await getAIAdvice();
-       if (advice) setResult(advice);
-       const s = await getSettings();
-       if (s.language) setLang(s.language);
+       try {
+         const advice = await getAIAdvice();
+         if (advice) setResult(advice);
+         const s = await getSettings();
+         if (s.language) setLang(s.language);
+       } catch (e) {
+         console.error("Init error:", e);
+       }
      }
      init();
   }, []);
@@ -54,7 +58,6 @@ export default function RecipesScreen() {
        setProfile(p);
        setRemaining(target - net);
        
-       // 再次同步語言，以防在設定頁切換後回來
        const set = await getSettings();
        if (set.language) setLang(set.language);
     }
@@ -62,11 +65,16 @@ export default function RecipesScreen() {
   }, []));
 
   const handleGenerate = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
+    // 請求通知權限
+    const { status } = await Notifications.getPermissionsAsync();
+    let finalStatus = status;
+    if (status !== 'granted') {
+      const { status: newStatus } = await Notifications.requestPermissionsAsync();
+      finalStatus = newStatus;
+    }
+
     setLoading(true);
-    // 不清空 result，保留舊資料直到新資料產生
     
-    // 延遲一點執行以免 UI 卡頓
     setTimeout(async () => {
        try {
          let res;
@@ -78,8 +86,9 @@ export default function RecipesScreen() {
          
          if (res) {
            setResult(res);
-           saveAIAdvice(res); // 持久化
-           if (status === 'granted') {
+           await saveAIAdvice(res); // 持久化
+           
+           if (finalStatus === 'granted') {
              await Notifications.scheduleNotificationAsync({
                content: { 
                  title: t('ai_coach', lang), 
@@ -89,7 +98,7 @@ export default function RecipesScreen() {
              });
            }
          } else {
-           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或稍後再試");
+           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
          }
        } catch (e) {
          Alert.alert("錯誤", "發生未知錯誤");
@@ -101,11 +110,9 @@ export default function RecipesScreen() {
 
   const openVideo = () => { if (result?.video_url) Linking.openURL(result.video_url); };
 
-  // 匯出 PDF
   const handleExportPDF = async () => {
     if (!result) return;
     
-    // 簡單的 HTML 樣板
     const htmlContent = `
       <html>
         <head>
