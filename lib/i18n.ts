@@ -1,4 +1,6 @@
 import { getLocales } from 'expo-localization';
+import { useState, useEffect } from 'react';
+import { getSettings, saveSettings } from './storage';
 
 export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
@@ -11,6 +13,13 @@ export const LANGUAGES = [
 
 export const TRANSLATIONS = {
   'zh-TW': {
+    // Tab Titles
+    tab_home: '首頁',
+    tab_analysis: '分析',
+    tab_ai_coach: 'AI教練',
+    tab_settings: '設定',
+    
+    // Common
     activity_level: '活動量',
     sedentary: '久坐',
     lightly_active: '輕度活動',
@@ -70,8 +79,16 @@ export const TRANSLATIONS = {
     calories: '熱量',
     suggestion_limit: '每日建議攝取量',
     alert_over: '超過建議值',
+    export_pdf: '匯出 PDF',
+    edit: '編輯',
+    delete: '刪除',
   },
   'en': {
+    tab_home: 'Home',
+    tab_analysis: 'Analysis',
+    tab_ai_coach: 'AI Coach',
+    tab_settings: 'Settings',
+
     activity_level: 'Activity Level',
     sedentary: 'Sedentary',
     lightly_active: 'Lightly Active',
@@ -131,8 +148,16 @@ export const TRANSLATIONS = {
     calories: 'Calories',
     suggestion_limit: 'Daily Suggestion',
     alert_over: 'Exceeded',
+    export_pdf: 'Export PDF',
+    edit: 'Edit',
+    delete: 'Delete',
   },
   'ja': {
+    tab_home: 'ホーム',
+    tab_analysis: '分析',
+    tab_ai_coach: 'AIコーチ',
+    tab_settings: '設定',
+
     activity_level: '活動レベル',
     sedentary: '座りっぱなし',
     lightly_active: '軽い運動',
@@ -192,8 +217,16 @@ export const TRANSLATIONS = {
     calories: 'カロリー',
     suggestion_limit: '推奨摂取量',
     alert_over: '超過',
+    export_pdf: 'PDF出力',
+    edit: '編集',
+    delete: '削除',
   },
   'ko': {
+    tab_home: '홈',
+    tab_analysis: '분석',
+    tab_ai_coach: 'AI 코치',
+    tab_settings: '설정',
+
     activity_level: '활동 수준',
     sedentary: '좌식 생활',
     lightly_active: '가벼운 활동',
@@ -253,8 +286,16 @@ export const TRANSLATIONS = {
     calories: '칼로리',
     suggestion_limit: '권장 섭취량',
     alert_over: '초과',
+    export_pdf: 'PDF 내보내기',
+    edit: '편집',
+    delete: '삭제',
   },
   'fr': {
+    tab_home: 'Accueil',
+    tab_analysis: 'Analyse',
+    tab_ai_coach: 'Coach IA',
+    tab_settings: 'Paramètres',
+
     activity_level: "Niveau d'activité",
     sedentary: 'Sédentaire',
     lightly_active: 'Légèrement actif',
@@ -314,8 +355,16 @@ export const TRANSLATIONS = {
     calories: 'Calories',
     suggestion_limit: 'Conseillé',
     alert_over: 'DÉPASSÉ',
+    export_pdf: 'Exporter PDF',
+    edit: 'Éditer',
+    delete: 'Supprimer',
   },
   'ru': {
+    tab_home: 'Главная',
+    tab_analysis: 'Анализ',
+    tab_ai_coach: 'AI Тренер',
+    tab_settings: 'Настройки',
+
     activity_level: 'Активность',
     sedentary: 'Сидячий',
     lightly_active: 'Малоактивный',
@@ -375,14 +424,17 @@ export const TRANSLATIONS = {
     calories: 'Ккал',
     suggestion_limit: 'Норма',
     alert_over: 'ПРЕВЫШЕНО',
+    export_pdf: 'Экспорт PDF',
+    edit: 'Изменить',
+    delete: 'Удалить',
   },
 };
 
 export const VERSION_LOGS = [
-  { version: '1.0.4', date: '2025-12-20', content: 'AI教練建議持久化與PDF匯出；拍照/手輸改為標準化(100g)輸入模式；新增拍照裁切遮罩功能；優化輸入法鍵盤體驗。' },
-  { version: '1.0.3', date: '2025-12-20', content: '新增多語言支援(繁/英/日/韓/法/俄)；新增體脂率紀錄；趨勢分析增加年/月/週切換；AI 邏輯優化(正餐判斷、無輔具運動、影片連結)。' },
-  { version: '1.0.2', date: '2025-12-19', content: '修正 AI 金鑰失效問題，開放使用者自訂 API Key；修正條碼掃描無法儲存問題；優化趨勢圖表顯示(雙軸)；新增左滑編輯功能。' },
-  { version: '1.0.1', date: '2025-12-18', content: '基本功能發布：飲食紀錄、卡路里計算、個人檔案管理、AI 拍照辨識、條碼掃描。' },
+  { version: '1.0.4', date: '2025-12-21', content: 'UI/UX全面優化：解決語言切換延遲問題；新增相簿匯入功能；AI教練建議分開儲存；鈉含量單位修正。' },
+  { version: '1.0.3', date: '2025-12-20', content: '新增多語言支援；新增體脂率紀錄；趨勢分析增加年/月/週切換；AI 邏輯優化。' },
+  { version: '1.0.2', date: '2025-12-18', content: '修正 AI 金鑰失效問題，開放自訂 Key；修正條碼掃描；優化趨勢圖表。' },
+  { version: '1.0.1', date: '2025-12-15', content: '基本功能發布：飲食紀錄、卡路里計算、個人檔案、AI 辨識、條碼掃描。' },
 ];
 
 export const t = (key: string, lang: string = 'zh-TW') => {
@@ -390,14 +442,42 @@ export const t = (key: string, lang: string = 'zh-TW') => {
   return dict[key as keyof typeof dict] || TRANSLATIONS['zh-TW'][key as any] || key;
 };
 
-// 語言偵測
-export const detectLanguage = () => {
-  const locales = getLocales();
-  if (locales && locales.length > 0) {
-    const code = locales[0].languageCode;
-    // 簡單對應系統語言代碼到我們的支援列表
-    if (code === 'zh') return 'zh-TW';
-    if (['en', 'ja', 'ko', 'fr', 'ru'].includes(code)) return code;
-  }
-  return 'zh-TW';
+// 簡單的事件訂閱機制，讓非元件也能觸發更新
+const listeners: ((lang: string) => void)[] = [];
+
+export const subscribeLanguageChange = (callback: (lang: string) => void) => {
+  listeners.push(callback);
+  return () => {
+    const index = listeners.indexOf(callback);
+    if (index > -1) listeners.splice(index, 1);
+  };
+};
+
+// 全域語言變數 (in-memory)
+let currentLang = 'zh-TW';
+
+export const getCurrentLang = () => currentLang;
+
+export const setAppLanguage = (lang: string) => {
+  currentLang = lang;
+  listeners.forEach(cb => cb(lang));
+  // 異步存入 Storage，不阻塞 UI
+  saveSettings({ language: lang });
+};
+
+// Hook
+export const useLanguage = () => {
+  const [lang, setLang] = useState(currentLang);
+  useEffect(() => {
+    // 初始載入
+    getSettings().then(s => { 
+      if(s.language && s.language !== currentLang) {
+        currentLang = s.language;
+        setLang(s.language);
+      }
+    });
+    // 訂閱變更
+    return subscribeLanguageChange(setLang);
+  }, []);
+  return lang;
 };
