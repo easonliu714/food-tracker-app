@@ -3,7 +3,6 @@ import * as FileSystem from "expo-file-system";
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { getSettings } from "./storage";
 
-// 動態獲取模型
 const getModel = async () => {
   const { apiKey, model } = await getSettings();
   if (!apiKey) throw new Error("API Key 未設定");
@@ -11,7 +10,6 @@ const getModel = async () => {
   return genAI.getGenerativeModel({ model: model || "gemini-2.5-flash" });
 };
 
-// 驗證 Key
 export async function validateApiKey(apiKey: string) {
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -27,7 +25,7 @@ export async function validateApiKey(apiKey: string) {
   }
 }
 
-// 1. 分析食物圖片
+// 1. 分析圖片 (Sodium mg fix)
 export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW') {
   try {
     const manipulatedImage = await manipulateAsync(imageUri, [{ resize: { width: 512 } }], { compress: 0.6, format: SaveFormat.JPEG, base64: true });
@@ -36,12 +34,17 @@ export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW')
       Analyze this food image. Response language: ${lang}.
       Return ONLY a JSON object (no markdown):
       {
-        "foodName": "string (in ${lang})",
+        "foodName": "string",
         "detectedObject": "string",
         "estimated_weight_g": number (grams),
         "calories": number,
-        "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number },
-        "suggestion": "string (health advice in ${lang})"
+        "macros": { 
+          "protein": number, 
+          "carbs": number, 
+          "fat": number, 
+          "sodium": number (Milligrams mg, DO NOT convert to grams) 
+        },
+        "suggestion": "string"
       }
     `;
     const result = await model.generateContent([prompt, { inlineData: { data: manipulatedImage.base64 || "", mimeType: "image/jpeg" } }]);
@@ -49,7 +52,7 @@ export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW')
   } catch (error) { return null; }
 }
 
-// 2. 分析文字
+// 2. 分析文字 (Sodium mg fix)
 export async function analyzeFoodText(foodName: string, lang: string = 'zh-TW') {
   try {
     const model = await getModel();
@@ -61,8 +64,13 @@ export async function analyzeFoodText(foodName: string, lang: string = 'zh-TW') 
         "detectedObject": "Text Input",
         "estimated_weight_g": number (100g base),
         "calories": number,
-        "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number },
-        "suggestion": "string (in ${lang})"
+        "macros": { 
+          "protein": number, 
+          "carbs": number, 
+          "fat": number, 
+          "sodium": number (Milligrams mg, DO NOT convert to grams) 
+        },
+        "suggestion": "string"
       }
     `;
     const result = await model.generateContent(prompt);
@@ -70,62 +78,41 @@ export async function analyzeFoodText(foodName: string, lang: string = 'zh-TW') 
   } catch (error) { return null; }
 }
 
-// 3. 食譜建議 (考慮正餐)
+// 3. 食譜建議
 export async function suggestRecipe(remainingCalories: number, type: 'STORE' | 'COOKING', lang: string = 'zh-TW') {
   try {
     const model = await getModel();
     const hour = new Date().getHours();
-    let mealContext = "snack";
-    if (hour < 10) mealContext = "breakfast";
-    else if (hour < 14) mealContext = "lunch";
-    else if (hour < 20) mealContext = "dinner";
-    else mealContext = "late night snack";
-
+    let mealContext = hour < 10 ? "breakfast" : hour < 14 ? "lunch" : hour < 20 ? "dinner" : "snack";
     const prompt = `
       Suggest a ${type === 'STORE' ? 'Convenience Store' : 'Home Cooked'} meal.
-      Context: Current time ${hour}:00 (${mealContext}). Remaining calories: ${remainingCalories}.
+      Context: ${mealContext}. Remaining calories: ${remainingCalories}.
       Response language: ${lang}.
-      Target: Main meal (Breakfast/Lunch/Dinner) if appropriate, otherwise snack.
-      Return ONLY a JSON object:
-      {
-        "title": "string",
-        "calories": number,
-        "ingredients": ["string"],
-        "steps": ["string"],
-        "reason": "string (Why this fits ${mealContext} and budget)"
-      }
+      Return ONLY JSON:
+      { "title": "string", "calories": number, "ingredients": ["string"], "steps": ["string"], "reason": "string" }
     `;
     const result = await model.generateContent(prompt);
     return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error) { return null; }
 }
 
-// 4. 運動建議 (優先無輔具)
+// 4. 運動建議
 export async function suggestWorkout(userProfile: any, remainingCalories: number, lang: string = 'zh-TW') {
   try {
     const model = await getModel();
     const prompt = `
-      Suggest a workout. User weight: ${userProfile?.currentWeightKg || 70}kg.
-      Goal: Burn approx 300kcal or fit remaining ${remainingCalories}.
-      Constraint: Prioritize equipment-free exercises or simple props (yoga mat).
-      Response language: ${lang}.
-      Return ONLY a JSON object:
-      {
-        "activity": "string",
-        "duration_minutes": number,
-        "estimated_calories": number,
-        "reason": "string",
-        "video_url": "string (YouTube search URL)"
-      }
+      Suggest a workout. User weight: ${userProfile?.currentWeightKg || 70}kg. Goal: Burn approx 300kcal.
+      Constraint: No equipment. Response language: ${lang}.
+      Return ONLY JSON:
+      { "activity": "string", "duration_minutes": number, "estimated_calories": number, "reason": "string", "video_url": "string (YouTube)" }
     `;
     const result = await model.generateContent(prompt);
     return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error) { return null; }
 }
 
-// 5. 公式計算
 export function calculateWorkoutCalories(activity: string, durationMinutes: number, weightKg: number, distanceKm: number = 0, steps: number = 0): number {
-  const met = 4.0; // 簡化
+  const met = 4.0;
   let val = met * weightKg * (durationMinutes / 60);
   if (distanceKm > 0) val = Math.max(val, weightKg * distanceKm * 1.036);
   if (steps > 0) val = Math.max(val, steps * 0.04);
