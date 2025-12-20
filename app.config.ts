@@ -17,7 +17,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.4", // [修改] 版本號升級
+  version: "1.0.4",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -40,7 +40,7 @@ const config: ExpoConfig = {
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
-    versionCode: 5, // [修改] 
+    versionCode: 5,
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
@@ -70,32 +70,40 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-localization", // [新增]
+    [
+      "expo-notifications", // [新增]
+      {
+        "icon": "./assets/images/icon.png",
+        "color": "#ffffff"
+      }
+    ],
     [
       "expo-camera",
       {
-        cameraPermission: "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
-        microphonePermission: "此應用程式不需要使用麥克風。",
-        recordAudioAndroid: false,
-      },
+        "cameraPermission": "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
+        "microphonePermission": "此應用程式不需要使用麥克風。",
+        "recordAudioAndroid": false
+      }
     ],
     [
       "expo-image-picker",
       {
-        photosPermission: "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。",
-      },
+        "photosPermission": "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。"
+      }
     ],
     [
       "expo-splash-screen",
       {
-        image: "./assets/images/splash-icon.png",
-        imageWidth: 200,
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
-        dark: {
-          backgroundColor: "#000000",
-        },
-      },
-    ],
+        "image": "./assets/images/splash-icon.png",
+        "imageWidth": 200,
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "backgroundColor": "#000000"
+        }
+      }
+    ]
   ],
   extra: {
     eas: {
