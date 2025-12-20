@@ -1,19 +1,24 @@
 import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Share } from "react-native";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Share, Platform } from "react-native";
 import * as Notifications from 'expo-notifications';
-import * as Print from 'expo-print'; // [新增]
-import * as Sharing from 'expo-sharing'; // [新增]
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice } from "@/lib/storage";
+import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice, getSettings } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
-import { t, detectLanguage } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
+// [修正] 通知的標準寫法，消除警示
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false }),
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
 });
 
 export default function RecipesScreen() {
@@ -27,12 +32,17 @@ export default function RecipesScreen() {
   const [result, setResult] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
-  const [lang, setLang] = useState("zh-TW"); // 預設
+  const [lang, setLang] = useState("zh-TW"); // 預設語言
 
-  // 初始化：讀取上次建議
+  // 初始化：讀取上次建議與語言
   useEffect(() => {
-     getAIAdvice().then(res => { if(res) setResult(res); });
-     // 讀取語言設定... (省略，假設 profile.tsx 已存)
+     async function init() {
+       const advice = await getAIAdvice();
+       if (advice) setResult(advice);
+       const s = await getSettings();
+       if (s.language) setLang(s.language);
+     }
+     init();
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -43,6 +53,10 @@ export default function RecipesScreen() {
        const net = (s.totalCaloriesIn || 0) - (s.totalCaloriesOut || 0);
        setProfile(p);
        setRemaining(target - net);
+       
+       // 再次同步語言，以防在設定頁切換後回來
+       const set = await getSettings();
+       if (set.language) setLang(set.language);
     }
     syncData();
   }, []));
@@ -50,8 +64,9 @@ export default function RecipesScreen() {
   const handleGenerate = async () => {
     const { status } = await Notifications.requestPermissionsAsync();
     setLoading(true);
-    // 不清空 result，讓使用者還能看到舊的
+    // 不清空 result，保留舊資料直到新資料產生
     
+    // 延遲一點執行以免 UI 卡頓
     setTimeout(async () => {
        try {
          let res;
@@ -63,15 +78,18 @@ export default function RecipesScreen() {
          
          if (res) {
            setResult(res);
-           saveAIAdvice(res); // [新增] 持久化
+           saveAIAdvice(res); // 持久化
            if (status === 'granted') {
              await Notifications.scheduleNotificationAsync({
-               content: { title: "AI 教練通知", body: "新建議已生成！" },
+               content: { 
+                 title: t('ai_coach', lang), 
+                 body: activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang) 
+               },
                trigger: null,
              });
            }
          } else {
-           Alert.alert("分析失敗", "AI 暫無回應");
+           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或稍後再試");
          }
        } catch (e) {
          Alert.alert("錯誤", "發生未知錯誤");
@@ -83,56 +101,88 @@ export default function RecipesScreen() {
 
   const openVideo = () => { if (result?.video_url) Linking.openURL(result.video_url); };
 
-  // [新增] 匯出 PDF
+  // 匯出 PDF
   const handleExportPDF = async () => {
     if (!result) return;
+    
+    // 簡單的 HTML 樣板
     const htmlContent = `
       <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+            .card { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; }
+            .label { font-weight: bold; color: #555; }
+          </style>
+        </head>
         <body>
-          <h1>${activeTab === 'RECIPE' ? '飲食建議' : '運動計畫'}</h1>
+          <h1>${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
           <h2>${activeTab === 'RECIPE' ? result.title : result.activity}</h2>
-          <p>${result.reason}</p>
+          
+          <div class="card">
+            <p><span class="label">${t('reason', lang)}:</span> ${result.reason}</p>
+          </div>
+          
           <hr/>
+          
           ${activeTab === 'RECIPE' ? 
-            `<h3>食材:</h3><ul>${result.ingredients?.map((i:string)=>`<li>${i}</li>`).join('')}</ul>
-             <h3>步驟:</h3><ol>${result.steps?.map((s:string)=>`<li>${s}</li>`).join('')}</ol>` : 
-            `<p>時間: ${result.duration_minutes} 分</p><p>消耗: ${result.estimated_calories} kcal</p>`
+            `<h3>${t('ingredients', lang)}:</h3>
+             <ul>${result.ingredients?.map((i:string)=>`<li>${i}</li>`).join('')}</ul>
+             <h3>${t('steps', lang)}:</h3>
+             <ol>${result.steps?.map((s:string)=>`<li>${s}</li>`).join('')}</ol>
+             <p><strong>${t('calories', lang)}:</strong> ${result.calories} kcal</p>` 
+            : 
+            `<p><strong>時間:</strong> ${result.duration_minutes} min</p>
+             <p><strong>消耗:</strong> ${result.estimated_calories} kcal</p>`
           }
+          
+          <p style="text-align: center; color: #999; margin-top: 50px;">Generated by Nutrition Tracker AI</p>
         </body>
       </html>
     `;
+
     try {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      if (Platform.OS === "ios") {
+        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      } else {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: '匯出 PDF' });
+      }
     } catch (e) {
-      Alert.alert("匯出失敗", "請檢查裝置支援");
+      Alert.alert("匯出失敗", "請檢查裝置是否支援列印或分享");
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-          <ThemedText type="title">AI 智能教練</ThemedText>
+          <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
           {result && (
-            <Pressable onPress={handleExportPDF}>
+            <Pressable onPress={handleExportPDF} style={{padding: 8}}>
                <Ionicons name="share-outline" size={24} color={tintColor} />
             </Pressable>
           )}
        </View>
        
        <View style={{flexDirection: 'row', padding: 16, gap: 10}}>
-          <Pressable onPress={() => setActiveTab('RECIPE')} style={[styles.tab, activeTab === 'RECIPE' && {backgroundColor: tintColor}]}><ThemedText style={activeTab==='RECIPE'&&{color:'white'}}>食譜建議</ThemedText></Pressable>
-          <Pressable onPress={() => setActiveTab('WORKOUT')} style={[styles.tab, activeTab === 'WORKOUT' && {backgroundColor: tintColor}]}><ThemedText style={activeTab==='WORKOUT'&&{color:'white'}}>運動建議</ThemedText></Pressable>
+          <Pressable onPress={() => setActiveTab('RECIPE')} style={[styles.tab, activeTab === 'RECIPE' && {backgroundColor: tintColor, borderColor: tintColor}]}>
+             <ThemedText style={{color: activeTab==='RECIPE'?'white':'#666', fontWeight:'bold'}}>{t('recipe_suggestion', lang)}</ThemedText>
+          </Pressable>
+          <Pressable onPress={() => setActiveTab('WORKOUT')} style={[styles.tab, activeTab === 'WORKOUT' && {backgroundColor: tintColor, borderColor: tintColor}]}>
+             <ThemedText style={{color: activeTab==='WORKOUT'?'white':'#666', fontWeight:'bold'}}>{t('workout_suggestion', lang)}</ThemedText>
+          </Pressable>
        </View>
        
        <ScrollView style={{paddingHorizontal: 16}}>
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
-             <ThemedText style={{textAlign: 'center', color: '#666'}}>目前剩餘額度</ThemedText>
+             <ThemedText style={{textAlign: 'center', color: '#666'}}>{t('remaining_budget', lang)}</ThemedText>
              <ThemedText style={{textAlign: 'center', fontSize: 32, fontWeight: 'bold', color: tintColor}}>{remaining} kcal</ThemedText>
           </View>
 
           <Pressable onPress={handleGenerate} style={[styles.btn, {backgroundColor: tintColor}]} disabled={loading}>
-             {loading ? <ActivityIndicator color="white"/> : <ThemedText style={{color: 'white', fontWeight: 'bold'}}>更新計畫</ThemedText>}
+             {loading ? <ActivityIndicator color="white"/> : <ThemedText style={{color: 'white', fontWeight: 'bold'}}>{t('generate_plan', lang)}</ThemedText>}
           </Pressable>
 
           {result && (
@@ -141,22 +191,22 @@ export default function RecipesScreen() {
                 
                 {activeTab === 'WORKOUT' && result.video_url && (
                   <Pressable onPress={openVideo} style={{marginVertical: 10}}>
-                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 觀看教學影片</ThemedText>
+                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText>
                   </Pressable>
                 )}
 
                 <ThemedText style={{marginTop: 8}}>
-                   {activeTab==='RECIPE' ? `🔥 熱量: ${result.calories} kcal` : `⏱️ 時間: ${result.duration_minutes} 分鐘 (-${result.estimated_calories} kcal)`}
+                   {activeTab==='RECIPE' ? `🔥 ${t('calories', lang)}: ${result.calories} kcal` : `⏱️ 時間: ${result.duration_minutes} min (-${result.estimated_calories} kcal)`}
                 </ThemedText>
                 
-                <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 建議原因：</ThemedText>
-                <ThemedText>{result.reason}</ThemedText>
+                <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 {t('reason', lang)}：</ThemedText>
+                <ThemedText style={{lineHeight: 20}}>{result.reason}</ThemedText>
                 
                 {activeTab === 'RECIPE' && (
                   <>
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 食材：</ThemedText>
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>
                     {result.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 步驟：</ThemedText>
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>
                     {result.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
                   </>
                 )}
