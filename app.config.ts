@@ -1,7 +1,7 @@
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
 
-const bundleId = "space.manus.nutrition_tracker.t20251217000540";
+const bundleId = "space.manus.nutrition_tracker.t20251217000540"; // 請保留您的 ID
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
@@ -28,8 +28,8 @@ const config: ExpoConfig = {
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       UIBackgroundModes: ["audio"],
-      NSCameraUsageDescription: "此應用程式需要使用相機來拍攝食物照片,以便進行營養分析。",
-      NSPhotoLibraryUsageDescription: "此應用程式需要存取您的相簿來選擇食物照片。",
+      NSCameraUsageDescription: "此應用程式需要使用相機來拍攝食物照片。",
+      NSPhotoLibraryUsageDescription: "此應用程式需要存取您的相簿來匯入食物照片。",
       NSMicrophoneUsageDescription: "此應用程式不需要使用麥克風。",
     },
   },
@@ -70,38 +70,26 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
-    "expo-localization", // [新增]
+    "expo-localization",
     [
-      "expo-notifications", // [新增]
+      "expo-notifications",
       {
-        "icon": "./assets/images/icon.png",
+        "icon": "./assets/images/icon.png", 
         "color": "#ffffff"
       }
     ],
     [
       "expo-camera",
       {
-        "cameraPermission": "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
-        "microphonePermission": "此應用程式不需要使用麥克風。",
+        "cameraPermission": "允許使用相機拍攝食物。",
+        "microphonePermission": "允許使用麥克風。",
         "recordAudioAndroid": false
       }
     ],
     [
       "expo-image-picker",
       {
-        "photosPermission": "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。"
-      }
-    ],
-    [
-      "expo-splash-screen",
-      {
-        "image": "./assets/images/splash-icon.png",
-        "imageWidth": 200,
-        "resizeMode": "contain",
-        "backgroundColor": "#ffffff",
-        "dark": {
-          "backgroundColor": "#000000"
-        }
+        "photosPermission": "允許存取相簿以選擇照片。"
       }
     ]
   ],
