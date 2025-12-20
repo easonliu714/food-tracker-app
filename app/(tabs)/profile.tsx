@@ -192,7 +192,7 @@ export default function ProfileScreen() {
          </Pressable>
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.3)</ThemedText>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.4)</ThemedText>
          </Pressable>
          
          <View style={{height:50}}/>
