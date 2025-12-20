@@ -1,6 +1,6 @@
 import { useRouter, useFocusEffect } from "expo-router";
 import { useState, useCallback } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, Platform } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -30,8 +30,7 @@ export default function HomeScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [frequentItems, setFrequentItems] = useState<any[]>([]);
   const [workoutTypes, setWorkoutTypes] = useState<string[]>([]);
-
-  // 日期狀態
+  
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [lang, setLang] = useState("zh-TW");
@@ -45,7 +44,7 @@ export default function HomeScreen() {
   const [duration, setDuration] = useState("30");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
-  const [floors, setFloors] = useState("0"); // 樓層
+  const [floors, setFloors] = useState("0");
   const [estCal, setEstCal] = useState(0);
 
   // 飲食 Modal
@@ -80,14 +79,12 @@ export default function HomeScreen() {
     
     const w = await getFrequentActivityTypes();
     setWorkoutTypes(w);
-    // 預設選第一個
     if (!actType && w.length > 0) setActType(w[0]);
 
   }, [selectedDate]);
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
-  // 自動計算熱量
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
       const type = isCustomAct ? customActType : actType;
@@ -98,7 +95,6 @@ export default function HomeScreen() {
         parseFloat(dist), 
         parseFloat(steps)
       );
-      // 樓層估算 (簡單 0.5 kcal/層)
       const fCal = (parseFloat(floors)||0) * 0.5;
       setEstCal(Math.round(cal + fCal));
     }
@@ -107,14 +103,12 @@ export default function HomeScreen() {
   const handleSaveWorkout = async () => {
     const type = isCustomAct ? customActType : actType;
     if (!type) return Alert.alert("請輸入項目");
-
     const newLog = {
       activityType: type,
       caloriesBurned: estCal,
       details: `${duration}分 / ${steps}步 / ${dist}km / ${floors}樓`,
       loggedAt: selectedDate.toISOString()
     };
-
     if (editingWorkout) {
       await updateActivityLogLocal({ ...editingWorkout, ...newLog });
       setEditingWorkout(null);
@@ -133,7 +127,6 @@ export default function HomeScreen() {
        setIsCustomAct(true);
        setCustomActType(log.activityType);
     }
-    
     const parts = (log.details || "").split(' / ');
     setDuration(parts[0]?.replace('分','') || "0");
     setSteps(parts[1]?.replace('步','') || "0");
@@ -156,7 +149,6 @@ export default function HomeScreen() {
              <ThemedText type="title">{t('today_overview', lang)}</ThemedText>
           </View>
 
-          {/* 日期導航 */}
           <View style={[styles.dateNav, {backgroundColor: cardBackground}]}>
              <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
              <Pressable onPress={() => setShowDatePicker(true)}>
@@ -176,7 +168,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* 常用項目 */}
           {frequentItems.length > 0 && (
             <View style={{marginBottom: 16}}>
               <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>{t('quick_record', lang)}</ThemedText>
@@ -191,10 +182,25 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* 快捷按鈕 (新增 手輸) */}
           <View style={styles.quickActions}>
-            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText></Pressable>
+            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
+               <Ionicons name="camera" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
+               <Ionicons name="barcode" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText>
+            </Pressable>
+            {/* [新增] 手輸按鈕 */}
+            <Pressable onPress={() => router.push("/food-recognition?mode=MANUAL")} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}>
+               <Ionicons name="create" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}>
+               <Ionicons name="fitness" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText>
+            </Pressable>
           </View>
 
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
@@ -225,7 +231,6 @@ export default function HomeScreen() {
           <View style={{height: 100}}/>
         </ScrollView>
 
-        {/* 運動 Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -265,8 +270,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </Modal>
-
-        {/* 飲食 Modal (保持原樣) */}
+        
         <Modal visible={editModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -295,9 +299,9 @@ const styles = StyleSheet.create({
   dateNav: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, marginHorizontal: 20, borderRadius: 12 },
   dateBtn: { padding: 10, marginHorizontal: 20 },
   progressSection: { alignItems: 'center', padding: 20, margin: 16, borderRadius: 20 },
-  quickActions: { flexDirection: "row", padding: 16, gap: 12 },
-  btn: { padding: 16, borderRadius: 12, alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
-  btnTxt: { color: 'white', fontWeight: 'bold' },
+  quickActions: { flexDirection: "row", padding: 16, gap: 8 },
+  btn: { padding: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 12, marginTop: 4 },
   listSection: { marginHorizontal: 16, padding: 16, borderRadius: 16 },
   listItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10 },
   deleteBtn: { backgroundColor: 'red', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', borderTopRightRadius: 16, borderBottomRightRadius: 16 },

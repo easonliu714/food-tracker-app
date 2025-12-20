@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
-import { saveFoodLogLocal } from "@/lib/storage";
+import { saveFoodLogLocal, saveProductLocal, getProductByBarcode, getSettings } from "@/lib/storage";
 import { NumberInput } from "@/components/NumberInput";
 
 const MEAL_OPTIONS = [
@@ -31,11 +31,14 @@ export default function FoodRecognitionScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const imageUri = params.imageUri as string;
+  // 支援從首頁傳入 mode=MANUAL
+  const initialMode = params.mode === 'MANUAL' ? 'MANUAL' : 'AI';
 
-  const [isAnalyzing, setIsAnalyzing] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(initialMode === 'AI');
   const [isSaving, setIsSaving] = useState(false);
-  const [mode, setMode] = useState<'AI' | 'MANUAL'>('AI');
+  const [mode, setMode] = useState<'AI' | 'MANUAL'>(initialMode);
   const [mealType, setMealType] = useState(getMealTypeByTime());
+  const [lang, setLang] = useState('zh-TW');
 
   // 資料表單狀態
   const [formData, setFormData] = useState({
@@ -45,7 +48,7 @@ export default function FoodRecognitionScreen() {
     carbs: "0",
     fat: "0",
     sod: "0",
-    weight: "100",
+    weight: "100", // 預設 100g
     suggestion: "",
     detectedObject: ""
   });
@@ -56,13 +59,18 @@ export default function FoodRecognitionScreen() {
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
 
-  // 1. 自動圖片分析
+  // 載入語言設定
+  useEffect(() => {
+    getSettings().then(s => { if(s.language) setLang(s.language); });
+  }, []);
+
+  // 1. 自動圖片分析 (僅在有圖片且 AI 模式下)
   useEffect(() => {
     async function analyze() {
-      if (!imageUri) return;
+      if (!imageUri || mode !== 'AI') return;
       try {
         setIsAnalyzing(true);
-        const result = await analyzeFoodImage(imageUri);
+        const result = await analyzeFoodImage(imageUri, lang);
         processResult(result);
       } catch (e) {
         Alert.alert("錯誤", "圖片分析失敗，請檢查網路或 API Key 設定");
@@ -71,17 +79,16 @@ export default function FoodRecognitionScreen() {
         setIsAnalyzing(false);
       }
     }
-    if (mode === 'AI') analyze();
+    analyze();
   }, [imageUri]);
 
-  // 2. 文字分析功能
+  // 2. 文字分析功能 (手動模式)
   const handleTextAnalyze = async () => {
-    if (!formData.foodName) return Alert.alert("請輸入名稱");
+    if (!formData.foodName) return Alert.alert("請輸入食物名稱");
     try {
       setIsAnalyzing(true);
-      const result = await analyzeFoodText(formData.foodName);
+      const result = await analyzeFoodText(formData.foodName, lang);
       processResult(result);
-      setMode('AI'); // 切換回 AI 顯示模式
     } catch (e) {
       Alert.alert("分析失敗");
     } finally {
@@ -89,10 +96,29 @@ export default function FoodRecognitionScreen() {
     }
   };
 
+  // 3. 資料庫查詢 (當名稱輸入完成失去焦點時)
+  const handleNameBlur = async () => {
+    if (!formData.foodName) return;
+    const saved = await getProductByBarcode(formData.foodName); // 使用名稱當作 Key
+    if (saved) {
+      setFormData(prev => ({
+        ...prev,
+        calories: saved.cal?.toString() || "0",
+        protein: saved.pro?.toString() || "0",
+        carbs: saved.carb?.toString() || "0",
+        fat: saved.fat?.toString() || "0",
+        sod: saved.sod?.toString() || "0",
+        weight: saved.stdWeight ? saved.stdWeight.toString() : "100",
+        suggestion: "已從資料庫載入紀錄",
+        detectedObject: "Database"
+      }));
+    }
+  };
+
   const processResult = (result: any) => {
     if (result && result.foodName !== "分析失敗") {
       setFormData({
-        foodName: result.foodName,
+        foodName: result.foodName || formData.foodName,
         calories: result.calories?.toString() || "0",
         protein: result.macros?.protein?.toString() || "0",
         carbs: result.macros?.carbs?.toString() || "0",
@@ -114,6 +140,8 @@ export default function FoodRecognitionScreen() {
     }
     try {
       setIsSaving(true);
+      
+      // 1. 儲存到今日紀錄
       await saveFoodLogLocal({
         mealType,
         foodName: formData.foodName,
@@ -122,9 +150,22 @@ export default function FoodRecognitionScreen() {
         totalCarbsG: parseFloat(formData.carbs) || 0,
         totalFatG: parseFloat(formData.fat) || 0,
         totalSodiumMg: parseFloat(formData.sod) || 0,
-        imageUrl: imageUri,
+        imageUrl: imageUri, // 如果是手輸，這裡會是 undefined
         notes: `AI識別(${formData.weight}g): ${formData.detectedObject}`
       });
+
+      // 2. 儲存到產品資料庫 (方便下次直接帶入)
+      await saveProductLocal(formData.foodName, {
+         name: formData.foodName,
+         brand: "User Custom",
+         stdWeight: parseFloat(formData.weight) || 100,
+         cal: formData.calories,
+         pro: formData.protein,
+         carb: formData.carbs,
+         fat: formData.fat,
+         sod: formData.sod
+      });
+
       router.push('/(tabs)');
     } catch (error) {
       Alert.alert("儲存失敗");
@@ -133,14 +174,14 @@ export default function FoodRecognitionScreen() {
     }
   };
 
-  // 輸入框組件
-  const InputField = ({ label, value, onChange }: any) => (
+  const InputField = ({ label, value, onChange, onBlur }: any) => (
     <View style={{marginBottom: 12}}>
       <ThemedText style={{fontSize: 14, color: textSecondary, marginBottom: 6}}>{label}</ThemedText>
       <TextInput 
         style={[styles.input, {color: textColor, borderColor: '#ccc', backgroundColor: 'white'}]}
         value={value}
         onChangeText={onChange}
+        onBlur={onBlur}
         placeholder="請輸入"
         placeholderTextColor="#999"
       />
@@ -160,7 +201,8 @@ export default function FoodRecognitionScreen() {
           <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
         ) : (
           <View style={[styles.image, {backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center'}]}>
-            <ThemedText style={{color: '#999'}}>無圖片</ThemedText>
+             <Ionicons name="fast-food-outline" size={50} color="#ccc"/>
+             <ThemedText style={{color:'#999', marginTop:10}}>手動輸入模式</ThemedText>
           </View>
         )}
 
@@ -172,15 +214,19 @@ export default function FoodRecognitionScreen() {
              ) : (
                <View>
                  <ThemedText type="subtitle">{mode === 'AI' ? 'AI 分析結果' : '手動輸入模式'}</ThemedText>
-                 {mode === 'AI' && formData.detectedObject && <Text style={{fontSize: 12, color: '#888', marginTop: 4}}>偵測到: {formData.detectedObject}</Text>}
+                 {formData.detectedObject && <Text style={{fontSize: 12, color: '#888', marginTop: 4}}>偵測: {formData.detectedObject}</Text>}
                </View>
              )}
-             <Pressable onPress={() => setMode(m => m === 'AI' ? 'MANUAL' : 'AI')} style={[styles.modeBtn, {borderColor: tintColor}]}>
-               <ThemedText style={{color: tintColor, fontSize: 14, fontWeight: '600'}}>{mode === 'AI' ? '切換手動' : '返回 AI'}</ThemedText>
-             </Pressable>
+             
+             {/* 只有在原本是 AI 模式進來時，才顯示切換按鈕，手動進來通常就維持手動 */}
+             {params.mode !== 'MANUAL' && (
+               <Pressable onPress={() => setMode(m => m === 'AI' ? 'MANUAL' : 'AI')} style={[styles.modeBtn, {borderColor: tintColor}]}>
+                 <ThemedText style={{color: tintColor, fontSize: 14, fontWeight: '600'}}>{mode === 'AI' ? '切換手動' : '返回 AI'}</ThemedText>
+               </Pressable>
+             )}
           </View>
 
-          {/* 手動模式下的 AI 文字分析按鈕 (加大) */}
+          {/* 手動模式下的 AI 按鈕 (加大) */}
           {mode === 'MANUAL' && (
              <Pressable onPress={handleTextAnalyze} style={[styles.btn, {backgroundColor: tintColor, marginBottom: 20, minHeight: 50}]}>
                <ThemedText style={{color: 'white', fontSize: 16, fontWeight: 'bold'}}>以「食物名稱」讓 AI 估算</ThemedText>
@@ -201,7 +247,7 @@ export default function FoodRecognitionScreen() {
 
           {/* 資料表單 */}
           <View style={[styles.card, { backgroundColor: cardBackground }]}>
-            <InputField label="食物名稱" value={formData.foodName} onChange={(t:string) => setFormData({...formData, foodName: t})} />
+            <InputField label="食物名稱" value={formData.foodName} onChange={(t:string) => setFormData({...formData, foodName: t})} onBlur={handleNameBlur} />
             
             <NumberInput label="估計重量 (g)" value={formData.weight} onChange={(t) => setFormData({...formData, weight: t})} step={10} />
 

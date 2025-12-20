@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -19,12 +20,11 @@ export default function ProfileScreen() {
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [modelList, setModelList] = useState<string[]>([]);
   
-  // Profile Data
   const [gender, setGender] = useState<"male"|"female">("male");
   const [birthYear, setBirthYear] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
-  const [bodyFat, setBodyFat] = useState(""); // 體脂率
+  const [bodyFat, setBodyFat] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
   const [activityLevel, setActivityLevel] = useState("sedentary");
   
@@ -39,26 +39,31 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
-  const borderColor = useThemeColor({}, "border");
+  // [修正] 移除可能導致崩潰的 borderColor 引用，直接使用顏色碼或 textSecondary
 
   useEffect(() => {
     async function load() {
-      const s = await getSettings();
-      if(s.language) setLang(s.language);
-      if(s.apiKey) setApiKey(s.apiKey);
-      if(s.model) setSelectedModel(s.model);
-      
-      const p = await getProfileLocal();
-      if(p) {
-        setGender(p.gender || "male");
-        if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
-        setHeightCm(p.heightCm?.toString() || "");
-        setCurrentWeight(p.currentWeightKg?.toString() || "");
-        setBodyFat(p.bodyFatPercentage?.toString() || "");
-        setTargetWeight(p.targetWeightKg?.toString() || "");
-        setActivityLevel(p.activityLevel || "sedentary");
+      try {
+        const s = await getSettings();
+        if(s.language) setLang(s.language);
+        if(s.apiKey) setApiKey(s.apiKey);
+        if(s.model) setSelectedModel(s.model);
+        
+        const p = await getProfileLocal();
+        if(p) {
+          setGender(p.gender || "male");
+          if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
+          setHeightCm(p.heightCm?.toString() || "");
+          setCurrentWeight(p.currentWeightKg?.toString() || "");
+          setBodyFat(p.bodyFatPercentage?.toString() || "");
+          setTargetWeight(p.targetWeightKg?.toString() || "");
+          setActivityLevel(p.activityLevel || "sedentary");
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     if(isAuthenticated) load();
   }, [isAuthenticated]);
@@ -73,7 +78,7 @@ export default function ProfileScreen() {
       bodyFatPercentage: parseFloat(bodyFat),
       targetWeightKg: parseFloat(targetWeight),
       activityLevel,
-      dailyCalorieTarget: 2000 // 簡化計算，實際可加入 BMR 公式
+      dailyCalorieTarget: 2000 
     });
     Alert.alert(t('save_settings', lang), "OK");
   };
@@ -86,14 +91,12 @@ export default function ProfileScreen() {
     
     if (res.valid && res.models) {
       setModelList(res.models);
-      // 自動選擇推薦模型
       const recommended = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
       const bestMatch = recommended.find(m => res.models.includes(m)) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
-      
       Alert.alert("測試成功", `金鑰有效！已為您預選 ${bestMatch}`);
     } else {
-      Alert.alert("測試失敗", res.error || "無法連線，請檢查 Key 是否正確");
+      Alert.alert("測試失敗", res.error || "無法連線");
     }
   };
 
@@ -103,7 +106,7 @@ export default function ProfileScreen() {
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
         <ThemedText type="title">個人設定</ThemedText>
-        <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor}]}>
+        <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor: '#ccc'}]}>
            <ThemedText>{LANGUAGES.find(l=>l.code===lang)?.label}</ThemedText>
            <Ionicons name="chevron-down" size={16} color={textColor} style={{marginLeft:4}}/>
         </Pressable>
@@ -117,7 +120,7 @@ export default function ProfileScreen() {
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>Gemini API Key</ThemedText>
               <TextInput 
-                style={[styles.input, {color: textColor, borderColor}]} 
+                style={[styles.input, {color: textColor, borderColor: '#ccc'}]} 
                 value={apiKey} 
                 onChangeText={setApiKey} 
                 placeholder={t('api_key_placeholder', lang)} 
@@ -136,7 +139,7 @@ export default function ProfileScreen() {
 
             <View style={{marginTop: 12}}>
                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
+                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor: '#ccc'}]}>
                    <ThemedText>{selectedModel}</ThemedText>
                 </Pressable>
             </View>
@@ -158,14 +161,14 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.row}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
             </View>
             <View style={[styles.row, {marginTop:10}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
             </View>
             
             <View style={{marginTop:12}}>
@@ -180,7 +183,6 @@ export default function ProfileScreen() {
             </View>
          </View>
 
-         {/* 儲存與登出 */}
          <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
             <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
          </Pressable>
@@ -196,7 +198,7 @@ export default function ProfileScreen() {
          <View style={{height:50}}/>
       </ScrollView>
 
-      {/* 語言選擇 Modal */}
+      {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -211,7 +213,7 @@ export default function ProfileScreen() {
          </View>
       </Modal>
 
-      {/* 模型選擇 Modal */}
+      {/* Model Modal */}
       <Modal visible={showModelPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -228,7 +230,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* 版本歷程 Modal */}
+      {/* Version Modal */}
       <Modal visible={showVersionModal} transparent animationType="slide">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
