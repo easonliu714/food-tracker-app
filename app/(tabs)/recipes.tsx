@@ -12,7 +12,7 @@ import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
-// [修正] 設定通知處理器，確保回傳正確的 NotificationBehavior 物件
+// [修正] 明確定義 NotificationBehavior 型別，徹底消除警示
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -75,6 +75,7 @@ export default function RecipesScreen() {
 
     setLoading(true);
     
+    // 延遲執行避免 UI 卡頓
     setTimeout(async () => {
        try {
          let res;
