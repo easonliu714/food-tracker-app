@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, Alert, Linking, Platform } from "react-native";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Platform } from "react-native";
 import * as Notifications from 'expo-notifications';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -12,8 +12,13 @@ import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
+// [修正] 明確宣告回傳型別，消除警示
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: false, shouldSetBadge: false }),
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
 });
 
 export default function RecipesScreen() {
@@ -24,34 +29,53 @@ export default function RecipesScreen() {
 
   const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
   const [loading, setLoading] = useState(false);
-  const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null }); // [修正] 分開存
+  const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
   const [lang, setLang] = useState("zh-TW");
 
-  // 切換頁面時，同步載入語言與資料
-  useFocusEffect(useCallback(() => {
-    async function load() {
-       const advice = await getAIAdvice(); // { recipe:..., workout:... }
-       if (advice) setAdviceData({ RECIPE: advice.RECIPE, WORKOUT: advice.WORKOUT });
-       
-       const s = await getSettings();
-       if (s.language) setLang(s.language);
+  // 初始化
+  useEffect(() => {
+     async function init() {
+       try {
+         const advice = await getAIAdvice();
+         if (advice) setAdviceData({ RECIPE: advice.RECIPE, WORKOUT: advice.WORKOUT });
+         const s = await getSettings();
+         if (s.language) setLang(s.language);
+       } catch (e) {
+         console.error("Init error:", e);
+       }
+     }
+     init();
+  }, []);
 
+  useFocusEffect(useCallback(() => {
+    async function syncData() {
        const p = await getProfileLocal();
-       const sum = await getDailySummaryLocal();
+       const s = await getDailySummaryLocal();
        const target = p?.dailyCalorieTarget || 2000;
-       const net = (sum.totalCaloriesIn || 0) - (sum.totalCaloriesOut || 0);
+       const net = (s.totalCaloriesIn || 0) - (s.totalCaloriesOut || 0);
        setProfile(p);
        setRemaining(target - net);
+       
+       const set = await getSettings();
+       if (set.language) setLang(set.language);
     }
-    load();
+    syncData();
   }, []));
 
-  const currentResult = adviceData[activeTab]; // 顯示當前 Tab 的資料
+  const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
+    const { status } = await Notifications.getPermissionsAsync();
+    let finalStatus = status;
+    if (status !== 'granted') {
+      const { status: newStatus } = await Notifications.requestPermissionsAsync();
+      finalStatus = newStatus;
+    }
+
     setLoading(true);
+    
     setTimeout(async () => {
        try {
          let res;
@@ -64,7 +88,17 @@ export default function RecipesScreen() {
          if (res) {
            const newAdvice = { ...adviceData, [activeTab]: res };
            setAdviceData(newAdvice);
-           await saveAIAdvice(activeTab, res); // 呼叫 storage 更新特定 type
+           await saveAIAdvice(activeTab, res);
+           
+           if (finalStatus === 'granted') {
+             await Notifications.scheduleNotificationAsync({
+               content: { 
+                 title: t('ai_coach', lang), 
+                 body: activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang) 
+               },
+               trigger: null,
+             });
+           }
          } else {
            Alert.alert("分析失敗", "AI 暫無回應");
          }
@@ -76,22 +110,55 @@ export default function RecipesScreen() {
     }, 100);
   };
 
+  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
+
   const handleExportPDF = async () => {
     if (!currentResult) return;
+    
     const htmlContent = `
       <html>
-        <body style="font-family: sans-serif; padding: 20px;">
-          <h1 style="color: #2196F3;">${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+            .card { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; }
+            .label { font-weight: bold; color: #555; }
+          </style>
+        </head>
+        <body>
+          <h1>${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
           <h2>${activeTab === 'RECIPE' ? currentResult.title : currentResult.activity}</h2>
-          <p>${currentResult.reason}</p>
+          
+          <div class="card">
+            <p><span class="label">${t('reason', lang)}:</span> ${currentResult.reason}</p>
+          </div>
           <hr/>
-          </body>
+          ${activeTab === 'RECIPE' ? 
+            `<h3>${t('ingredients', lang)}:</h3>
+             <ul>${currentResult.ingredients?.map((i:string)=>`<li>${i}</li>`).join('')}</ul>
+             <h3>${t('steps', lang)}:</h3>
+             <ol>${currentResult.steps?.map((s:string)=>`<li>${s}</li>`).join('')}</ol>
+             <p><strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal</p>` 
+            : 
+            `<p><strong>時間:</strong> ${currentResult.duration_minutes} min</p>
+             <p><strong>消耗:</strong> ${currentResult.estimated_calories} kcal</p>`
+          }
+          <p style="text-align: center; color: #999; margin-top: 50px;">Generated by Nutrition Tracker AI</p>
+        </body>
       </html>
     `;
+
     try {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-    } catch (e) { Alert.alert("匯出失敗"); }
+      if (Platform.OS === "ios") {
+        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      } else {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: '匯出 PDF' });
+      }
+    } catch (e) {
+      Alert.alert("匯出失敗", "請檢查裝置是否支援");
+    }
   };
 
   return (
@@ -99,7 +166,9 @@ export default function RecipesScreen() {
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
           <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
           {currentResult && (
-            <Pressable onPress={handleExportPDF} style={{padding: 8}}><Ionicons name="share-outline" size={24} color={tintColor} /></Pressable>
+            <Pressable onPress={handleExportPDF} style={{padding: 8}}>
+               <Ionicons name="share-outline" size={24} color={tintColor} />
+            </Pressable>
           )}
        </View>
        
@@ -125,13 +194,28 @@ export default function RecipesScreen() {
           {currentResult && (
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20, marginBottom: 40}]}>
                 <ThemedText type="title">{activeTab==='RECIPE' ? currentResult.title : currentResult.activity}</ThemedText>
+                
+                {activeTab === 'WORKOUT' && currentResult.video_url && (
+                  <Pressable onPress={openVideo} style={{marginVertical: 10}}>
+                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText>
+                  </Pressable>
+                )}
+
                 <ThemedText style={{marginTop: 8}}>
                    {activeTab==='RECIPE' ? `🔥 ${t('calories', lang)}: ${currentResult.calories} kcal` : `⏱️ 時間: ${currentResult.duration_minutes} min (-${currentResult.estimated_calories} kcal)`}
                 </ThemedText>
+                
                 <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 {t('reason', lang)}：</ThemedText>
                 <ThemedText style={{lineHeight: 20}}>{currentResult.reason}</ThemedText>
                 
-                {/* 食譜詳細列表略 */}
+                {activeTab === 'RECIPE' && (
+                  <>
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>
+                    {currentResult.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
+                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>
+                    {currentResult.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
+                  </>
+                )}
              </View>
           )}
        </ScrollView>
