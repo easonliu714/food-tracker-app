@@ -14,11 +14,11 @@ import {
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
   deleteActivityLogLocal, updateFoodLogLocal, 
-  updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems, getFrequentActivityTypes
+  updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems, getFrequentActivityTypes, getSettings
 } from "@/lib/storage";
 import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
-import { t } from "@/lib/i18n"; // 確保您有 i18n
+import { t } from "@/lib/i18n";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -31,21 +31,21 @@ export default function HomeScreen() {
   const [frequentItems, setFrequentItems] = useState<any[]>([]);
   const [workoutTypes, setWorkoutTypes] = useState<string[]>([]);
 
+  // 日期狀態
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [lang, setLang] = useState("zh-TW"); // 預設
+  const [lang, setLang] = useState("zh-TW");
 
   // 運動 Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [actType, setActType] = useState("");
-  const [customActType, setCustomActType] = useState(""); // 手動輸入
+  const [customActType, setCustomActType] = useState("");
   const [isCustomAct, setIsCustomAct] = useState(false);
-  
   const [duration, setDuration] = useState("30");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
-  const [floors, setFloors] = useState("0"); // [新增] 樓層
+  const [floors, setFloors] = useState("0"); // 樓層
   const [estCal, setEstCal] = useState(0);
 
   // 飲食 Modal
@@ -59,38 +59,37 @@ export default function HomeScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textSecondary = useThemeColor({}, "textSecondary");
 
-  // 格式化日期顯示 (YYYY-MM-DD)
-  const formatDate = (date: Date) => {
-    const offset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offset).toISOString().split('T')[0];
+  const toLocalISO = (d: Date) => {
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().split('T')[0];
   };
 
   const loadData = useCallback(async () => {
+    const s = await getSettings();
+    if(s.language) setLang(s.language);
+    
     const p = await getProfileLocal();
     setProfile(p);
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
     
-    // 載入當日摘要
-    const s = await getDailySummaryLocal(selectedDate);
-    setSummary(s);
+    const sum = await getDailySummaryLocal(selectedDate);
+    setSummary(sum);
     
-    // 載入常用項目
     const f = await getFrequentFoodItems();
     setFrequentItems(f);
     
-    // [新增] 載入常用運動 (已排序)
     const w = await getFrequentActivityTypes();
     setWorkoutTypes(w);
+    // 預設選第一個
     if (!actType && w.length > 0) setActType(w[0]);
 
-  }, [selectedDate]); // 依賴 selectedDate
+  }, [selectedDate]);
 
   useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
-  // 自動計算
+  // 自動計算熱量
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
-      // 如果是手動輸入，優先用手動值，否則用選單值
       const type = isCustomAct ? customActType : actType;
       const cal = calculateWorkoutCalories(
         type, 
@@ -99,23 +98,21 @@ export default function HomeScreen() {
         parseFloat(dist), 
         parseFloat(steps)
       );
-      // 樓層簡單估算: 1層約 0.5 kcal (極粗略，主要依賴時間)
-      const floorCal = (parseFloat(floors)||0) * 0.5;
-      setEstCal(Math.round(cal + floorCal));
+      // 樓層估算 (簡單 0.5 kcal/層)
+      const fCal = (parseFloat(floors)||0) * 0.5;
+      setEstCal(Math.round(cal + fCal));
     }
   }, [actType, customActType, isCustomAct, duration, steps, dist, floors, modalVisible]));
 
-  // 儲存運動
   const handleSaveWorkout = async () => {
     const type = isCustomAct ? customActType : actType;
-    if (!type) return Alert.alert("請輸入運動項目");
+    if (!type) return Alert.alert("請輸入項目");
 
     const newLog = {
       activityType: type,
       caloriesBurned: estCal,
-      // [新增] 樓層紀錄於 details
       details: `${duration}分 / ${steps}步 / ${dist}km / ${floors}樓`,
-      loggedAt: selectedDate.toISOString() // 確保存入當前選擇的日期
+      loggedAt: selectedDate.toISOString()
     };
 
     if (editingWorkout) {
@@ -131,12 +128,12 @@ export default function HomeScreen() {
   const handleEditWorkout = (log: any) => {
     setEditingWorkout(log);
     setActType(log.activityType);
-    setIsCustomAct(false); // 預設先對應選單，若不在選單內可切換
+    setIsCustomAct(false);
     if (!workoutTypes.includes(log.activityType)) {
        setIsCustomAct(true);
        setCustomActType(log.activityType);
     }
-
+    
     const parts = (log.details || "").split(' / ');
     setDuration(parts[0]?.replace('分','') || "0");
     setSteps(parts[1]?.replace('步','') || "0");
@@ -145,52 +142,44 @@ export default function HomeScreen() {
     setModalVisible(true);
   };
 
-  // ... (飲食編輯部分保持不變，省略重複代碼，請保留原有的 handleEditFood 等) ...
   const handleEditFood = (log: any) => { setEditingLog(log); setEditName(log.foodName); setEditCal(log.totalCalories.toString()); setEditModalVisible(true); };
   const handleSaveEditFood = async () => { if (editingLog) { await updateFoodLogLocal({ ...editingLog, foodName: editName, totalCalories: parseInt(editCal) || 0 }); setEditModalVisible(false); setEditingLog(null); loadData(); } };
   const handleQuickAdd = async (item: any) => { Alert.alert("快速紀錄", `再吃一次「${item.foodName}」？`, [{ text: "取消", style: "cancel" }, { text: "確定", onPress: async () => { await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() }); loadData(); } }]); };
   const renderRightActions = (id: number, type: 'food'|'activity') => ( <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}><Ionicons name="trash" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>刪除</ThemedText></Pressable> );
   const renderLeftActions = (item: any, type: 'food'|'activity') => ( <Pressable onPress={() => type === 'food' ? handleEditFood(item) : handleEditWorkout(item)} style={styles.editBtn}><Ionicons name="create" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>編輯</ThemedText></Pressable> );
 
-  const net = (summary?.totalCaloriesIn || 0) - (summary?.totalCaloriesOut || 0);
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor }]}>
         <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
           <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-             <ThemedText type="title" style={{fontSize: 32}}>今日概覽</ThemedText>
+             <ThemedText type="title">{t('today_overview', lang)}</ThemedText>
           </View>
 
           {/* 日期導航 */}
           <View style={[styles.dateNav, {backgroundColor: cardBackground}]}>
-             <Pressable onPress={() => {
-                const d = new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d);
-             }} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
-             
+             <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
              <Pressable onPress={() => setShowDatePicker(true)}>
-               <ThemedText type="subtitle">{formatDate(selectedDate)}</ThemedText>
+               <ThemedText type="subtitle">{toLocalISO(selectedDate)}</ThemedText>
              </Pressable>
-             
-             <Pressable onPress={() => {
-                const d = new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d);
-             }} style={styles.dateBtn}><Ionicons name="chevron-forward" size={24} color={tintColor}/></Pressable>
+             <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() + 86400000))} style={styles.dateBtn}><Ionicons name="chevron-forward" size={24} color={tintColor}/></Pressable>
           </View>
           {showDatePicker && (
             <DateTimePicker value={selectedDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d) setSelectedDate(d); }} />
           )}
 
           <View style={[styles.progressSection, { backgroundColor: cardBackground, marginTop: 10 }]}>
-            <ProgressRing progress={targetCalories>0?net/targetCalories:0} current={net} target={targetCalories} size={200} />
+            <ProgressRing progress={targetCalories>0?(summary?.totalCaloriesIn - summary?.totalCaloriesOut)/targetCalories:0} current={summary?.totalCaloriesIn - summary?.totalCaloriesOut} target={targetCalories} size={200} />
             <View style={{flexDirection:'row', gap:20, marginTop:10}}>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>攝取 {summary?.totalCaloriesIn}</ThemedText>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>消耗 {summary?.totalCaloriesOut}</ThemedText>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('intake', lang)} {summary?.totalCaloriesIn}</ThemedText>
+               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('burned', lang)} {summary?.totalCaloriesOut}</ThemedText>
             </View>
           </View>
 
+          {/* 常用項目 */}
           {frequentItems.length > 0 && (
             <View style={{marginBottom: 16}}>
-              <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>常用項目</ThemedText>
+              <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>{t('quick_record', lang)}</ThemedText>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{paddingLeft: 16}}>
                 {frequentItems.map((item, index) => (
                   <Pressable key={index} onPress={() => handleQuickAdd(item)} style={[styles.quickChip, {backgroundColor: cardBackground, marginRight: 10}]}>
@@ -203,15 +192,14 @@ export default function HomeScreen() {
           )}
 
           <View style={styles.quickActions}>
-            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>拍照</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>掃碼</ThemedText></Pressable>
-            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>運動</ThemedText></Pressable>
+            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText></Pressable>
+            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText></Pressable>
+            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText></Pressable>
           </View>
 
-          {/* 列表們 (Food & Activity) */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食 (右滑編輯 / 左滑刪除)</ThemedText>
-            {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>無紀錄</ThemedText> :
+            {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
               summary?.foodLogs?.map((log: any) => (
               <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log, 'food')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
@@ -224,7 +212,7 @@ export default function HomeScreen() {
 
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>運動 (右滑編輯 / 左滑刪除)</ThemedText>
-            {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>無紀錄</ThemedText> :
+            {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
               summary?.activityLogs?.map((log: any) => (
               <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')} renderLeftActions={() => renderLeftActions(log, 'activity')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
@@ -237,23 +225,17 @@ export default function HomeScreen() {
           <View style={{height: 100}}/>
         </ScrollView>
 
-        {/* 運動 Modal (包含手動輸入、樓層) */}
+        {/* 運動 Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
                  <ThemedText type="title">{editingWorkout ? "編輯運動" : "新增運動"}</ThemedText>
-                 {/* 切換手動/選單 */}
-                 <Pressable onPress={() => setIsCustomAct(!isCustomAct)}><ThemedText style={{color: tintColor}}>{isCustomAct ? "選單選擇" : "手動輸入"}</ThemedText></Pressable>
+                 <Pressable onPress={() => setIsCustomAct(!isCustomAct)}><ThemedText style={{color: tintColor}}>{isCustomAct ? "選單" : "手動"}</ThemedText></Pressable>
               </View>
               
               {isCustomAct ? (
-                 <TextInput 
-                   style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop: 10}]} 
-                   placeholder="輸入運動名稱" 
-                   value={customActType} 
-                   onChangeText={setCustomActType} 
-                 />
+                 <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} placeholder="輸入名稱" value={customActType} onChangeText={setCustomActType} />
               ) : (
                  <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}}>
                    {workoutTypes.map(t => (
@@ -284,7 +266,7 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
-        {/* 飲食編輯 Modal (略，保持原樣) */}
+        {/* 飲食 Modal (保持原樣) */}
         <Modal visible={editModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
