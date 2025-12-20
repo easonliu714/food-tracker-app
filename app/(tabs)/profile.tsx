@@ -8,14 +8,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveProfileLocal, getProfileLocal, saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
-import { LANGUAGES, VERSION_LOGS, t } from "@/lib/i18n";
+import { LANGUAGES, VERSION_LOGS, t, useLanguage, setAppLanguage } from "@/lib/i18n"; // [修正]
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, logout } = useAuth();
   
-  const [lang, setLang] = useState("zh-TW");
+  const lang = useLanguage(); // [修正]
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [modelList, setModelList] = useState<string[]>([]);
@@ -39,36 +39,31 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
-  const borderColor = useThemeColor({}, "border") || '#ccc'; // [修正] 加入 fallback
+  const borderColor = useThemeColor({}, "border") || '#ccc'; // [修正]
 
   useEffect(() => {
     async function load() {
-      try {
-        const s = await getSettings();
-        if(s.language) setLang(s.language);
-        if(s.apiKey) setApiKey(s.apiKey);
-        if(s.model) setSelectedModel(s.model);
-        
-        const p = await getProfileLocal();
-        if(p) {
-          setGender(p.gender || "male");
-          if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
-          setHeightCm(p.heightCm?.toString() || "");
-          setCurrentWeight(p.currentWeightKg?.toString() || "");
-          setBodyFat(p.bodyFatPercentage?.toString() || "");
-          setTargetWeight(p.targetWeightKg?.toString() || "");
-          setActivityLevel(p.activityLevel || "sedentary");
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+      const s = await getSettings();
+      if(s.apiKey) setApiKey(s.apiKey);
+      if(s.model) setSelectedModel(s.model);
+      
+      const p = await getProfileLocal();
+      if(p) {
+        setGender(p.gender || "male");
+        if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
+        setHeightCm(p.heightCm?.toString() || "");
+        setCurrentWeight(p.currentWeightKg?.toString() || "");
+        setBodyFat(p.bodyFatPercentage?.toString() || "");
+        setTargetWeight(p.targetWeightKg?.toString() || "");
+        setActivityLevel(p.activityLevel || "sedentary");
       }
+      setLoading(false);
     }
     if(isAuthenticated) load();
   }, [isAuthenticated]);
 
   const handleSave = async () => {
+    // 儲存設定
     await saveSettings({ apiKey, model: selectedModel, language: lang });
     await saveProfileLocal({
       gender,
@@ -78,7 +73,7 @@ export default function ProfileScreen() {
       bodyFatPercentage: parseFloat(bodyFat),
       targetWeightKg: parseFloat(targetWeight),
       activityLevel,
-      dailyCalorieTarget: 2000 
+      dailyCalorieTarget: 2000
     });
     Alert.alert(t('save_settings', lang), "OK");
   };
@@ -105,22 +100,21 @@ export default function ProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-        <ThemedText type="title">個人設定</ThemedText>
-        <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor: '#ccc'}]}>
+        <ThemedText type="title">{t('tab_settings', lang)}</ThemedText>
+        <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor}]}>
            <ThemedText>{LANGUAGES.find(l=>l.code===lang)?.label}</ThemedText>
            <Ionicons name="chevron-down" size={16} color={textColor} style={{marginLeft:4}}/>
         </Pressable>
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
-         {/* AI 設定 */}
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
             
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>Gemini API Key</ThemedText>
               <TextInput 
-                style={[styles.input, {color: textColor, borderColor: '#ccc'}]} 
+                style={[styles.input, {color: textColor, borderColor}]} 
                 value={apiKey} 
                 onChangeText={setApiKey} 
                 placeholder={t('api_key_placeholder', lang)} 
@@ -139,13 +133,12 @@ export default function ProfileScreen() {
 
             <View style={{marginTop: 12}}>
                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor: '#ccc'}]}>
+                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
                    <ThemedText>{selectedModel}</ThemedText>
                 </Pressable>
             </View>
          </View>
 
-         {/* 個人資料 */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
             <ThemedText type="subtitle" style={{marginBottom:12}}>基本資料</ThemedText>
             
@@ -161,14 +154,14 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.row}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
             </View>
             <View style={[styles.row, {marginTop:10}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor:'#ccc'}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
             </View>
             
             <View style={{marginTop:12}}>
@@ -202,9 +195,12 @@ export default function ProfileScreen() {
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-               <ThemedText type="subtitle" style={{marginBottom:10}}>選擇語言 / Select Language</ThemedText>
+               <ThemedText type="subtitle" style={{marginBottom:10}}>選擇語言</ThemedText>
                {LANGUAGES.map(l => (
-                 <Pressable key={l.code} onPress={()=>{setLang(l.code); setShowLangPicker(false);}} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
+                 <Pressable key={l.code} onPress={()=>{
+                    setAppLanguage(l.code); // [修正] 觸發全域更新
+                    setShowLangPicker(false);
+                 }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
                     <ThemedText style={{fontWeight: lang===l.code?'bold':'normal', color: lang===l.code?tintColor:textColor}}>{l.label}</ThemedText>
                  </Pressable>
                ))}
@@ -230,22 +226,9 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Version Modal */}
+      {/* Version Modal (略，保持原樣) */}
       <Modal visible={showVersionModal} transparent animationType="slide">
-         <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-               <ThemedText type="subtitle" style={{marginBottom:10}}>Version History</ThemedText>
-               <ScrollView style={{maxHeight: 400}}>
-                  {VERSION_LOGS.map((v, i) => (
-                    <View key={i} style={{marginBottom: 15}}>
-                       <ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText>
-                       <ThemedText style={{fontSize:13, color:textSecondary, lineHeight:18}}>{v.content}</ThemedText>
-                    </View>
-                  ))}
-               </ScrollView>
-               <Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable>
-            </View>
-         </View>
+         <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>Version History</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
       </Modal>
     </View>
   );
