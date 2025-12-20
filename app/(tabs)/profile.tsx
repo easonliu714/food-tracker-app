@@ -39,7 +39,7 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
-  // [修正] 移除可能導致崩潰的 borderColor 引用，直接使用顏色碼或 textSecondary
+  const borderColor = useThemeColor({}, "border") || '#ccc'; // [修正] 加入 fallback
 
   useEffect(() => {
     async function load() {
