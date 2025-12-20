@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { View, StyleSheet, Image, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Text } from "react-native";
+import { View, StyleSheet, Image, Pressable, ScrollView, TextInput, ActivityIndicator, Alert, Text, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
@@ -9,271 +9,266 @@ import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
 import { saveFoodLogLocal, saveProductLocal, getProductByBarcode, getSettings } from "@/lib/storage";
 import { NumberInput } from "@/components/NumberInput";
 
-const MEAL_OPTIONS = [
-  { k: 'breakfast', l: '早餐' }, 
-  { k: 'lunch', l: '午餐' }, 
-  { k: 'snack', l: '點心' },
-  { k: 'dinner', l: '晚餐' }, 
-  { k: 'late_night', l: '消夜' }
-];
-
-const getMealTypeByTime = () => {
-  const h = new Date().getHours();
-  if (h >= 6 && h < 11) return 'breakfast';
-  if (h >= 11 && h < 14) return 'lunch';
-  if (h >= 14 && h < 17) return 'snack';
-  if (h >= 17 && h < 21) return 'dinner';
-  return 'late_night';
-};
+// 餐別選項
+const MEAL_OPTIONS = [{ k: 'breakfast', l: '早餐' }, { k: 'lunch', l: '午餐' }, { k: 'snack', l: '點心' }, { k: 'dinner', l: '晚餐' }, { k: 'late_night', l: '消夜' }];
+const getMealTypeByTime = () => { const h = new Date().getHours(); if (h < 11) return 'breakfast'; if (h < 14) return 'lunch'; if (h < 17) return 'snack'; if (h < 21) return 'dinner'; return 'late_night'; };
 
 export default function FoodRecognitionScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
-  const imageUri = params.imageUri as string;
-  // 支援從首頁傳入 mode=MANUAL
+  
+  // 圖片 Uri (可能是裁切過的)
+  const [imageUri, setImageUri] = useState<string | null>(params.imageUri as string);
   const initialMode = params.mode === 'MANUAL' ? 'MANUAL' : 'AI';
 
-  const [isAnalyzing, setIsAnalyzing] = useState(initialMode === 'AI');
+  const [isAnalyzing, setIsAnalyzing] = useState(false); // 預設不自動跑，等待使用者確認裁切或輸入
   const [isSaving, setIsSaving] = useState(false);
   const [mode, setMode] = useState<'AI' | 'MANUAL'>(initialMode);
   const [mealType, setMealType] = useState(getMealTypeByTime());
   const [lang, setLang] = useState('zh-TW');
 
-  // 資料表單狀態
-  const [formData, setFormData] = useState({
-    foodName: "",
-    calories: "0",
-    protein: "0",
-    carbs: "0",
-    fat: "0",
-    sod: "0",
-    weight: "100", // 預設 100g
-    suggestion: "",
-    detectedObject: ""
+  // [修改] 資料結構分離：Input (食用量) vs Standard (標準值)
+  // Standard Data (每 100g/ml)
+  const [stdData, setStdData] = useState({ 
+    name: "", cal: "0", pro: "0", carb: "0", fat: "0", sod: "0", stdWeight: "100" 
   });
+  
+  // Intake Input
+  const [inputType, setInputType] = useState<'serving'|'gram'>('serving');
+  const [inputAmount, setInputAmount] = useState("1"); // 1份
+  const [inputGram, setInputGram] = useState("100"); // 100g
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
-  const textSecondary = useThemeColor({}, "textSecondary");
 
-  // 載入語言設定
-  useEffect(() => {
-    getSettings().then(s => { if(s.language) setLang(s.language); });
-  }, []);
+  useEffect(() => { getSettings().then(s => { if(s.language) setLang(s.language); }); }, []);
 
-  // 1. 自動圖片分析 (僅在有圖片且 AI 模式下)
+  // 1. 自動分析 (僅當有圖片且尚未分析過)
   useEffect(() => {
-    async function analyze() {
-      if (!imageUri || mode !== 'AI') return;
-      try {
+    async function autoAnalyze() {
+      if (imageUri && mode === 'AI' && !stdData.name) {
         setIsAnalyzing(true);
-        const result = await analyzeFoodImage(imageUri, lang);
-        processResult(result);
-      } catch (e) {
-        Alert.alert("錯誤", "圖片分析失敗，請檢查網路或 API Key 設定");
-        setMode('MANUAL');
-      } finally {
-        setIsAnalyzing(false);
+        try {
+          const result = await analyzeFoodImage(imageUri, lang);
+          if (result && result.foodName !== "分析失敗") {
+            fillStdData(result);
+          } else {
+            Alert.alert("分析失敗", "請嘗試手動輸入");
+            setMode('MANUAL');
+          }
+        } catch(e) {
+          setMode('MANUAL');
+        } finally {
+          setIsAnalyzing(false);
+        }
       }
     }
-    analyze();
-  }, [imageUri]);
+    autoAnalyze();
+  }, [imageUri]); // 依賴 imageUri
 
-  // 2. 文字分析功能 (手動模式)
+  // 填入數據 (AI 回傳的是總量預估，我們將其視為 "一份" 的標準值)
+  const fillStdData = (data: any) => {
+    setStdData({
+      name: data.foodName || "",
+      cal: data.calories?.toString() || "0",
+      pro: data.macros?.protein?.toString() || "0",
+      carb: data.macros?.carbs?.toString() || "0",
+      fat: data.macros?.fat?.toString() || "0",
+      sod: data.macros?.sodium?.toString() || "0",
+      stdWeight: data.estimated_weight_g?.toString() || "100" // AI 估計的這份重量
+    });
+    // 重置輸入為 1 份
+    setInputType('serving');
+    setInputAmount("1");
+    setInputGram(data.estimated_weight_g?.toString() || "100");
+  };
+
+  // 名稱模糊查詢 (手輸模式)
+  const handleNameBlur = async () => {
+    if (!stdData.name) return;
+    const saved = await getProductByBarcode(stdData.name);
+    if (saved) {
+      setStdData({
+        ...stdData,
+        cal: saved.cal?.toString(),
+        pro: saved.pro?.toString(),
+        carb: saved.carb?.toString(),
+        fat: saved.fat?.toString(),
+        sod: saved.sod?.toString() || "0",
+        stdWeight: saved.stdWeight?.toString() || "100"
+      });
+      Alert.alert("已載入", "發現資料庫中有此食物，已自動帶入數值。");
+    }
+  };
+
+  // AI 文字估算
   const handleTextAnalyze = async () => {
-    if (!formData.foodName) return Alert.alert("請輸入食物名稱");
+    if (!stdData.name) return Alert.alert("請輸入食物名稱");
+    setIsAnalyzing(true);
     try {
-      setIsAnalyzing(true);
-      const result = await analyzeFoodText(formData.foodName, lang);
-      processResult(result);
-    } catch (e) {
-      Alert.alert("分析失敗");
+      const result = await analyzeFoodText(stdData.name, lang);
+      if (result) fillStdData(result);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // 3. 資料庫查詢 (當名稱輸入完成失去焦點時)
-  const handleNameBlur = async () => {
-    if (!formData.foodName) return;
-    const saved = await getProductByBarcode(formData.foodName); // 使用名稱當作 Key
-    if (saved) {
-      setFormData(prev => ({
-        ...prev,
-        calories: saved.cal?.toString() || "0",
-        protein: saved.pro?.toString() || "0",
-        carbs: saved.carb?.toString() || "0",
-        fat: saved.fat?.toString() || "0",
-        sod: saved.sod?.toString() || "0",
-        weight: saved.stdWeight ? saved.stdWeight.toString() : "100",
-        suggestion: "已從資料庫載入紀錄",
-        detectedObject: "Database"
-      }));
-    }
-  };
-
-  const processResult = (result: any) => {
-    if (result && result.foodName !== "分析失敗") {
-      setFormData({
-        foodName: result.foodName || formData.foodName,
-        calories: result.calories?.toString() || "0",
-        protein: result.macros?.protein?.toString() || "0",
-        carbs: result.macros?.carbs?.toString() || "0",
-        fat: result.macros?.fat?.toString() || "0",
-        sod: result.macros?.sodium?.toString() || "0",
-        weight: result.estimated_weight_g?.toString() || "100",
-        suggestion: result.suggestion || "",
-        detectedObject: result.detectedObject || "文字輸入"
-      });
+  // 連動計算：份數 <-> 克數
+  useEffect(() => {
+    const stdW = parseFloat(stdData.stdWeight) || 100;
+    if (inputType === 'serving') {
+      const g = (parseFloat(inputAmount) || 0) * stdW;
+      if (Math.abs(g - (parseFloat(inputGram)||0)) > 0.1) setInputGram(g.toFixed(0));
     } else {
-      Alert.alert("分析失敗", "無法識別內容，請手動輸入");
-      setMode('MANUAL');
+      const s = (parseFloat(inputGram) || 0) / stdW;
+      if (Math.abs(s - (parseFloat(inputAmount)||0)) > 0.1) setInputAmount(s.toFixed(1));
     }
+  }, [inputAmount, inputGram, inputType, stdData.stdWeight]);
+
+  // 最終計算
+  const getFinal = () => {
+    // 假設 stdData 是 "每份(stdWeight)" 的數值 (AI 邏輯) 或是 "每100g" 的數值 (掃碼邏輯)
+    // 這裡統一邏輯：stdData 顯示的是 "一份" (User defined standard portion) 的數值
+    // 使用者輸入幾份，就乘幾倍。
+    // 如果使用者改克數，則 ratio = 輸入克數 / 標準份量克數
+    const ratio = (parseFloat(inputAmount) || 0); 
+    
+    // 備註：如果 stdData 的 cal 是 per 100g，那這裡邏輯要改。
+    // 根據需求 2，希望像掃碼一樣。掃碼通常是：下方顯示 "每 100g 數值"，上方輸入 "克數"。
+    // 但 AI 估算通常給的是 "這一碗 (300g) 多少卡"。
+    // 折衷：我們把 stdData 當作 "基準單位資料"。
+    // 為了符合需求 2，我們將介面顯示為 "基準值 (可編輯為 100g 或 1份)"。
+    
+    return {
+      cal: Math.round((parseFloat(stdData.cal)||0) * ratio),
+      pro: Math.round((parseFloat(stdData.pro)||0) * ratio),
+      carb: Math.round((parseFloat(stdData.carb)||0) * ratio),
+      fat: Math.round((parseFloat(stdData.fat)||0) * ratio),
+      sod: Math.round((parseFloat(stdData.sod)||0) * ratio),
+    };
   };
 
   const handleSave = async () => {
-    if (!formData.foodName) {
-      return Alert.alert("請輸入食物名稱");
-    }
-    try {
-      setIsSaving(true);
-      
-      // 1. 儲存到今日紀錄
-      await saveFoodLogLocal({
-        mealType,
-        foodName: formData.foodName,
-        totalCalories: parseInt(formData.calories) || 0,
-        totalProteinG: parseFloat(formData.protein) || 0,
-        totalCarbsG: parseFloat(formData.carbs) || 0,
-        totalFatG: parseFloat(formData.fat) || 0,
-        totalSodiumMg: parseFloat(formData.sod) || 0,
-        imageUrl: imageUri, // 如果是手輸，這裡會是 undefined
-        notes: `AI識別(${formData.weight}g): ${formData.detectedObject}`
-      });
+    const final = getFinal();
+    await saveProductLocal(stdData.name, {
+      name: stdData.name,
+      brand: "User Input",
+      stdWeight: parseFloat(stdData.stdWeight)||100,
+      cal: stdData.cal, pro: stdData.pro, carb: stdData.carb, fat: stdData.fat, sod: stdData.sod
+    });
 
-      // 2. 儲存到產品資料庫 (方便下次直接帶入)
-      await saveProductLocal(formData.foodName, {
-         name: formData.foodName,
-         brand: "User Custom",
-         stdWeight: parseFloat(formData.weight) || 100,
-         cal: formData.calories,
-         pro: formData.protein,
-         carb: formData.carbs,
-         fat: formData.fat,
-         sod: formData.sod
-      });
-
-      router.push('/(tabs)');
-    } catch (error) {
-      Alert.alert("儲存失敗");
-    } finally {
-      setIsSaving(false);
-    }
+    await saveFoodLogLocal({
+      mealType,
+      foodName: stdData.name,
+      totalCalories: final.cal,
+      totalProteinG: final.pro,
+      totalCarbsG: final.carb,
+      totalFatG: final.fat,
+      totalSodiumMg: final.sod,
+      imageUrl: imageUri,
+      notes: `手輸/AI: ${inputGram}g`
+    });
+    router.push('/(tabs)');
   };
 
-  const InputField = ({ label, value, onChange, onBlur }: any) => (
-    <View style={{marginBottom: 12}}>
-      <ThemedText style={{fontSize: 14, color: textSecondary, marginBottom: 6}}>{label}</ThemedText>
-      <TextInput 
-        style={[styles.input, {color: textColor, borderColor: '#ccc', backgroundColor: 'white'}]}
-        value={value}
-        onChangeText={onChange}
-        onBlur={onBlur}
-        placeholder="請輸入"
-        placeholderTextColor="#999"
-      />
-    </View>
-  );
+  const final = getFinal();
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20), backgroundColor: cardBackground }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color={textColor} /></Pressable>
         <ThemedText type="subtitle">食物確認</ThemedText>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={{ flex: 1 }}>
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+          <Image source={{ uri: imageUri }} style={styles.image} resizeMode="contain" />
         ) : (
-          <View style={[styles.image, {backgroundColor: '#eee', justifyContent: 'center', alignItems: 'center'}]}>
-             <Ionicons name="fast-food-outline" size={50} color="#ccc"/>
-             <ThemedText style={{color:'#999', marginTop:10}}>手動輸入模式</ThemedText>
+          <View style={[styles.image, {backgroundColor: '#eee', justifyContent:'center', alignItems:'center'}]}>
+             <Ionicons name="fast-food" size={50} color="#ccc"/>
+             <ThemedText style={{color:'#999'}}>無圖片</ThemedText>
           </View>
         )}
 
         <View style={{ padding: 16 }}>
-          {/* 模式切換與狀態 */}
-          <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
-             {isAnalyzing ? (
-               <View style={{flexDirection: 'row', alignItems: 'center'}}><ActivityIndicator size="small" color={tintColor}/><ThemedText style={{marginLeft: 8}}>AI 分析中...</ThemedText></View>
-             ) : (
-               <View>
-                 <ThemedText type="subtitle">{mode === 'AI' ? 'AI 分析結果' : '手動輸入模式'}</ThemedText>
-                 {formData.detectedObject && <Text style={{fontSize: 12, color: '#888', marginTop: 4}}>偵測: {formData.detectedObject}</Text>}
-               </View>
-             )}
-             
-             {/* 只有在原本是 AI 模式進來時，才顯示切換按鈕，手動進來通常就維持手動 */}
-             {params.mode !== 'MANUAL' && (
-               <Pressable onPress={() => setMode(m => m === 'AI' ? 'MANUAL' : 'AI')} style={[styles.modeBtn, {borderColor: tintColor}]}>
-                 <ThemedText style={{color: tintColor, fontSize: 14, fontWeight: '600'}}>{mode === 'AI' ? '切換手動' : '返回 AI'}</ThemedText>
-               </Pressable>
-             )}
+          {/* 模式與 AI 狀態 */}
+          <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:16}}>
+             {isAnalyzing && <ActivityIndicator color={tintColor} />}
+             <Pressable onPress={() => setMode(m => m==='AI'?'MANUAL':'AI')} style={[styles.modeBtn, {borderColor:tintColor}]}>
+                <ThemedText style={{color:tintColor}}>{mode==='AI'?'切換手動':'返回 AI'}</ThemedText>
+             </Pressable>
           </View>
-
-          {/* 手動模式下的 AI 按鈕 (加大) */}
+          
           {mode === 'MANUAL' && (
-             <Pressable onPress={handleTextAnalyze} style={[styles.btn, {backgroundColor: tintColor, marginBottom: 20, minHeight: 50}]}>
-               <ThemedText style={{color: 'white', fontSize: 16, fontWeight: 'bold'}}>以「食物名稱」讓 AI 估算</ThemedText>
+             <Pressable onPress={handleTextAnalyze} style={[styles.btn, {backgroundColor: tintColor, marginBottom: 16, minHeight: 48}]}>
+               <ThemedText style={{color: 'white', fontWeight:'bold'}}>AI 估算營養</ThemedText>
              </Pressable>
           )}
 
-          {/* 餐別選擇 */}
-          <View style={[styles.card, { backgroundColor: cardBackground, marginBottom: 16 }]}>
-            <ThemedText style={{fontSize: 14, color: textSecondary, marginBottom: 10}}>用餐時段</ThemedText>
-            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 10}}>
+          {/* 1. 名稱與餐別 */}
+          <View style={[styles.card, { backgroundColor: cardBackground }]}>
+            <ThemedText style={{fontSize: 12, color: '#666'}}>食物名稱 (輸入後自動查詢)</ThemedText>
+            <TextInput 
+               style={[styles.input, {color: textColor, backgroundColor: 'white'}]} 
+               value={stdData.name} 
+               onChangeText={t => setStdData({...stdData, name: t})} 
+               onBlur={handleNameBlur}
+               placeholder="例如: 牛肉麵"
+            />
+            <View style={{flexDirection: 'row', gap: 8, marginTop: 10, flexWrap:'wrap'}}>
               {MEAL_OPTIONS.map(opt => (
-                <Pressable key={opt.k} onPress={() => setMealType(opt.k)} style={[styles.chip, mealType === opt.k && {backgroundColor: tintColor, borderColor: tintColor}]}>
-                  <ThemedText style={{color: mealType === opt.k ? 'white' : textColor, fontSize: 14}}>{opt.l}</ThemedText>
+                <Pressable key={opt.k} onPress={() => setMealType(opt.k)} style={[styles.chip, mealType===opt.k && {backgroundColor:tintColor}]}>
+                  <ThemedText style={{color: mealType===opt.k?'white':textColor}}>{opt.l}</ThemedText>
                 </Pressable>
               ))}
             </View>
           </View>
 
-          {/* 資料表單 */}
-          <View style={[styles.card, { backgroundColor: cardBackground }]}>
-            <InputField label="食物名稱" value={formData.foodName} onChange={(t:string) => setFormData({...formData, foodName: t})} onBlur={handleNameBlur} />
-            
-            <NumberInput label="估計重量 (g)" value={formData.weight} onChange={(t) => setFormData({...formData, weight: t})} step={10} />
-
-            <View style={{flexDirection: 'row', gap: 16}}>
-              <View style={{flex: 1}}><NumberInput label="熱量 (kcal)" value={formData.calories} onChange={(t) => setFormData({...formData, calories: t})} step={10} /></View>
-              <View style={{flex: 1}}><NumberInput label="蛋白質 (g)" value={formData.protein} onChange={(t) => setFormData({...formData, protein: t})} /></View>
-            </View>
-            <View style={{flexDirection: 'row', gap: 16}}>
-              <View style={{flex: 1}}><NumberInput label="碳水 (g)" value={formData.carbs} onChange={(t) => setFormData({...formData, carbs: t})} /></View>
-              <View style={{flex: 1}}><NumberInput label="脂肪 (g)" value={formData.fat} onChange={(t) => setFormData({...formData, fat: t})} /></View>
-            </View>
-            <NumberInput label="鈉 (mg)" value={formData.sod} onChange={(t) => setFormData({...formData, sod: t})} step={10} />
-            
-            {formData.suggestion ? (
-              <View style={{marginTop: 12, padding: 12, backgroundColor: '#E8F5E9', borderRadius: 8}}>
-                <ThemedText style={{color: '#2E7D32', fontSize: 14, lineHeight: 20}}>💡 {formData.suggestion}</ThemedText>
-              </View>
-            ) : null}
+          {/* 2. 份量輸入區 (對齊 Barcode 介面) */}
+          <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
+             <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:10}}>
+                <Pressable onPress={()=>setInputType('serving')}><ThemedText style={{color:inputType==='serving'?tintColor:'#999', fontWeight:'bold'}}>輸入份數</ThemedText></Pressable>
+                <Pressable onPress={()=>setInputType('gram')}><ThemedText style={{color:inputType==='gram'?tintColor:'#999', fontWeight:'bold'}}>輸入克數</ThemedText></Pressable>
+             </View>
+             {inputType === 'serving' ? (
+                <NumberInput label="份數" value={inputAmount} onChange={setInputAmount} step={0.5} unit="份" />
+             ) : (
+                <NumberInput label="克數 (g)" value={inputGram} onChange={setInputGram} step={10} unit="g" />
+             )}
+             
+             <View style={{backgroundColor:'#E3F2FD', padding:10, borderRadius:8, marginTop:10}}>
+                <ThemedText style={{textAlign:'center', color:'#1565C0', fontWeight:'bold'}}>
+                   總計: {final.cal} kcal
+                </ThemedText>
+             </View>
           </View>
+
+          {/* 3. 標準值設定 (基準) */}
+          <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
+             <ThemedText style={{fontWeight:'bold', marginBottom:10}}>基準數值 (每 1 份)</ThemedText>
+             <NumberInput label="一份重量 (g)" value={stdData.stdWeight} onChange={v => setStdData({...stdData, stdWeight: v})} step={10} />
+             
+             <View style={{flexDirection:'row', gap:10}}>
+                <View style={{flex:1}}><NumberInput label="熱量" value={stdData.cal} onChange={v => setStdData({...stdData, cal: v})} step={10}/></View>
+                <View style={{flex:1}}><NumberInput label="蛋白質" value={stdData.pro} onChange={v => setStdData({...stdData, pro: v})}/></View>
+             </View>
+             <View style={{flexDirection:'row', gap:10}}>
+                <View style={{flex:1}}><NumberInput label="碳水" value={stdData.carb} onChange={v => setStdData({...stdData, carb: v})}/></View>
+                <View style={{flex:1}}><NumberInput label="脂肪" value={stdData.fat} onChange={v => setStdData({...stdData, fat: v})}/></View>
+             </View>
+             <NumberInput label="鈉 (mg)" value={stdData.sod} onChange={v => setStdData({...stdData, sod: v})} step={10}/>
+          </View>
+
         </View>
       </ScrollView>
 
-      {/* 底部儲存按鈕 (加大) */}
-      <View style={{ padding: 16, backgroundColor: cardBackground, borderTopWidth: 1, borderTopColor: '#eee' }}>
-        <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: tintColor }]} disabled={isSaving}>
-          {isSaving ? <ActivityIndicator color="white" /> : <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>確認並儲存</ThemedText>}
+      <View style={{ padding: 16, backgroundColor: cardBackground }}>
+        <Pressable onPress={handleSave} style={[styles.btn, { backgroundColor: tintColor }]}>
+          <ThemedText style={{ color: 'white', fontWeight: 'bold', fontSize: 18 }}>確認並儲存</ThemedText>
         </Pressable>
       </View>
     </View>
@@ -282,13 +277,12 @@ export default function FoodRecognitionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 16, alignItems: 'center' },
-  backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  image: { width: '100%', height: 220 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16 },
+  backBtn: { padding: 8 },
+  image: { width: '100%', height: 250 },
   card: { padding: 16, borderRadius: 16 },
-  modeBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd' },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, height: 50 },
-  btn: { padding: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', minHeight: 56 },
-  btnSmall: { padding: 12, borderRadius: 10, borderWidth: 1, minWidth: 100, alignItems: 'center' }
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginTop: 4, fontSize: 16 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#ddd' },
+  modeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
+  btn: { padding: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }
 });

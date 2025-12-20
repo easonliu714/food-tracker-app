@@ -8,6 +8,7 @@ const KEYS = {
   PRODUCTS: 'saved_products',
   WEIGHTS: 'weight_history',
   SETTINGS: 'app_settings',
+  AI_ADVICE: 'ai_advice', // [新增]
 };
 
 // 設定
@@ -64,9 +65,30 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
+// [新增] AI 建議持久化
+export const saveAIAdvice = async (advice: any) => {
+  await AsyncStorage.setItem(KEYS.AI_ADVICE, JSON.stringify(advice));
+};
+
+export const getAIAdvice = async () => {
+  const data = await AsyncStorage.getItem(KEYS.AI_ADVICE);
+  return data ? JSON.parse(data) : null;
+};
+
 // 商品庫
-export const saveProductLocal = async (barcode: string, productData: any) => { const data = await AsyncStorage.getItem(KEYS.PRODUCTS); const products = data ? JSON.parse(data) : {}; products[barcode] = productData; await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products)); };
-export const getProductByBarcode = async (barcode: string) => { const data = await AsyncStorage.getItem(KEYS.PRODUCTS); const products = data ? JSON.parse(data) : {}; return products[barcode] || null; };
+// 提醒：saveProductLocal 使用 barcode (或名稱) 作為 key
+export const saveProductLocal = async (barcode: string, productData: any) => {
+  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+  const products = data ? JSON.parse(data) : {};
+  products[barcode] = productData;
+  await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
+};
+
+export const getProductByBarcode = async (barcode: string) => {
+  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+  const products = data ? JSON.parse(data) : {};
+  return products[barcode] || null;
+};
 
 // 飲食紀錄
 export const getFoodLogsLocal = async () => { const data = await AsyncStorage.getItem(KEYS.FOOD_LOGS); return data ? JSON.parse(data) : []; };
