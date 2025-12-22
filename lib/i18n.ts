@@ -439,7 +439,7 @@ export const VERSION_LOGS = [
 
 export const t = (key: string, lang: string = 'zh-TW') => {
   const dict = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS['en'];
-  return dict[key as keyof typeof dict] || TRANSLATIONS['zh-TW'][key as any] || key;
+  return dict[key as keyof typeof dict] || TRANSLATIONS['zh-TW'][key as keyof typeof TRANSLATIONS['zh-TW']] || key;
 };
 
 // 簡單的事件訂閱機制，讓非元件也能觸發更新
