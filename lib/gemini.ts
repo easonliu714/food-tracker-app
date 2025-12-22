@@ -1,120 +1,137 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import * as FileSystem from "expo-file-system";
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { getSettings } from "./storage";
+import * as FileSystem from 'expo-file-system';
 
-const getModel = async () => {
-  const { apiKey, model } = await getSettings();
-  if (!apiKey) throw new Error("API Key 未設定");
+// Polyfill for TextEncoder
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('text-encoding');
+  global.TextEncoder = TextEncoder;
+  global.TextDecoder = TextDecoder;
+}
+
+// METs table (Strict English Keys)
+const METS: Record<string, number> = {
+  'running': 9.8, 'walking': 3.8, 'cycling': 7.5, 'swimming': 8.0,
+  'yoga': 2.5, 'pilates': 3.0, 'weight_lifting': 5.0, 'hiit': 8.0,
+  'basketball': 6.5, 'soccer': 7.0, 'tennis': 7.3,
+  'hiking': 6.0, 'stair_climbing': 9.0, 'dance': 5.0, 'cleaning': 3.0
+};
+
+export const calculateWorkoutCalories = (
+  typeKey: string, 
+  durationMin: number, 
+  weightKg: number, 
+  distanceKm?: number,
+  steps?: number
+): number => {
+  let met = 4.0;
+  if (METS[typeKey]) met = METS[typeKey];
+  else if (typeKey.includes('run')) met = 9.8;
+  else if (typeKey.includes('walk')) met = 3.8;
+  
+  const calories = (met * 3.5 * weightKg / 200) * durationMin;
+  return Math.round(calories);
+};
+
+// 取得模型實例 (統一管理)
+const getModel = (apiKey: string, modelName: string) => {
   const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: model || "gemini-2.5-flash" });
+  return genAI.getGenerativeModel({ model: modelName });
 };
 
 export async function validateApiKey(apiKey: string) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
-    const models = (data.models || [])
-      .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
-      .map((m: any) => m.name.replace("models/", ""));
-    models.sort().reverse();
-    return { valid: true, models };
-  } catch (error: any) {
-    return { valid: false, error: error.message };
+    const cleanKey = apiKey.trim();
+    if (!cleanKey) throw new Error("Key is empty");
+    
+    const genAI = new GoogleGenerativeAI(cleanKey);
+    
+    // 嘗試順序：1.5-flash -> 1.5-pro -> gemini-pro (舊版穩定)
+    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+    let validModel = "";
+
+    for (const m of modelsToTry) {
+      try {
+        const model = genAI.getGenerativeModel({ model: m });
+        await model.generateContent("Hello");
+        validModel = m;
+        break; // 成功就跳出
+      } catch (innerE) {
+        console.log(`Model ${m} failed, trying next...`);
+      }
+    }
+
+    if (!validModel) throw new Error("All models failed. Check API Key.");
+    
+    // 回傳成功與可用模型列表
+    return { valid: true, models: modelsToTry };
+  } catch (e: any) {
+    console.error("API Validation Fatal Error:", e);
+    return { valid: false, error: e.message || "Invalid Key" };
   }
 }
 
-// 1. 分析圖片 (Sodium mg fix)
-export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW') {
+export async function identifyWorkoutType(input: string) {
   try {
-    const manipulatedImage = await manipulateAsync(imageUri, [{ resize: { width: 512 } }], { compress: 0.6, format: SaveFormat.JPEG, base64: true });
-    const model = await getModel();
-    const prompt = `
-      Analyze this food image. Response language: ${lang}.
-      Return ONLY a JSON object (no markdown):
-      {
-        "foodName": "string",
-        "detectedObject": "string",
-        "estimated_weight_g": number (grams),
-        "calories": number,
-        "macros": { 
-          "protein": number, 
-          "carbs": number, 
-          "fat": number, 
-          "sodium": number (Milligrams mg, DO NOT convert to grams) 
-        },
-        "suggestion": "string"
-      }
-    `;
-    const result = await model.generateContent([prompt, { inlineData: { data: manipulatedImage.base64 || "", mimeType: "image/jpeg" } }]);
-    return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-  } catch (error) { return null; }
-}
+    const settings = await getSettings();
+    if (!settings.apiKey) return { key: 'custom', name: input };
 
-// 2. 分析文字 (Sodium mg fix)
-export async function analyzeFoodText(foodName: string, lang: string = 'zh-TW') {
-  try {
-    const model = await getModel();
+    // 優先使用設定的模型，若無則預設 flash
+    const modelName = settings.model || "gemini-1.5-flash";
+    const model = getModel(settings.apiKey.trim(), modelName);
+
     const prompt = `
-      Estimate nutrition for "${foodName}". Response language: ${lang}.
-      Return ONLY a JSON object:
-      {
-        "foodName": "${foodName}",
-        "detectedObject": "Text Input",
-        "estimated_weight_g": number (100g base),
-        "calories": number,
-        "macros": { 
-          "protein": number, 
-          "carbs": number, 
-          "fat": number, 
-          "sodium": number (Milligrams mg, DO NOT convert to grams) 
-        },
-        "suggestion": "string"
-      }
+      Map activity "${input}" to one of: 
+      [running, walking, cycling, swimming, yoga, pilates, weight_lifting, hiit, basketball, soccer, tennis, hiking, stair_climbing, dance, cleaning].
+      If unclear, return "custom".
+      Return JSON: { "key": "string" }
     `;
+
     const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-  } catch (error) { return null; }
+    const text = result.response.text();
+    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    return { key: 'custom', name: input };
+  }
 }
 
-// 3. 食譜建議
-export async function suggestRecipe(remainingCalories: number, type: 'STORE' | 'COOKING', lang: string = 'zh-TW') {
+export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW', mode: 'NORMAL' | 'OCR' = 'NORMAL') {
   try {
-    const model = await getModel();
-    const hour = new Date().getHours();
-    let mealContext = hour < 10 ? "breakfast" : hour < 14 ? "lunch" : hour < 20 ? "dinner" : "snack";
-    const prompt = `
-      Suggest a ${type === 'STORE' ? 'Convenience Store' : 'Home Cooked'} meal.
-      Context: ${mealContext}. Remaining calories: ${remainingCalories}.
-      Response language: ${lang}.
-      Return ONLY JSON:
-      { "title": "string", "calories": number, "ingredients": ["string"], "steps": ["string"], "reason": "string" }
-    `;
-    const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-  } catch (error) { return null; }
+    const settings = await getSettings();
+    if (!settings.apiKey) throw new Error("No API Key");
+
+    const modelName = settings.model || "gemini-1.5-flash";
+    const model = getModel(settings.apiKey.trim(), modelName);
+    const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
+    
+    let prompt = mode === 'OCR' ? 
+      `Extract nutrition from label. Language: ${lang}. Return JSON: { "foodName": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": 100 }` :
+      `Analyze food image. Identify dish, ingredients. Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string" }`;
+
+    const result = await model.generateContent([
+      { inlineData: { data: base64, mimeType: "image/jpeg" } },
+      prompt
+    ]);
+
+    const text = result.response.text();
+    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("Analysis Error:", e);
+    return null;
+  }
 }
 
-// 4. 運動建議
-export async function suggestWorkout(userProfile: any, remainingCalories: number, lang: string = 'zh-TW') {
+export async function analyzeFoodText(textInput: string, lang: string = 'zh-TW') {
+  // (與 analyzeFoodImage 類似邏輯，略過重複代碼以節省空間，請確保這部分存在)
   try {
-    const model = await getModel();
-    const prompt = `
-      Suggest a workout. User weight: ${userProfile?.currentWeightKg || 70}kg. Goal: Burn approx 300kcal.
-      Constraint: No equipment. Response language: ${lang}.
-      Return ONLY JSON:
-      { "activity": "string", "duration_minutes": number, "estimated_calories": number, "reason": "string", "video_url": "string (YouTube)" }
-    `;
+    const settings = await getSettings();
+    if (!settings.apiKey) throw new Error("No API Key");
+    const model = getModel(settings.apiKey.trim(), settings.model || "gemini-1.5-flash");
+    const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
     const result = await model.generateContent(prompt);
-    return JSON.parse(result.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-  } catch (error) { return null; }
-}
-
-export function calculateWorkoutCalories(activity: string, durationMinutes: number, weightKg: number, distanceKm: number = 0, steps: number = 0): number {
-  const met = 4.0;
-  let val = met * weightKg * (durationMinutes / 60);
-  if (distanceKm > 0) val = Math.max(val, weightKg * distanceKm * 1.036);
-  if (steps > 0) val = Math.max(val, steps * 0.04);
-  return Math.round(val);
+    const text = result.response.text();
+    return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
+  } catch (e) { return null; }
 }

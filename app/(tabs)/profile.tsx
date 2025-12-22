@@ -8,14 +8,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveProfileLocal, getProfileLocal, saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
-import { LANGUAGES, VERSION_LOGS, t, useLanguage, setAppLanguage } from "@/lib/i18n"; // [修正]
+import { LANGUAGES, getVersionLogs, t, useLanguage, setAppLanguage } from "@/lib/i18n";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, logout } = useAuth();
   
-  const lang = useLanguage(); // [修正]
+  const lang = useLanguage();
+  const versionLogs = getVersionLogs(lang); // 根據語言取得對應歷程
+
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [modelList, setModelList] = useState<string[]>([]);
@@ -39,70 +41,109 @@ export default function ProfileScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
-  const borderColor = useThemeColor({}, "border") || '#ccc'; // [修正]
+  const borderColor = useThemeColor({}, "border") || '#ccc';
 
   useEffect(() => {
     async function load() {
-      const s = await getSettings();
-      if(s.apiKey) setApiKey(s.apiKey);
-      if(s.model) setSelectedModel(s.model);
-      
-      const p = await getProfileLocal();
-      if(p) {
-        setGender(p.gender || "male");
-        if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
-        setHeightCm(p.heightCm?.toString() || "");
-        setCurrentWeight(p.currentWeightKg?.toString() || "");
-        setBodyFat(p.bodyFatPercentage?.toString() || "");
-        setTargetWeight(p.targetWeightKg?.toString() || "");
-        setActivityLevel(p.activityLevel || "sedentary");
+      try {
+        const s = await getSettings();
+        if(s.apiKey) setApiKey(s.apiKey);
+        if(s.model) setSelectedModel(s.model);
+        
+        const p = await getProfileLocal();
+        if(p) {
+          setGender(p.gender || "male");
+          if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
+          setHeightCm(p.heightCm?.toString() || "");
+          setCurrentWeight(p.currentWeightKg?.toString() || "");
+          setBodyFat(p.bodyFatPercentage?.toString() || "");
+          setTargetWeight(p.targetWeightKg?.toString() || "");
+          setActivityLevel(p.activityLevel || "sedentary");
+        }
+      } catch (e) {
+        console.error("Profile load error:", e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
-    if(isAuthenticated) load();
-  }, [isAuthenticated]);
+    load();
+  }, []);
+
+  const calculateTDEE = (w: number, h: number, age: number, g: string, act: string) => {
+    let bmr = 10 * w + 6.25 * h - 5 * age;
+    bmr += g === 'male' ? 5 : -161;
+    
+    const multipliers: Record<string, number> = {
+      'sedentary': 1.2,
+      'lightly_active': 1.375,
+      'moderately_active': 1.55,
+      'very_active': 1.725,
+      'extra_active': 1.9
+    };
+    return Math.round(bmr * (multipliers[act] || 1.2));
+  };
 
   const handleSave = async () => {
-    // 儲存設定
-    await saveSettings({ apiKey, model: selectedModel, language: lang });
-    await saveProfileLocal({
-      gender,
-      birthDate: birthYear ? new Date(parseInt(birthYear), 0, 1).toISOString() : undefined,
-      heightCm: parseInt(heightCm),
-      currentWeightKg: parseFloat(currentWeight),
-      bodyFatPercentage: parseFloat(bodyFat),
-      targetWeightKg: parseFloat(targetWeight),
-      activityLevel,
-      dailyCalorieTarget: 2000
-    });
-    Alert.alert(t('save_settings', lang), "OK");
+    try {
+      const cleanKey = apiKey.trim(); // [Fix]
+      setApiKey(cleanKey); // Update state view
+
+      setAppLanguage(lang); 
+      await saveSettings({ apiKey, model: selectedModel, language: lang });
+      
+      const weight = parseFloat(currentWeight) || 70;
+      const height = parseFloat(heightCm) || 170;
+      const age = new Date().getFullYear() - (parseInt(birthYear) || 2000);
+      const tdee = calculateTDEE(weight, height, age, gender, activityLevel);
+      
+      const targetW = parseFloat(targetWeight) || weight;
+      let adjustedTarget = tdee;
+      if (targetW < weight) adjustedTarget -= 500;
+      else if (targetW > weight) adjustedTarget += 300;
+
+      adjustedTarget = Math.max(adjustedTarget, 1200);
+
+      await saveProfileLocal({
+        gender,
+        birthDate: birthYear ? new Date(parseInt(birthYear), 0, 1).toISOString() : undefined,
+        heightCm: parseInt(heightCm),
+        currentWeightKg: weight,
+        bodyFatPercentage: parseFloat(bodyFat),
+        targetWeightKg: targetW,
+        activityLevel,
+        dailyCalorieTarget: adjustedTarget
+      });
+      Alert.alert(t('save_settings', lang), `設定已更新！每日建議熱量已調整為 ${adjustedTarget} kcal`);
+    } catch (e) {
+      Alert.alert("儲存失敗", "請稍後再試");
+    }
   };
 
   const handleTestKey = async () => {
-    if (!apiKey) return Alert.alert("請輸入 API Key");
+    const cleanKey = apiKey.trim();
+    if (!cleanKey) return Alert.alert("請輸入 API Key");
+    
     setTestingKey(true);
-    const res = await validateApiKey(apiKey);
+    const res = await validateApiKey(cleanKey); // Pass trimmed key
     setTestingKey(false);
     
     if (res.valid && res.models) {
       setModelList(res.models);
-      const recommended = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+      const recommended = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
       const bestMatch = recommended.find(m => res.models.includes(m)) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
-      Alert.alert("測試成功", `金鑰有效！已為您預選 ${bestMatch}`);
+      Alert.alert("測試成功", `金鑰有效！已切換至 ${bestMatch}`);
     } else {
       Alert.alert("測試失敗", res.error || "無法連線");
     }
   };
-
-  if (!isAuthenticated) return <View/>;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
         <ThemedText type="title">{t('tab_settings', lang)}</ThemedText>
         <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor}]}>
-           <ThemedText>{LANGUAGES.find(l=>l.code===lang)?.label}</ThemedText>
+           <ThemedText>{LANGUAGES.find(l=>l.code===lang)?.label || lang}</ThemedText>
            <Ionicons name="chevron-down" size={16} color={textColor} style={{marginLeft:4}}/>
         </Pressable>
       </View>
@@ -118,10 +159,9 @@ export default function ProfileScreen() {
                 value={apiKey} 
                 onChangeText={setApiKey} 
                 placeholder={t('api_key_placeholder', lang)} 
-                secureTextEntry 
               />
               <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>
-                 請先登入 Google AI Studio，於左側功能欄點擊 "Get API key" 取得金鑰。
+                 {t('api_key_warning', lang)}
               </ThemedText>
             </View>
 
@@ -140,8 +180,7 @@ export default function ProfileScreen() {
          </View>
 
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
-            <ThemedText type="subtitle" style={{marginBottom:12}}>基本資料</ThemedText>
-            
+            <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
             <View style={{marginBottom: 12}}>
                <ThemedText style={{marginBottom:5}}>{t('gender', lang)}</ThemedText>
                <View style={styles.row}>
@@ -152,7 +191,6 @@ export default function ProfileScreen() {
                   ))}
                </View>
             </View>
-
             <View style={styles.row}>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
@@ -185,22 +223,17 @@ export default function ProfileScreen() {
          </Pressable>
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.4)</ThemedText>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.6)</ThemedText>
          </Pressable>
-         
          <View style={{height:50}}/>
       </ScrollView>
 
-      {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-               <ThemedText type="subtitle" style={{marginBottom:10}}>選擇語言</ThemedText>
+               <ThemedText type="subtitle" style={{marginBottom:10}}>選擇語言 / Select Language</ThemedText>
                {LANGUAGES.map(l => (
-                 <Pressable key={l.code} onPress={()=>{
-                    setAppLanguage(l.code); // [修正] 觸發全域更新
-                    setShowLangPicker(false);
-                 }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
+                 <Pressable key={l.code} onPress={()=>{ setAppLanguage(l.code); setShowLangPicker(false); }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
                     <ThemedText style={{fontWeight: lang===l.code?'bold':'normal', color: lang===l.code?tintColor:textColor}}>{l.label}</ThemedText>
                  </Pressable>
                ))}
@@ -209,7 +242,6 @@ export default function ProfileScreen() {
          </View>
       </Modal>
 
-      {/* Model Modal */}
       <Modal visible={showModelPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -226,9 +258,23 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Version Modal (略，保持原樣) */}
       <Modal visible={showVersionModal} transparent animationType="slide">
-         <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>Version History</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
+         <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, {backgroundColor:cardBackground}]}>
+               <ThemedText type="subtitle" style={{marginBottom:10}}>{t('version_history', lang)}</ThemedText>
+               <ScrollView style={{maxHeight:400}}>
+                  {versionLogs.map((v, i)=>(
+                     <View key={i} style={{marginBottom:15}}>
+                        <ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText>
+                        <ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText>
+                     </View>
+                  ))}
+               </ScrollView>
+               <Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}>
+                  <ThemedText style={{color:'white'}}>關閉</ThemedText>
+               </Pressable>
+            </View>
+         </View>
       </Modal>
     </View>
   );

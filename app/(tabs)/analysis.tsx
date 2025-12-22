@@ -1,103 +1,151 @@
-import { ScrollView, View, StyleSheet, Dimensions, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
 import { useState, useCallback } from "react";
+import { View, ScrollView, RefreshControl, StyleSheet, Dimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BarChart } from "react-native-gifted-charts";
+import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { getAggregatedHistory, getProfileLocal } from "@/lib/storage";
-import { Svg, Rect, Line, Text as SvgText, G } from "react-native-svg";
-import { t, useLanguage } from "@/lib/i18n"; // [修正]
-
-const SCREEN_W = Dimensions.get('window').width;
-const CHART_W = SCREEN_W - 32;
-const CHART_H = 220;
+import { getFoodLogsLocal, getProfileLocal } from "@/lib/storage";
+import { t, useLanguage } from "@/lib/i18n";
 
 export default function AnalysisScreen() {
   const insets = useSafeAreaInsets();
-  const lang = useLanguage(); // [修正]
-  const [period, setPeriod] = useState<"week"|"month_day"|"month_week"|"year">("week");
-  const [history, setHistory] = useState<any[]>([]);
-  const [targets, setTargets] = useState({ pro: 60, carb: 250, fat: 60, sod: 2400 });
+  const lang = useLanguage();
+  const [refreshing, setRefreshing] = useState(false);
   
+  const [weeklyData, setWeeklyData] = useState<any[]>([]);
+  const [macroData, setMacroData] = useState<any[]>([]);
+  const [dailyTargets, setDailyTargets] = useState({ p: 60, c: 250, f: 60, s: 2300 }); // [修正] 加入鈉建議值
+
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
+  const textColor = useThemeColor({}, "text");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
-  useFocusEffect(useCallback(() => {
-    async function load() {
-       const h = await getAggregatedHistory(period);
-       setHistory(h);
-       // 移除 getSettings (Hook 已處理)
-       const p = await getProfileLocal();
-       if (p?.dailyCalorieTarget) {
-         const t = p.dailyCalorieTarget;
-         setTargets({
-           pro: Math.round(t * 0.2 / 4),
-           carb: Math.round(t * 0.5 / 4),
-           fat: Math.round(t * 0.3 / 9),
-           sod: 2400
-         });
-       }
+  const loadData = useCallback(async () => {
+    const logs = await getFoodLogsLocal();
+    const profile = await getProfileLocal();
+    
+    // 計算每日建議量
+    if (profile?.dailyCalorieTarget) {
+      const cal = profile.dailyCalorieTarget;
+      setDailyTargets({
+        p: Math.round((cal * 0.2) / 4),
+        c: Math.round((cal * 0.5) / 4),
+        f: Math.round((cal * 0.3) / 9),
+        s: 2300 // 鈉建議量通常固定為 2300mg
+      });
     }
-    load();
-  }, [period]));
 
-  const dataCount = Math.max(history.length, 1);
-  const BAR_W = Math.max(10, (CHART_W / dataCount) * 0.4);
-  const SPACING = CHART_W / dataCount;
-  const MAX_CAL = 3500;
-  const BAR_MAX_PERCENT = 1.5; 
+    const now = new Date();
+    const weekMap = new Map();
+    // 初始化過去7天
+    for(let i=6; i>=0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const k = d.toISOString().split('T')[0];
+      weekMap.set(k, { cal: 0, p: 0, c: 0, f: 0, s: 0, date: k.slice(5) }); // [修正] 加入 s (Sodium)
+    }
+
+    logs.forEach((log: any) => {
+      const dateKey = log.loggedAt.split('T')[0];
+      if (weekMap.has(dateKey)) {
+        const curr = weekMap.get(dateKey);
+        weekMap.set(dateKey, {
+          ...curr,
+          cal: curr.cal + (log.totalCalories || 0),
+          p: curr.p + (log.totalProteinG || 0),
+          c: curr.c + (log.totalCarbsG || 0),
+          f: curr.f + (log.totalFatG || 0),
+          s: curr.s + (log.totalSodiumMg || 0) // [修正] 累加鈉
+        });
+      }
+    });
+
+    // 1. 熱量圖表數據
+    const calData = Array.from(weekMap.values()).map((d: any) => ({
+      value: d.cal,
+      label: d.date,
+      frontColor: tintColor,
+      topLabelComponent: () => <ThemedText style={{fontSize:10, color: textSecondary}}>{d.cal}</ThemedText>
+    }));
+    setWeeklyData(calData);
+
+    // 2. 營養素圖表數據 (Grouped Bar)
+    // [修正] 改為 4 條 Bar (P, C, F, S)
+    const nutData: any[] = [];
+    Array.from(weekMap.values()).forEach((d: any) => {
+      nutData.push(
+        { value: d.p, label: d.date, spacing: 2, labelWidth: 30, labelTextStyle: {fontSize: 10, color: textColor}, frontColor: '#4CAF50' }, // Protein
+        { value: d.c, spacing: 2, frontColor: '#2196F3' }, // Carbs
+        { value: d.f, spacing: 2, frontColor: '#FF9800' },  // Fat
+        { value: d.s, spacing: 20, frontColor: '#9C27B0' } // Sodium (Purple), Spacing 加大分組
+      );
+    });
+    setMacroData(nutData);
+
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
-       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-          <ThemedText type="title">{t('trend_analysis', lang)}</ThemedText>
-       </View>
-       <ScrollView style={{padding: 16}}>
-          <View style={{flexDirection:'row', justifyContent:'space-around', marginBottom: 16, backgroundColor: cardBackground, padding: 8, borderRadius: 12}}>
-             {['week','month_day','month_week','year'].map(p => (
-                <Pressable key={p} onPress={()=>setPeriod(p as any)} style={{padding: 8, borderBottomWidth: period===p?2:0, borderColor: tintColor}}>
-                   <ThemedText style={{fontWeight: period===p?'bold':'normal', color: period===p?tintColor:'#666'}}>{t(p, lang)}</ThemedText>
-                </Pressable>
-             ))}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
+        <ThemedText type="title">{t('tab_analysis', lang)}</ThemedText>
+      </View>
+
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
+        <View style={{ paddingHorizontal: 16 }}>
+          {/* Chart 1: Calorie Trend */}
+          <View style={[styles.card, { backgroundColor: cardBackground }]}>
+            <ThemedText type="subtitle" style={{marginBottom: 20}}>{t('trend_analysis', lang)} (Kcal)</ThemedText>
+            <BarChart
+              data={weeklyData}
+              barWidth={22}
+              noOfSections={4}
+              barBorderRadius={4}
+              frontColor={tintColor}
+              yAxisThickness={0}
+              xAxisThickness={0}
+              hideRules
+              yAxisTextStyle={{color: textColor}}
+              xAxisLabelTextStyle={{color: textColor, fontSize: 10}}
+              showGradient={false}
+            />
           </View>
-          {/* Charts... (保持不變) */}
-          <View style={[styles.card, {backgroundColor: cardBackground}]}>
-             <View style={{flexDirection: 'row', gap: 12, marginTop: 8}}>
-                <ThemedText style={{fontSize: 10, color: '#4CAF50'}}>■ {t('intake', lang)}</ThemedText>
-                <ThemedText style={{fontSize: 10, color: '#FF9800'}}>■ {t('burned', lang)}</ThemedText>
-                <ThemedText style={{fontSize: 10, color: '#2196F3'}}>━ {t('weight', lang)}</ThemedText>
-                <ThemedText style={{fontSize: 10, color: '#9C27B0'}}>● {t('body_fat', lang)}</ThemedText>
-             </View>
-             <Svg height={CHART_H + 40} width={CHART_W} style={{marginTop: 10}}>
-                <Line x1="0" y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke="#ccc" />
-                {history.map((day, i) => {
-                   const x = i * SPACING + (SPACING / 2);
-                   const hIn = Math.min((day.caloriesIn / MAX_CAL) * CHART_H, CHART_H);
-                   const hOut = Math.min((day.caloriesOut / MAX_CAL) * CHART_H, CHART_H);
-                   const wNorm = Math.max(0, Math.min(1, (day.weight - 40) / 60));
-                   const yW = CHART_H - (wNorm * CHART_H);
-                   let nextX, nextYW;
-                   if (i < history.length - 1) {
-                      const nextDay = history[i+1];
-                      nextX = (i+1) * SPACING + (SPACING / 2);
-                      const nextWNorm = Math.max(0, Math.min(1, (nextDay.weight - 40) / 60));
-                      nextYW = CHART_H - (nextWNorm * CHART_H);
-                   }
-                   return (
-                     <G key={i}>
-                        <Rect x={x - BAR_W/2 - 1} y={CHART_H - hIn} width={BAR_W/2} height={hIn} fill="#4CAF50" rx={2} />
-                        <Rect x={x + 1} y={CHART_H - hOut} width={BAR_W/2} height={hOut} fill="#FF9800" rx={2} />
-                        {nextX && <Line x1={x} y1={yW} x2={nextX} y2={nextYW} stroke="#2196F3" strokeWidth="2" />}
-                        {day.weight > 0 && <Rect x={x-2} y={yW-2} width={4} height={4} fill="#2196F3" />}
-                        {day.bodyFat > 0 && <SvgText x={x} y={CHART_H - (day.bodyFat*2) - 5} fontSize="8" fill="#9C27B0" textAnchor="middle">{day.bodyFat}%</SvgText>}
-                        <SvgText x={x} y={CHART_H + 15} fontSize="10" fill="#666" textAnchor="middle">{day.label.slice(-5)}</SvgText>
-                     </G>
-                   );
-                })}
-             </Svg>
+
+          {/* Chart 2: Nutrient Trend (Grouped) */}
+          <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 20 }]}>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('nutrition_distribution', lang)}</ThemedText>
+            
+            {/* 建議量基準線說明 */}
+            <View style={{flexDirection:'row', flexWrap:'wrap', gap:10, marginBottom:15, padding:10, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius:8}}>
+               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#4CAF50', marginRight:4}}/><ThemedText style={{fontSize:10}}>Pro: {dailyTargets.p}g</ThemedText></View>
+               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#2196F3', marginRight:4}}/><ThemedText style={{fontSize:10}}>Carb: {dailyTargets.c}g</ThemedText></View>
+               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#FF9800', marginRight:4}}/><ThemedText style={{fontSize:10}}>Fat: {dailyTargets.f}g</ThemedText></View>
+               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#9C27B0', marginRight:4}}/><ThemedText style={{fontSize:10}}>Sod: 2300mg</ThemedText></View>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <BarChart
+                data={macroData}
+                barWidth={8} // [修正] 稍微調窄一點以容納4條
+                spacing={24} // spacing controlled in data
+                roundedTop
+                hideRules
+                xAxisThickness={0}
+                yAxisThickness={0}
+                yAxisTextStyle={{color: textColor}}
+                noOfSections={4}
+                maxValue={3000} // [注意] 因為納是 mg (例如 2300)，會把 Y 軸撐大，導致 P/C/F (如 60) 看起來很矮。這是正常的物理限制。
+                showGradient={false}
+              />
+            </ScrollView>
           </View>
-       </ScrollView>
+        </View>
+        <View style={{height: 100}}/>
+      </ScrollView>
     </View>
   );
 }
@@ -105,5 +153,5 @@ export default function AnalysisScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { padding: 20 },
-  card: { padding: 16, borderRadius: 16 }
+  card: { padding: 20, borderRadius: 16, alignItems: 'center' }
 });

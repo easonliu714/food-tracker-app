@@ -20,8 +20,32 @@ export const saveSettings = async (settings: { apiKey?: string; model?: string; 
 };
 
 export const getSettings = async () => {
-  const data = await AsyncStorage.getItem(KEYS.SETTINGS);
-  return data ? JSON.parse(data) : { apiKey: "", model: "gemini-2.5-flash", language: "zh-TW" };
+  try {
+    const data = await AsyncStorage.getItem(KEYS.SETTINGS);
+    const settings = data ? JSON.parse(data) : {};
+
+    // [修正] 如果 Storage 中沒有 API Key，則嘗試讀取環境變數
+    // 請確保您的 .env 檔案中有 EXPO_PUBLIC_GEMINI_API_KEY
+    if (!settings.apiKey) {
+      settings.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
+    }
+
+    // [修正] 預設模型改為穩定的 1.5-flash，避免 2.5-flash 造成 404
+    if (!settings.model) settings.model = "gemini-1.5-flash";
+    
+    // 預設語言
+    if (!settings.language) settings.language = "zh-TW";
+
+    return settings;
+  } catch (e) {
+    console.error("Error reading settings:", e);
+    // 發生錯誤時的回退預設值
+    return { 
+      apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || "", 
+      model: "gemini-1.5-flash", 
+      language: "zh-TW" 
+    };
+  }
 };
 
 // --- 使用者 ---
@@ -289,10 +313,10 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
   return result.slice(- (period === 'year' ? 12 : period === 'month_week' ? 12 : 7));
 };
 
-// 為了相容舊版分析 (如果還有用到的話，保留)
+// 為了相容舊版分析
 export const getHistory7DaysLocal = async () => getAggregatedHistory('week');
 
-// --- AI 建議持久化 (分開存) ---
+// --- AI 建議持久化 ---
 export const saveAIAdvice = async (type: 'RECIPE' | 'WORKOUT', advice: any) => {
   const current = await getAIAdvice();
   const updated = { ...current, [type]: advice };
