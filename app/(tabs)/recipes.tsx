@@ -7,12 +7,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice, getSettings } from "@/lib/storage";
+import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
-import { t } from "@/lib/i18n";
+import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
-// [修正] 明確宣告回傳型別，消除警示
+// 設定通知處理器 (消除警示)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -26,29 +26,34 @@ export default function RecipesScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
+  const lang = useLanguage(); // 使用 Hook 確保語言同步
 
   const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
   const [loading, setLoading] = useState(false);
+  // 分開儲存兩種建議，避免切換時覆蓋
   const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
-  const [lang, setLang] = useState("zh-TW");
 
-  // 初始化
+  // 初始化：讀取持久化的建議
   useEffect(() => {
      async function init() {
        try {
          const advice = await getAIAdvice();
-         if (advice) setAdviceData({ RECIPE: advice.RECIPE, WORKOUT: advice.WORKOUT });
-         const s = await getSettings();
-         if (s.language) setLang(s.language);
+         if (advice) {
+           setAdviceData({
+             RECIPE: advice.RECIPE || null,
+             WORKOUT: advice.WORKOUT || null
+           });
+         }
        } catch (e) {
-         console.error("Init error:", e);
+         console.error("Failed to load saved advice", e);
        }
      }
      init();
   }, []);
 
+  // 每次進入頁面更新熱量數據
   useFocusEffect(useCallback(() => {
     async function syncData() {
        const p = await getProfileLocal();
@@ -57,13 +62,11 @@ export default function RecipesScreen() {
        const net = (s.totalCaloriesIn || 0) - (s.totalCaloriesOut || 0);
        setProfile(p);
        setRemaining(target - net);
-       
-       const set = await getSettings();
-       if (set.language) setLang(set.language);
     }
     syncData();
   }, []));
 
+  // 取得當前 Tab 應顯示的資料
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
@@ -76,6 +79,7 @@ export default function RecipesScreen() {
 
     setLoading(true);
     
+    // 延遲執行以避免 UI 卡頓
     setTimeout(async () => {
        try {
          let res;
@@ -86,6 +90,7 @@ export default function RecipesScreen() {
          }
          
          if (res) {
+           // 更新狀態與 storage
            const newAdvice = { ...adviceData, [activeTab]: res };
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
@@ -100,7 +105,7 @@ export default function RecipesScreen() {
              });
            }
          } else {
-           Alert.alert("分析失敗", "AI 暫無回應");
+           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
          }
        } catch (e) {
          Alert.alert("錯誤", "發生未知錯誤");
@@ -110,41 +115,78 @@ export default function RecipesScreen() {
     }, 100);
   };
 
-  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
+  const openVideo = () => { 
+    if (currentResult?.video_url) {
+      Linking.openURL(currentResult.video_url);
+    }
+  };
 
+  // [修正] 完整實作 PDF 匯出 HTML 生成
   const handleExportPDF = async () => {
     if (!currentResult) return;
     
+    // 根據當前 Tab 生成對應內容
+    const contentHtml = activeTab === 'RECIPE' ? 
+      `
+        <div class="section">
+          <h3>🛒 ${t('ingredients', lang)}</h3>
+          <ul>
+            ${currentResult.ingredients?.map((item: string) => `<li>${item}</li>`).join('') || '<li>無資料</li>'}
+          </ul>
+        </div>
+        <div class="section">
+          <h3>📝 ${t('steps', lang)}</h3>
+          <ol>
+            ${currentResult.steps?.map((step: string) => `<li>${step}</li>`).join('') || '<li>無資料</li>'}
+          </ol>
+        </div>
+        <div class="highlight">
+          🔥 <strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal
+        </div>
+      ` : 
+      `
+        <div class="section">
+          <h3>🏋️ 運動詳情</h3>
+          <p><strong>項目:</strong> ${currentResult.activity}</p>
+          <p><strong>時間:</strong> ${currentResult.duration_minutes} 分鐘</p>
+          <div class="highlight">
+            ⚡ <strong>預估消耗:</strong> ${currentResult.estimated_calories} kcal
+          </div>
+        </div>
+      `;
+
     const htmlContent = `
+      <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
           <style>
-            body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-            .card { background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0; }
-            .label { font-weight: bold; color: #555; }
+            body { font-family: Helvetica, Arial, sans-serif; padding: 40px; line-height: 1.6; color: #333; }
+            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+            h2 { color: #444; margin-top: 0; }
+            .card { background: #f5f5f5; padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 5px solid #2196F3; }
+            .section { margin-bottom: 20px; }
+            .highlight { font-size: 1.2em; color: #E65100; font-weight: bold; margin-top: 10px; }
+            li { margin-bottom: 8px; }
+            .footer { text-align: center; color: #999; margin-top: 60px; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 20px; }
           </style>
         </head>
         <body>
           <h1>${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
-          <h2>${activeTab === 'RECIPE' ? currentResult.title : currentResult.activity}</h2>
           
           <div class="card">
-            <p><span class="label">${t('reason', lang)}:</span> ${currentResult.reason}</p>
+            <h2>${activeTab === 'RECIPE' ? currentResult.title : currentResult.activity}</h2>
+            <p><strong>💡 ${t('reason', lang)}:</strong></p>
+            <p>${currentResult.reason}</p>
           </div>
-          <hr/>
-          ${activeTab === 'RECIPE' ? 
-            `<h3>${t('ingredients', lang)}:</h3>
-             <ul>${currentResult.ingredients?.map((i:string)=>`<li>${i}</li>`).join('')}</ul>
-             <h3>${t('steps', lang)}:</h3>
-             <ol>${currentResult.steps?.map((s:string)=>`<li>${s}</li>`).join('')}</ol>
-             <p><strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal</p>` 
-            : 
-            `<p><strong>時間:</strong> ${currentResult.duration_minutes} min</p>
-             <p><strong>消耗:</strong> ${currentResult.estimated_calories} kcal</p>`
-          }
-          <p style="text-align: center; color: #999; margin-top: 50px;">Generated by Nutrition Tracker AI</p>
+          
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
+          
+          ${contentHtml}
+          
+          <div class="footer">
+            Generated by Nutrition Tracker AI • ${new Date().toLocaleDateString()}
+          </div>
         </body>
       </html>
     `;
@@ -154,10 +196,10 @@ export default function RecipesScreen() {
       if (Platform.OS === "ios") {
         await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
       } else {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: '匯出 PDF' });
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('export_pdf', lang) });
       }
     } catch (e) {
-      Alert.alert("匯出失敗", "請檢查裝置是否支援");
+      Alert.alert("匯出失敗", "請檢查裝置是否支援列印或分享功能");
     }
   };
 
