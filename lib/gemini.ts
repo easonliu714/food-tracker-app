@@ -38,21 +38,24 @@ export const calculateWorkoutCalories = (
   return Math.round(burned);
 };
 
-// [修正] 預設使用 gemini-1.5-flash (穩定版)
+// [關鍵修正] 模型優先順序: latest > 2.5 > 1.5
 const getModel = (apiKey: string, modelName: string) => {
-  // 若設定為 latest，自動對應到 1.5-flash
-  const targetModel = (modelName === 'gemini-flash-latest' || !modelName) ? 'gemini-1.5-flash' : modelName;
+  let targetModel = modelName || 'gemini-flash-latest';
+  
+  // 防止舊設定殘留 1.5-flash
+  if (targetModel === 'gemini-1.5-flash') {
+      targetModel = 'gemini-flash-latest';
+  }
+
   console.log(`[Gemini] Init Model: ${targetModel}`);
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({ model: targetModel });
 };
 
-// [新增] 強力 JSON 清理函式 (解決 Unexpected character 問題)
+// [新增] 強力 JSON 清理函式
 function cleanJson(text: string): string {
   try {
-    // 1. 移除 Markdown 標記
     let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    // 2. 尋找第一個 { 與最後一個 }，排除前後雜訊
     const firstOpen = clean.indexOf('{');
     const lastClose = clean.lastIndexOf('}');
     if (firstOpen !== -1 && lastClose !== -1) {
@@ -69,13 +72,14 @@ export async function validateApiKey(apiKey: string) {
     const cleanKey = apiKey.trim();
     if (!cleanKey) throw new Error("Key is empty");
     
-    // 測試兩個常用模型
-    const model = getModel(cleanKey, "gemini-1.5-flash");
+    // 優先使用 latest 測試
+    const model = getModel(cleanKey, "gemini-flash-latest");
     console.log("[Gemini] Sending validation request...");
     await model.generateContent("Hi");
     console.log("[Gemini] Validation Success!");
     
-    return { valid: true, models: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash-latest"] };
+    // 回傳列表：latest 優先，2.5 次之
+    return { valid: true, models: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-pro"] };
   } catch (e: any) {
     console.error("[Gemini] Validation FAILED:", e.message);
     return { valid: false, error: e.message || "Unknown Error" };
@@ -87,7 +91,7 @@ async function sendPrompt(prompt: string, imageBase64?: string) {
     const settings = await getSettings();
     if (!settings.apiKey) throw new Error("API Key not set");
 
-    const modelName = settings.model || "gemini-1.5-flash";
+    const modelName = settings.model || "gemini-flash-latest";
     const model = getModel(settings.apiKey.trim(), modelName);
     
     console.log(`[Gemini] Sending Request... Prompt Length: ${prompt.length}`);
@@ -98,14 +102,14 @@ async function sendPrompt(prompt: string, imageBase64?: string) {
 
     const result = await model.generateContent(content);
     const text = result.response.text();
-    console.log("[Gemini] Raw Response (First 100 chars):", text.substring(0, 100).replace(/\n/g, ' '));
+    console.log("[Gemini] Raw Response:", text.substring(0, 100).replace(/\n/g, ' '));
     
     const jsonStr = cleanJson(text);
     return JSON.parse(jsonStr);
   } catch (e: any) {
     console.error("[Gemini] Request FAILED:", e.message);
     console.error("[Gemini] Full Error:", JSON.stringify(e, null, 2));
-    throw e; // 拋出錯誤讓前端捕獲
+    throw e;
   }
 }
 

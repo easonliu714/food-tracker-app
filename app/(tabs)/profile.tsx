@@ -18,11 +18,11 @@ export default function ProfileScreen() {
   const versionLogs = getVersionLogs(lang);
 
   const [apiKey, setApiKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemini-1.5-flash");
+  const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
   const [gender, setGender] = useState<"male"|"female">("male");
-  const [birthYear, setBirthYear] = useState(""); // [新增] 出生年份
+  const [birthYear, setBirthYear] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [bodyFat, setBodyFat] = useState("");
@@ -52,7 +52,6 @@ export default function ProfileScreen() {
         const p = await getProfileLocal();
         if(p) {
           setGender(p.gender || "male");
-          // [修正] 讀取出生年份
           if(p.birthYear) setBirthYear(p.birthYear.toString());
           else if (p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
           
@@ -89,7 +88,6 @@ export default function ProfileScreen() {
       
       const weight = parseFloat(currentWeight) || 70;
       const height = parseFloat(heightCm) || 170;
-      // [修正] 計算年齡
       const bYear = parseInt(birthYear) || 2000;
       const age = new Date().getFullYear() - bYear;
       
@@ -125,12 +123,19 @@ export default function ProfileScreen() {
     setTestingKey(false);
     if (res.valid && res.models) {
       setModelList(res.models);
-      if(!selectedModel && res.models.length > 0) setSelectedModel(res.models[0]);
-      Alert.alert("測試成功", "金鑰有效！");
+      // 自動選取 gemini-flash-latest
+      if(res.models.includes('gemini-flash-latest')) {
+          setSelectedModel('gemini-flash-latest');
+      } else if(res.models.length > 0) {
+          setSelectedModel(res.models[0]);
+      }
+      Alert.alert("測試成功", `金鑰有效！已切換至 ${selectedModel}`);
     } else {
       Alert.alert("測試失敗", res.error || "無法連線");
     }
   };
+
+  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems:'center'}]}><ActivityIndicator size="large" color={tintColor}/></View>;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -143,8 +148,6 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
-         {/* ... (API Key Section 與原程式碼相同，省略重複部分) ... */}
-         
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
             <View style={{marginTop:12}}>
@@ -175,7 +178,6 @@ export default function ProfileScreen() {
                </View>
             </View>
             
-            {/* [新增] 出生年份欄位 */}
             <View style={{marginBottom: 12}}>
                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_year', lang) || "出生年份 (Year)"}</ThemedText>
                <TextInput style={[styles.input, {color:textColor, borderColor}]} value={birthYear} onChangeText={setBirthYear} keyboardType="numeric" placeholder="YYYY" />
@@ -186,7 +188,12 @@ export default function ProfileScreen() {
                <View style={{width:10}}/>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
             </View>
-            {/* ... (其餘欄位省略) ... */}
+            <View style={[styles.row, {marginTop:10}]}>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+               <View style={{width:10}}/>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+            </View>
+            
             <View style={{marginTop:12}}>
                <ThemedText style={{marginBottom:5}}>{t('activity_level', lang)}</ThemedText>
                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -202,10 +209,17 @@ export default function ProfileScreen() {
          <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
             <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
          </Pressable>
+
+         <Pressable onPress={logout} style={[styles.btn, {borderColor: '#FF3B30', borderWidth:1, marginTop: 12}]}>
+            <ThemedText style={{color: '#FF3B30'}}>{t('logout', lang)}</ThemedText>
+         </Pressable>
+
+         <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.7)</ThemedText>
+         </Pressable>
          <View style={{height:50}}/>
       </ScrollView>
 
-      {/* Modals... (省略) */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -223,6 +237,21 @@ export default function ProfileScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+      <Modal visible={showVersionModal} transparent animationType="slide">
+         <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, {backgroundColor:cardBackground}]}>
+               <ScrollView style={{maxHeight:400}}>
+                  {versionLogs.map((v, i)=>(
+                     <View key={i} style={{marginBottom:15}}>
+                        <ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText>
+                        <ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText>
+                     </View>
+                  ))}
+               </ScrollView>
+               <Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable>
+            </View>
+         </View>
       </Modal>
     </View>
   );

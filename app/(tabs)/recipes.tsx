@@ -31,10 +31,8 @@ export default function RecipesScreen() {
 
   useEffect(() => {
      async function init() {
-       try {
-         const advice = await getAIAdvice();
-         if (advice) setAdviceData({ RECIPE: advice.RECIPE || null, WORKOUT: advice.WORKOUT || null });
-       } catch (e) { console.error(e); }
+       const advice = await getAIAdvice();
+       if (advice) setAdviceData({ RECIPE: advice.RECIPE, WORKOUT: advice.WORKOUT });
      }
      init();
   }, []);
@@ -54,13 +52,10 @@ export default function RecipesScreen() {
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
-    // [修正] 加入緩衝提示 Alert
-    Alert.alert(t('ai_coach', lang), "AI 正在分析您的數據，請稍候片刻...", [{ text: "好" }]);
-    
+    Alert.alert(t('ai_coach', lang), "AI 正在分析，請稍候...", [{ text: "OK" }]);
     setLoading(true);
-    const { status } = await Notifications.getPermissionsAsync();
     
-    // 延遲 1 秒再發送請求，給使用者緩衝感
+    // 緩衝 1.5 秒
     setTimeout(async () => {
        try {
          let res;
@@ -74,25 +69,17 @@ export default function RecipesScreen() {
            const newAdvice = { ...adviceData, [activeTab]: res };
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
-           
-           if (status === 'granted') {
-             await Notifications.scheduleNotificationAsync({
-               content: { 
-                 title: t('ai_coach', lang), 
-                 body: activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang) 
-               },
-               trigger: null,
-             });
-           }
          } else {
-           Alert.alert("分析失敗", "AI 暫無回應，請稍後再試");
+           console.error("[Recipes] AI returned null");
+           Alert.alert("分析失敗", "AI 無回應，請檢查終端機日誌");
          }
-       } catch (e) {
-         Alert.alert("錯誤", "發生未知錯誤");
+       } catch (e: any) {
+         console.error("[Recipes] Generate Error:", e);
+         Alert.alert("錯誤", e.message || "發生未知錯誤");
        } finally {
          setLoading(false);
        }
-    }, 1000); 
+    }, 1500); 
   };
 
   const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
