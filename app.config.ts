@@ -22,7 +22,8 @@ const config: ExpoConfig = {
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
-  newArchEnabled: true,
+  // [修正] 暫時移除 newArchEnabled 以確保相容性，若確定 SDK54 模擬器支援可開啟
+  // newArchEnabled: true, 
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
@@ -40,8 +41,6 @@ const config: ExpoConfig = {
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
-    // [修正] 移除 versionCode，讓 EAS Build 自動管理或在 eas.json 設定
-    // [修正] 移除 edgeToEdgeEnabled 和 predictiveBackGestureEnabled 以消除型別警示
     package: env.androidPackage,
     permissions: [
       "POST_NOTIFICATIONS",
@@ -110,8 +109,9 @@ const config: ExpoConfig = {
     }
   },
   experiments: {
+    // [重要修正] 暫時關閉 React Compiler 以解決 react/compiler-runtime 錯誤
+    reactCompiler: false,
     typedRoutes: true,
-    reactCompiler: true,
   },
 };
 

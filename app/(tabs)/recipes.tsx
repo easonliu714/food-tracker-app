@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Platform } from "react-native";
-import * as Notifications from 'expo-notifications';
+// [修改] 移除 expo-notifications 以解決 SDK 54 Android Expo Go 崩潰問題
+// import * as Notifications from 'expo-notifications'; 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,30 +13,22 @@ import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
-// 設定通知處理器 (消除警示)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
+// [移除] 移除通知處理器設定
+// Notifications.setNotificationHandler({...});
 
 export default function RecipesScreen() {
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
-  const lang = useLanguage(); // 使用 Hook 確保語言同步
+  const lang = useLanguage(); 
 
   const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
   const [loading, setLoading] = useState(false);
-  // 分開儲存兩種建議，避免切換時覆蓋
   const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
 
-  // 初始化：讀取持久化的建議
   useEffect(() => {
      async function init() {
        try {
@@ -53,7 +46,6 @@ export default function RecipesScreen() {
      init();
   }, []);
 
-  // 每次進入頁面更新熱量數據
   useFocusEffect(useCallback(() => {
     async function syncData() {
        const p = await getProfileLocal();
@@ -66,17 +58,11 @@ export default function RecipesScreen() {
     syncData();
   }, []));
 
-  // 取得當前 Tab 應顯示的資料
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
-    const { status } = await Notifications.getPermissionsAsync();
-    let finalStatus = status;
-    if (status !== 'granted') {
-      const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      finalStatus = newStatus;
-    }
-
+    // [修改] 移除通知權限請求
+    
     setLoading(true);
     
     // 延遲執行以避免 UI 卡頓
@@ -90,25 +76,23 @@ export default function RecipesScreen() {
          }
          
          if (res) {
-           // 更新狀態與 storage
            const newAdvice = { ...adviceData, [activeTab]: res };
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
            
-           if (finalStatus === 'granted') {
-             await Notifications.scheduleNotificationAsync({
-               content: { 
-                 title: t('ai_coach', lang), 
-                 body: activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang) 
-               },
-               trigger: null,
-             });
-           }
+           // [修改] 改用 Alert 替代推播通知
+           Alert.alert(
+             t('ai_coach', lang), 
+             (activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)) + 
+             "\n(模擬器不支援推播，此訊息代表通知已觸發)"
+           );
+
          } else {
            Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
          }
        } catch (e) {
          Alert.alert("錯誤", "發生未知錯誤");
+         console.error(e);
        } finally {
          setLoading(false);
        }
@@ -121,11 +105,9 @@ export default function RecipesScreen() {
     }
   };
 
-  // [修正] 完整實作 PDF 匯出 HTML 生成
   const handleExportPDF = async () => {
     if (!currentResult) return;
     
-    // 根據當前 Tab 生成對應內容
     const contentHtml = activeTab === 'RECIPE' ? 
       `
         <div class="section">
