@@ -18,8 +18,7 @@ export default function ProfileScreen() {
   const versionLogs = getVersionLogs(lang);
 
   const [apiKey, setApiKey] = useState("");
-  // [修正] UI 預設顯示 gemini-flash-latest
-  const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
+  const [selectedModel, setSelectedModel] = useState("gemini-1.5-flash");
   const [modelList, setModelList] = useState<string[]>([]);
   
   const [gender, setGender] = useState<"male"|"female">("male");
@@ -48,7 +47,11 @@ export default function ProfileScreen() {
       try {
         const s = await getSettings();
         if(s.apiKey) setApiKey(s.apiKey);
-        if(s.model) setSelectedModel(s.model);
+        if(s.model) {
+            setSelectedModel(s.model);
+            // 確保目前選的模型有在清單中顯示
+            setModelList(prev => prev.includes(s.model) ? prev : [...prev, s.model]);
+        }
         
         const p = await getProfileLocal();
         if(p) {
@@ -85,6 +88,7 @@ export default function ProfileScreen() {
       const cleanKey = apiKey.trim();
       setApiKey(cleanKey);
       setAppLanguage(lang); 
+      // [關鍵] 儲存使用者明確選擇的模型
       await saveSettings({ apiKey: cleanKey, model: selectedModel, language: lang });
       
       const weight = parseFloat(currentWeight) || 70;
@@ -110,7 +114,7 @@ export default function ProfileScreen() {
         activityLevel,
         dailyCalorieTarget: adjustedTarget
       });
-      Alert.alert(t('save_settings', lang), `設定已更新！TDEE: ${tdee}, 每日建議: ${adjustedTarget} kcal`);
+      Alert.alert(t('save_settings', lang), `設定已更新！(使用模型: ${selectedModel})\nTDEE: ${tdee}, 每日建議: ${adjustedTarget} kcal`);
     } catch (e) {
       Alert.alert("儲存失敗", "請稍後再試");
     }
@@ -119,18 +123,23 @@ export default function ProfileScreen() {
   const handleTestKey = async () => {
     const cleanKey = apiKey.trim();
     if (!cleanKey) return Alert.alert("請輸入 API Key");
+    
     setTestingKey(true);
+    // 呼叫驗證，取得模型清單
     const res = await validateApiKey(cleanKey);
     setTestingKey(false);
+    
     if (res.valid && res.models) {
       setModelList(res.models);
-      // [修正] 自動選取 gemini-flash-latest
-      if(res.models.includes('gemini-flash-latest')) setSelectedModel('gemini-flash-latest');
-      else if(res.models.length > 0) setSelectedModel(res.models[0]);
       
-      Alert.alert("測試成功", `金鑰有效！已切換至 ${selectedModel}`);
+      // 邏輯：如果當前選的模型在清單內，保持不變；否則選第一個
+      if (!res.models.includes(selectedModel)) {
+          setSelectedModel(res.models[0]);
+      }
+      
+      Alert.alert("測試成功", `金鑰有效！請從下方選單確認您想使用的模型。\n目前預選: ${selectedModel}`);
     } else {
-      Alert.alert("測試失敗", res.error || "無法連線");
+      Alert.alert("測試失敗", res.error || "無法連線，請檢查 Key 或網路");
     }
   };
 
@@ -160,7 +169,10 @@ export default function ProfileScreen() {
             </View>
             <View style={{marginTop: 12}}>
                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}><ThemedText>{selectedModel}</ThemedText></Pressable>
+                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
+                   <ThemedText>{selectedModel}</ThemedText>
+                   <Ionicons name="caret-down" size={16} color={textSecondary} style={{position:'absolute', right:10}}/>
+                </Pressable>
             </View>
          </View>
 
@@ -219,7 +231,7 @@ export default function ProfileScreen() {
          <View style={{height:50}}/>
       </ScrollView>
 
-      {/* Modals... (省略重複) */}
+      {/* Modals */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -232,9 +244,16 @@ export default function ProfileScreen() {
       <Modal visible={showModelPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
+            <ThemedText type="subtitle" style={{marginBottom:10, textAlign:'center'}}>選擇模型 (Select Model)</ThemedText>
             <ScrollView style={{maxHeight: 300}}>
-              {modelList.map(m => (<Pressable key={m} onPress={() => {setSelectedModel(m); setShowModelPicker(false);}} style={{padding: 15}}><ThemedText>{m}</ThemedText></Pressable>))}
+              {modelList.map(m => (
+                <Pressable key={m} onPress={() => {setSelectedModel(m); setShowModelPicker(false);}} style={{padding: 15, borderBottomWidth:1, borderColor:'#eee', flexDirection:'row', justifyContent:'space-between'}}>
+                  <ThemedText style={{color: selectedModel===m?tintColor:textColor, fontWeight: selectedModel===m?'bold':'normal'}}>{m}</ThemedText>
+                  {selectedModel===m && <Ionicons name="checkmark" size={20} color={tintColor}/>}
+                </Pressable>
+              ))}
             </ScrollView>
+            <Pressable onPress={() => setShowModelPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>取消</ThemedText></Pressable>
           </View>
         </View>
       </Modal>

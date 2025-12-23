@@ -13,14 +13,13 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { 
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems,
-  getSettings, saveSettings, updateActivityLogLocal 
+  deleteActivityLogLocal, updateActivityLogLocal,
+  getSettings, saveSettings 
 } from "@/lib/storage";
 import { calculateWorkoutCalories, identifyWorkoutType, validateApiKey } from "@/lib/gemini"; 
 import { NumberInput } from "@/components/NumberInput";
 import { t, useLanguage } from "@/lib/i18n";
 
-// 隱藏黃色警告
 LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS']);
 
 const STANDARD_WORKOUTS = [
@@ -93,7 +92,7 @@ export default function HomeScreen() {
       const dur = parseFloat(duration) || 0;
       const w = profile?.currentWeightKg || 70; 
       
-      console.log(`[Home] Calculating: ${actType}, Duration: ${dur}, Weight: ${w}`);
+      console.log(`[Mobile Log] Calc Triggered: Type=${actType}, Dur=${dur}`);
       
       if (actType) {
         const cal = calculateWorkoutCalories(actType, dur, w, parseFloat(dist)||0, parseFloat(steps)||0);
