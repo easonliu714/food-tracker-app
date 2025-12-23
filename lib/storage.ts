@@ -147,6 +147,14 @@ export const deleteActivityLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
+// [新增] 刪除特定類型的所有運動紀錄 (用於刪除自訂項目)
+export const deleteActivityLogsByType = async (type: string) => {
+  const existingLogs = await getActivityLogsLocal();
+  const updatedLogs = existingLogs.filter((log: any) => log.activityType !== type);
+  await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
+  return existingLogs.length - updatedLogs.length; // 回傳刪除筆數
+};
+
 function toLocalISOString(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().split('T')[0];
@@ -190,7 +198,6 @@ export const getFrequentFoodItems = async () => {
 export const getFrequentActivityTypes = async () => {
   const logs = await getActivityLogsLocal();
   const frequency: Record<string, number> = {};
-  // [修正] 更新預設運動清單
   const DEFAULT_TYPES = ['走路', '跑步', '爬梯', '打掃', '瑜珈', '一般運動'];
   
   logs.forEach((log: any) => {
@@ -198,7 +205,6 @@ export const getFrequentActivityTypes = async () => {
   });
   
   const sorted = Object.keys(frequency).sort((a, b) => frequency[b] - frequency[a]);
-  // 合併並去重
   return Array.from(new Set([...sorted, ...DEFAULT_TYPES]));
 };
 

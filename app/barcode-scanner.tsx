@@ -28,6 +28,7 @@ export default function BarcodeScannerScreen() {
     // 1. 檢查本地資料庫
     const localProduct = await getProductByBarcode(data);
     if (localProduct) {
+      // 確保將條碼傳遞過去
       router.push({ pathname: "/food-recognition", params: { mode: "BARCODE", barcode: data } });
       return;
     }
@@ -39,21 +40,20 @@ export default function BarcodeScannerScreen() {
       
       if (json.status === 1 && json.product) {
         const p = json.product;
-        // 整理資料傳遞給確認頁
         const externalData = {
           foodName: p.product_name || p.product_name_en || "Unknown Product",
           calories_100g: p.nutriments?.["energy-kcal_100g"] || 0,
           protein_100g: p.nutriments?.proteins_100g || 0,
           carbs_100g: p.nutriments?.carbohydrates_100g || 0,
           fat_100g: p.nutriments?.fat_100g || 0,
-          sodium_100g: (p.nutriments?.salt_100g || 0) * 400, // salt to sodium mg approx
+          sodium_100g: (p.nutriments?.salt_100g || 0) * 400,
         };
         
         router.push({ 
           pathname: "/food-recognition", 
           params: { 
             mode: "EXTERNAL_DB", 
-            barcode: data,
+            barcode: data, // 確保傳遞 barcode
             initialData: JSON.stringify(externalData) 
           } 
         });
@@ -63,13 +63,13 @@ export default function BarcodeScannerScreen() {
       console.log("External DB Error", e);
     }
 
-    // 3. 查無資料，跳出選項
+    // 3. 查無資料
     Alert.alert(
       t('scan_failed', lang),
-      t('scan_failed_msg', lang),
+      `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, // 顯示條碼
       [
         { text: t('input_manual', lang), onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) },
-        { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera" }) }, // 引導至 AI 拍照
+        { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera" }) },
         { text: "Cancel", style: "cancel", onPress: () => setScanned(false) }
       ]
     );

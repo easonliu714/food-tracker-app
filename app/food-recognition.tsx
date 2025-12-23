@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { View, ScrollView, Image, ActivityIndicator, Pressable, TextInput, Alert, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as FileSystem from 'expo-file-system'; // [新增]
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { analyzeFoodImage } from "@/lib/gemini";
@@ -17,9 +18,8 @@ export default function FoodRecognitionScreen() {
   
   const [loading, setLoading] = useState(false);
   const [foodName, setFoodName] = useState("");
-  const [servingWeight, setServingWeight] = useState("100"); // 預設份量 100g
+  const [servingWeight, setServingWeight] = useState("100"); 
   
-  // Base Values (Per 100g)
   const [baseCal, setBaseCal] = useState("0");
   const [basePro, setBasePro] = useState("0");
   const [baseCarb, setBaseCarb] = useState("0");
@@ -35,19 +35,24 @@ export default function FoodRecognitionScreen() {
 
   useEffect(() => {
     async function process() {
+      // 1. 手動模式：不做事，等待輸入
       if (mode === "MANUAL") return;
 
+      // 2. 外部資料庫模式
       if (mode === "EXTERNAL_DB" && initialData) {
-        const data = JSON.parse(initialData as string);
-        setFoodName(data.foodName);
-        setBaseCal(data.calories_100g.toString());
-        setBasePro(data.protein_100g.toString());
-        setBaseCarb(data.carbs_100g.toString());
-        setBaseFat(data.fat_100g.toString());
-        setBaseSod(data.sodium_100g.toString());
+        try {
+          const data = JSON.parse(initialData as string);
+          setFoodName(data.foodName);
+          setBaseCal(data.calories_100g.toString());
+          setBasePro(data.protein_100g.toString());
+          setBaseCarb(data.carbs_100g.toString());
+          setBaseFat(data.fat_100g.toString());
+          setBaseSod(data.sodium_100g.toString());
+        } catch(e) { console.error(e); }
         return;
       }
 
+      // 3. 條碼模式：查本地資料庫
       if (mode === "BARCODE" && barcode) {
         const p = await getProductByBarcode(barcode as string);
         if (p) {
@@ -61,31 +66,47 @@ export default function FoodRecognitionScreen() {
         return;
       }
 
-      if (base64) {
+      // 4. AI 模式 (拍照/相簿)
+      if (mode === "AI" || base64 || imageUri) {
         setLoading(true);
-        const profile = await getProfileLocal();
-        const result = await analyzeFoodImage(base64 as string, lang, profile);
-        setLoading(false);
-        if (result) {
-          // AI 分析結果：名稱加上組成
-          setFoodName(`${result.foodName} (${result.composition || ''})`);
-          setBaseCal(result.calories_100g?.toString() || "0");
-          setBasePro(result.protein_100g?.toString() || "0");
-          setBaseCarb(result.carbs_100g?.toString() || "0");
-          setBaseFat(result.fat_100g?.toString() || "0");
-          setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
-        } else {
-          Alert.alert("辨識失敗", "請手動輸入");
+        try {
+          let imageBase64 = base64 as string;
+          
+          // 如果沒有直接傳入 base64 但有 uri，手動讀取檔案
+          if (!imageBase64 && imageUri) {
+            imageBase64 = await FileSystem.readAsStringAsync(imageUri as string, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+          }
+
+          if (imageBase64) {
+            const profile = await getProfileLocal();
+            const result = await analyzeFoodImage(imageBase64, lang, profile);
+            if (result) {
+              setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
+              setBaseCal(result.calories_100g?.toString() || "0");
+              setBasePro(result.protein_100g?.toString() || "0");
+              setBaseCarb(result.carbs_100g?.toString() || "0");
+              setBaseFat(result.fat_100g?.toString() || "0");
+              setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
+            } else {
+              Alert.alert("辨識失敗", "AI 無法識別圖片，請手動輸入");
+            }
+          }
+        } catch (e) {
+          console.error("AI Process Error", e);
+          Alert.alert("錯誤", "讀取圖片或分析失敗");
+        } finally {
+          setLoading(false);
         }
       }
     }
     process();
-  }, []);
+  }, [mode, base64, imageUri, initialData, barcode]);
 
   const handleSave = async () => {
     if (!foodName) return Alert.alert("請輸入食物名稱");
     
-    // 計算總值 = 基準(100g) * (份量 / 100)
     const ratio = (parseFloat(servingWeight) || 0) / 100;
     
     const finalLog = {
@@ -98,8 +119,8 @@ export default function FoodRecognitionScreen() {
       imageUri: imageUri as string
     };
 
+    // 如果有 barcode (包含掃碼失敗轉手動輸入的情況)，將資料存入本地產品庫
     if (barcode) {
-      // 儲存產品基準值到本地資料庫
       await saveProductLocal(barcode as string, {
         foodName,
         calories_100g: parseFloat(baseCal),
@@ -136,7 +157,6 @@ export default function FoodRecognitionScreen() {
           
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>{t('food_name', lang)}</ThemedText>
-             {/* 解決鍵盤消失：TextInput 應獨立或避免過度 re-render。此處使用簡單 View 包覆 */}
              <TextInput 
                style={[styles.textInput, {color: tintColor}]} 
                value={foodName} 
@@ -144,7 +164,6 @@ export default function FoodRecognitionScreen() {
                placeholder="輸入食物名稱"
              />
 
-             {/* 份量輸入區 (獨立) */}
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
                 <NumberInput label={t('serving_weight', lang)} value={servingWeight} onChange={setServingWeight} step={10} />
                 <ThemedText style={{textAlign:'center', fontSize: 12, color: '#666', marginTop: 4}}>
@@ -152,7 +171,6 @@ export default function FoodRecognitionScreen() {
                 </ThemedText>
              </View>
 
-             {/* AI 分析結果區 (僅在有 AI 資料時顯示) */}
              {aiAnalysis && (
                <View style={{marginTop: 16, padding: 12, backgroundColor: '#E3F2FD', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#2196F3'}}>
                  <ThemedText style={{fontWeight:'bold', color: '#1565C0', marginBottom: 4}}>🤖 {t('ai_analysis_result', lang)}</ThemedText>
@@ -161,7 +179,6 @@ export default function FoodRecognitionScreen() {
                </View>
              )}
 
-             {/* 基準值區塊 (每 100g) */}
              <View style={{marginTop: 20}}>
                 <ThemedText style={{fontWeight: 'bold', marginBottom: 10}}>{t('per_100g_base', lang)}</ThemedText>
                 <NumberInput label={t('calories', lang)} value={baseCal} onChange={setBaseCal} step={10} />
