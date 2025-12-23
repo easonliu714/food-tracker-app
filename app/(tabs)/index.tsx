@@ -1,6 +1,6 @@
 import { useRouter, useFocusEffect } from "expo-router";
 import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, ActivityIndicator } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, ActivityIndicator, LogBox } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,12 +13,15 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { 
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, updateActivityLogLocal,
-  getSettings, saveSettings 
+  deleteActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems,
+  getSettings, saveSettings, updateActivityLogLocal 
 } from "@/lib/storage";
 import { calculateWorkoutCalories, identifyWorkoutType, validateApiKey } from "@/lib/gemini"; 
 import { NumberInput } from "@/components/NumberInput";
 import { t, useLanguage } from "@/lib/i18n";
+
+// 隱藏黃色警告
+LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS']);
 
 const STANDARD_WORKOUTS = [
   'running', 'walking', 'cycling', 'swimming', 'yoga', 'weight_lifting', 'hiit', 
@@ -84,15 +87,15 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated, loadData]));
 
-  // [修正] 確保即時計算，並加入 Log 驗證
+  // [修正] 即時計算邏輯
   useEffect(() => {
     if (modalVisible && !identifying) {
       const dur = parseFloat(duration) || 0;
       const w = profile?.currentWeightKg || 70; 
       
-      // 即使 duration 為 0，也要能重置為 0
+      console.log(`[Home] Calculating: ${actType}, Duration: ${dur}, Weight: ${w}`);
+      
       if (actType) {
-        console.log(`[Home] Calc: ${actType} ${dur}min ${w}kg`);
         const cal = calculateWorkoutCalories(actType, dur, w, parseFloat(dist)||0, parseFloat(steps)||0);
         const fCal = (parseFloat(floors)||0) * 0.5;
         setEstCal(Math.round(cal + fCal));
