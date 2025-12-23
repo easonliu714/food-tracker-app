@@ -1,6 +1,6 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert, ActivityIndicator, LogBox } from "react-native";
+import { useState, useCallback } from "react";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,46 +13,45 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { 
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, updateActivityLogLocal,
-  getSettings, saveSettings 
+  deleteActivityLogLocal, updateFoodLogLocal, 
+  updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems, getFrequentActivityTypes, getSettings
 } from "@/lib/storage";
-import { calculateWorkoutCalories, identifyWorkoutType, validateApiKey } from "@/lib/gemini"; 
+import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
-import { t, useLanguage } from "@/lib/i18n";
-
-LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS']);
-
-const STANDARD_WORKOUTS = [
-  'running', 'walking', 'cycling', 'swimming', 'yoga', 'weight_lifting', 'hiit', 
-  'basketball', 'soccer', 'tennis', 'hiking', 'stair_climbing', 'cleaning'
-];
+import { t } from "@/lib/i18n";
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const lang = useLanguage();
-
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [targetCalories, setTargetCalories] = useState(2000);
   const [profile, setProfile] = useState<any>(null);
+  const [frequentItems, setFrequentItems] = useState<any[]>([]);
+  const [workoutTypes, setWorkoutTypes] = useState<string[]>([]);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [lang, setLang] = useState("zh-TW");
 
+  // 運動 Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
-  const [actType, setActType] = useState("running");
-  const [customInput, setCustomInput] = useState(""); 
+  const [actType, setActType] = useState("");
+  const [customActType, setCustomActType] = useState("");
   const [isCustomAct, setIsCustomAct] = useState(false);
-  const [identifying, setIdentifying] = useState(false);
-
-  const [duration, setDuration] = useState("");
-  const [steps, setSteps] = useState("");
-  const [dist, setDist] = useState("");
-  const [floors, setFloors] = useState("");
+  const [duration, setDuration] = useState("30");
+  const [steps, setSteps] = useState("0");
+  const [dist, setDist] = useState("0");
+  const [floors, setFloors] = useState("0");
   const [estCal, setEstCal] = useState(0);
+
+  // 飲食編輯 Modal
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingLog, setEditingLog] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editCal, setEditCal] = useState("");
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -65,131 +64,76 @@ export default function HomeScreen() {
   };
 
   const loadData = useCallback(async () => {
+    const s = await getSettings();
+    if(s.language) setLang(s.language);
+    
     const p = await getProfileLocal();
     setProfile(p);
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
+    
     const sum = await getDailySummaryLocal(selectedDate);
     setSummary(sum);
+    
+    const f = await getFrequentFoodItems();
+    setFrequentItems(f);
+    
+    const w = await getFrequentActivityTypes();
+    setWorkoutTypes(w);
+    if (!actType && w.length > 0) setActType(w[0]);
   }, [selectedDate]);
 
-  const checkApiKeyStatus = async () => {
-    const settings = await getSettings();
-    if (!settings.apiKey) {
-      Alert.alert(t('tab_settings', lang), "請先設定 Gemini API Key", [{ text: "設定", onPress: () => router.push("/profile") }]);
-    }
-  };
+  useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
 
-  useFocusEffect(useCallback(() => { 
-    if (isAuthenticated) {
-      loadData();
-      checkApiKeyStatus();
+  // 自動計算
+  useFocusEffect(useCallback(() => {
+    if (modalVisible) {
+      const type = isCustomAct ? customActType : actType;
+      const cal = calculateWorkoutCalories(type, parseFloat(duration)||0, profile?.currentWeightKg||70, parseFloat(dist), parseFloat(steps));
+      const fCal = (parseFloat(floors)||0) * 0.5;
+      setEstCal(Math.round(cal + fCal));
     }
-  }, [isAuthenticated, loadData]));
-
-  // [修正] 即時計算邏輯
-  useEffect(() => {
-    if (modalVisible && !identifying) {
-      const dur = parseFloat(duration) || 0;
-      const w = profile?.currentWeightKg || 70; 
-      
-      console.log(`[Mobile Log] Calc Triggered: Type=${actType}, Dur=${dur}`);
-      
-      if (actType) {
-        const cal = calculateWorkoutCalories(actType, dur, w, parseFloat(dist)||0, parseFloat(steps)||0);
-        const fCal = (parseFloat(floors)||0) * 0.5;
-        setEstCal(Math.round(cal + fCal));
-      }
-    }
-  }, [actType, duration, steps, dist, floors, modalVisible, profile, identifying]);
-
-  const handleIdentify = async () => {
-    if (!customInput) return;
-    setIdentifying(true);
-    const res = await identifyWorkoutType(customInput);
-    setIdentifying(false);
-    if (res && res.key !== 'custom') {
-      setActType(res.key);
-      Alert.alert(t('ai_identified_as', lang), `${t(res.key, lang)}`);
-    } else {
-      setActType('custom');
-    }
-  };
+  }, [actType, customActType, isCustomAct, duration, steps, dist, floors, modalVisible]));
 
   const handleSaveWorkout = async () => {
-    if (!actType) return;
-    let detailsParts = [];
-    if(duration) detailsParts.push(`${duration} min`);
-    if(steps) detailsParts.push(`${steps} steps`);
-    if(dist) detailsParts.push(`${dist} km`);
-    if(floors) detailsParts.push(`${floors} floors`);
-
-    const logData = {
-      activityType: actType === 'custom' ? customInput : actType,
+    const type = isCustomAct ? customActType : actType;
+    if (!type) return Alert.alert("請輸入項目");
+    const newLog = {
+      activityType: type,
       caloriesBurned: estCal,
-      details: detailsParts.join(' / '),
+      details: `${duration}分 / ${steps}步 / ${dist}km / ${floors}樓`,
       loggedAt: selectedDate.toISOString()
     };
-    
     if (editingWorkout) {
-      await updateActivityLogLocal({ ...logData, id: editingWorkout.id });
+      await updateActivityLogLocal({ ...editingWorkout, ...newLog });
+      setEditingWorkout(null);
     } else {
-      await saveActivityLogLocal(logData);
+      await saveActivityLogLocal(newLog);
     }
     setModalVisible(false);
     loadData();
   };
 
-  const handleEditWorkoutLocal = (log: any) => {
+  const handleEditWorkout = (log: any) => {
     setEditingWorkout(log);
-    const isStandard = STANDARD_WORKOUTS.includes(log.activityType);
-    if (isStandard) {
-      setActType(log.activityType);
-      setIsCustomAct(false);
-    } else {
-      setActType('custom');
-      setCustomInput(log.activityType);
-      setIsCustomAct(true);
-    }
-    const getVal = (suffix: string) => {
-      const match = (log.details||"").match(new RegExp(`([\\d\\.]+)\\s${suffix}`));
-      return match ? match[1] : "";
-    };
-    setDuration(getVal("min"));
-    setSteps(getVal("steps"));
-    setDist(getVal("km"));
-    setFloors(getVal("floors"));
-    setEstCal(log.caloriesBurned); 
-    setModalVisible(true);
-  };
-
-  const resetModal = () => {
-    setEditingWorkout(null);
-    setActType('running'); 
+    setActType(log.activityType);
     setIsCustomAct(false);
-    setCustomInput("");
-    setDuration(""); setSteps(""); setDist(""); setFloors(""); setEstCal(0);
+    if (!workoutTypes.includes(log.activityType)) {
+       setIsCustomAct(true);
+       setCustomActType(log.activityType);
+    }
+    const parts = (log.details || "").split(' / ');
+    setDuration(parts[0]?.replace('分','') || "0");
+    setSteps(parts[1]?.replace('步','') || "0");
+    setDist(parts[2]?.replace('km','') || "0");
+    setFloors(parts[3]?.replace('樓','') || "0");
     setModalVisible(true);
   };
 
-  const renderActivityName = (type: string) => t(type, lang) === type && type !== 'custom' ? type : t(type, lang);
-
-  const renderDeleteAction = (id: number, type: 'food'|'activity') => ( 
-    <Pressable onPress={async () => { 
-        if(type==='food') await deleteFoodLogLocal(id); 
-        else await deleteActivityLogLocal(id); 
-        loadData(); 
-      }} style={styles.deleteBtn}>
-      <Ionicons name="trash" size={24} color="white" />
-      <ThemedText style={{color:'white', fontSize:12}}>{t('delete', lang)}</ThemedText>
-    </Pressable> 
-  );
-
-  const renderEditAction = (item: any, type: 'food'|'activity') => ( 
-    <Pressable onPress={() => type === 'food' ? router.push({ pathname: '/food-recognition', params: { mode: 'EDIT', id: item.id } }) : handleEditWorkoutLocal(item)} style={styles.editBtn}>
-      <Ionicons name="create" size={24} color="white" />
-      <ThemedText style={{color:'white', fontSize:12}}>{t('edit', lang)}</ThemedText>
-    </Pressable> 
-  );
+  const handleEditFood = (log: any) => { setEditingLog(log); setEditName(log.foodName); setEditCal(log.totalCalories.toString()); setEditModalVisible(true); };
+  const handleSaveEditFood = async () => { if (editingLog) { await updateFoodLogLocal({ ...editingLog, foodName: editName, totalCalories: parseInt(editCal) || 0 }); setEditModalVisible(false); setEditingLog(null); loadData(); } };
+  const handleQuickAdd = async (item: any) => { Alert.alert("快速紀錄", `再吃一次「${item.foodName}」？`, [{ text: "取消", style: "cancel" }, { text: "確定", onPress: async () => { await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() }); loadData(); } }]); };
+  const renderRightActions = (id: number, type: 'food'|'activity') => ( <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}><Ionicons name="trash" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>刪除</ThemedText></Pressable> );
+  const renderLeftActions = (item: any, type: 'food'|'activity') => ( <Pressable onPress={() => type === 'food' ? handleEditFood(item) : handleEditWorkout(item)} style={styles.editBtn}><Ionicons name="create" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>編輯</ThemedText></Pressable> );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -198,12 +142,15 @@ export default function HomeScreen() {
           <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
              <ThemedText type="title">{t('today_overview', lang)}</ThemedText>
           </View>
+
           <View style={[styles.dateNav, {backgroundColor: cardBackground}]}>
              <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
              <Pressable onPress={() => setShowDatePicker(true)}><ThemedText type="subtitle">{toLocalISO(selectedDate)}</ThemedText></Pressable>
              <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() + 86400000))} style={styles.dateBtn}><Ionicons name="chevron-forward" size={24} color={tintColor}/></Pressable>
           </View>
-          {showDatePicker && <DateTimePicker value={selectedDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d) setSelectedDate(d); }} />}
+          {showDatePicker && (
+            <DateTimePicker value={selectedDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d) setSelectedDate(d); }} />
+          )}
 
           <View style={[styles.progressSection, { backgroundColor: cardBackground, marginTop: 10 }]}>
             <ProgressRing progress={targetCalories>0?(summary?.totalCaloriesIn - summary?.totalCaloriesOut)/targetCalories:0} current={summary?.totalCaloriesIn - summary?.totalCaloriesOut} target={targetCalories} size={200} />
@@ -213,27 +160,61 @@ export default function HomeScreen() {
             </View>
           </View>
 
+          {frequentItems.length > 0 && (
+            <View style={{marginBottom: 16}}>
+              <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>{t('quick_record', lang)}</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{paddingLeft: 16}}>
+                {frequentItems.map((item, index) => (
+                  <Pressable key={index} onPress={() => handleQuickAdd(item)} style={[styles.quickChip, {backgroundColor: cardBackground, marginRight: 10}]}>
+                    <ThemedText>{item.foodName}</ThemedText>
+                    <ThemedText style={{fontSize: 10, color: textSecondary}}>{item.totalCalories} kcal</ThemedText>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.quickActions}>
-            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/food-recognition?mode=MANUAL")} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="create" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText></Pressable>
-            <Pressable onPress={resetModal} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText></Pressable>
+            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
+               <Ionicons name="camera" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
+               <Ionicons name="barcode" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => router.push("/food-recognition?mode=MANUAL")} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}>
+               <Ionicons name="create" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText>
+            </Pressable>
+            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}>
+               <Ionicons name="fitness" size={24} color="white"/>
+               <ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText>
+            </Pressable>
           </View>
 
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}><ThemedText type="subtitle">{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:10, color:textSecondary}}>{t('swipe_hint', lang)}</ThemedText></View>
-            {summary?.foodLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderDeleteAction(log.id, 'food')} renderLeftActions={() => renderEditAction(log, 'food')}>
-                <View style={[styles.listItem, {backgroundColor: cardBackground}]}><ThemedText>{log.foodName}</ThemedText><ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText></View>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>飲食</ThemedText>
+            {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
+              summary?.foodLogs?.map((log: any) => (
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log, 'food')}>
+                <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
+                  <ThemedText>{log.foodName}</ThemedText>
+                  <ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText>
+                </View>
               </Swipeable>
             ))}
           </View>
-          
+
           <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}><ThemedText type="subtitle">{t('workout', lang)}</ThemedText><ThemedText style={{fontSize:10, color:textSecondary}}>{t('swipe_hint', lang)}</ThemedText></View>
-            {summary?.activityLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderDeleteAction(log.id, 'activity')} renderLeftActions={() => renderEditAction(log, 'activity')}>
-                <View style={[styles.listItem, {backgroundColor: cardBackground}]}><ThemedText>{renderActivityName(log.activityType)}</ThemedText><ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText></View>
+            <ThemedText type="subtitle" style={{marginBottom: 10}}>運動</ThemedText>
+            {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
+              summary?.activityLogs?.map((log: any) => (
+              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')} renderLeftActions={() => renderLeftActions(log, 'activity')}>
+                <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
+                  <ThemedText>{log.activityType}</ThemedText>
+                  <ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText>
+                </View>
               </Swipeable>
             ))}
           </View>
@@ -244,21 +225,53 @@ export default function HomeScreen() {
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                 <ThemedText type="title">{editingWorkout ? t('edit', lang) : t('workout', lang)}</ThemedText>
-                 <Pressable onPress={() => setIsCustomAct(!isCustomAct)}><ThemedText style={{color: tintColor}}>{isCustomAct ? t('switch_manual', lang) : t('manual_input', lang)}</ThemedText></Pressable>
+                 <ThemedText type="title">{editingWorkout ? "編輯運動" : "新增運動"}</ThemedText>
+                 <Pressable onPress={() => setIsCustomAct(!isCustomAct)}><ThemedText style={{color: tintColor}}>{isCustomAct ? "選單" : "手動"}</ThemedText></Pressable>
               </View>
               {isCustomAct ? (
-                 <View>
-                   <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} placeholder={t('manual_input', lang)} value={customInput} onChangeText={setCustomInput} />
-                   <Pressable onPress={handleIdentify} style={[styles.modalBtn, {backgroundColor: tintColor, marginTop: 8, flexDirection:'row', justifyContent:'center'}]}>{identifying ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white'}}>{t('ai_identify_workout', lang)}</ThemedText>}</Pressable>
-                 </View>
+                 <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} placeholder="輸入名稱" value={customActType} onChangeText={setCustomActType} />
               ) : (
-                 <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}} showsHorizontalScrollIndicator={false}>{STANDARD_WORKOUTS.map(key => (<Pressable key={key} onPress={() => setActType(key)} style={[styles.typeChip, actType === key && {backgroundColor: tintColor}]}><ThemedText style={{color: actType === key ? 'white' : '#666'}}>{t(key, lang)}</ThemedText></Pressable>))}</ScrollView>
+                 <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}}>
+                   {workoutTypes.map(t => (
+                     <Pressable key={t} onPress={() => setActType(t)} style={[styles.typeChip, actType === t && {backgroundColor: tintColor}]}>
+                       <ThemedText style={{color: actType === t ? 'white' : '#666'}}>{t}</ThemedText>
+                     </Pressable>
+                   ))}
+                 </ScrollView>
               )}
-              <View style={{flexDirection: 'row', gap: 10, marginTop:10}}><View style={{flex:1}}><NumberInput label={t('input_time', lang)} value={duration} onChange={setDuration} step={10} /></View><View style={{flex:1}}><NumberInput label={t('input_dist', lang)} value={dist} onChange={setDist} step={0.5} /></View></View>
-              <View style={{flexDirection: 'row', gap: 10}}><View style={{flex:1}}><NumberInput label={t('input_steps', lang)} value={steps} onChange={setSteps} step={100} /></View><View style={{flex:1}}><NumberInput label={t('input_floors', lang)} value={floors} onChange={setFloors} step={1} /></View></View>
-              <View style={{backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, marginVertical: 10}}><ThemedText style={{textAlign: 'center', color: '#E65100', fontWeight: 'bold'}}>{t('est_burned', lang)}: {estCal} kcal</ThemedText></View>
-              <View style={{flexDirection: 'row', gap: 10}}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable><Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>{editingWorkout ? t('save_settings', lang) : "新增"}</ThemedText></Pressable></View>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <View style={{flex:1}}><NumberInput label="時間 (分)" value={duration} onChange={setDuration} step={10} /></View>
+                <View style={{flex:1}}><NumberInput label="距離 (km)" value={dist} onChange={setDist} step={0.5} /></View>
+              </View>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                 <View style={{flex:1}}><NumberInput label="步數" value={steps} onChange={setSteps} step={100} /></View>
+                 <View style={{flex:1}}><NumberInput label="樓層" value={floors} onChange={setFloors} step={1} /></View>
+              </View>
+              <View style={{backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, marginVertical: 10}}>
+                <ThemedText style={{textAlign: 'center', color: '#E65100', fontWeight: 'bold'}}>預估消耗: {estCal} kcal</ThemedText>
+              </View>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <Pressable onPress={() => setModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
+                <Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={editModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
+              <ThemedText type="title">編輯飲食</ThemedText>
+              <View style={{marginVertical: 20}}>
+                <ThemedText style={{marginBottom: 5, color: textSecondary}}>食物名稱</ThemedText>
+                <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white'}]} value={editName} onChangeText={setEditName} />
+                <View style={{height: 10}}/>
+                <NumberInput label="熱量 (kcal)" value={editCal} onChange={setEditCal} step={10} />
+              </View>
+              <View style={{flexDirection: 'row', gap: 10}}>
+                <Pressable onPress={() => setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
+                <Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
+              </View>
             </View>
           </View>
         </Modal>

@@ -20,31 +20,8 @@ export const saveSettings = async (settings: { apiKey?: string; model?: string; 
 };
 
 export const getSettings = async () => {
-  try {
-    const data = await AsyncStorage.getItem(KEYS.SETTINGS);
-    const settings = data ? JSON.parse(data) : {};
-
-    // 優先讀取環境變數 (解決 Expo Go 開發時無法讀取 .env 的問題)
-    if (!settings.apiKey) {
-      settings.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
-    }
-
-    // [修正] 預設使用 gemini-1.5-flash，但如果 Storage 中已有值 (使用者選過)，則完全尊重該選擇
-    if (!settings.model) settings.model = "gemini-1.5-flash";
-    
-    // 預設語言
-    if (!settings.language) settings.language = "zh-TW";
-
-    return settings;
-  } catch (e) {
-    console.error("Error reading settings:", e);
-    // 發生錯誤時的回退預設值
-    return { 
-      apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || "", 
-      model: "gemini-1.5-flash", 
-      language: "zh-TW" 
-    };
-  }
+  const data = await AsyncStorage.getItem(KEYS.SETTINGS);
+  return data ? JSON.parse(data) : { apiKey: "", model: "gemini-2.5-flash", language: "zh-TW" };
 };
 
 // --- 使用者 ---
@@ -312,10 +289,10 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
   return result.slice(- (period === 'year' ? 12 : period === 'month_week' ? 12 : 7));
 };
 
-// 為了相容舊版分析
+// 為了相容舊版分析 (如果還有用到的話，保留)
 export const getHistory7DaysLocal = async () => getAggregatedHistory('week');
 
-// --- AI 建議持久化 ---
+// --- AI 建議持久化 (分開存) ---
 export const saveAIAdvice = async (type: 'RECIPE' | 'WORKOUT', advice: any) => {
   const current = await getAIAdvice();
   const updated = { ...current, [type]: advice };
