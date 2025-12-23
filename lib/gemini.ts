@@ -38,24 +38,36 @@ export const calculateWorkoutCalories = (
   return Math.round(burned);
 };
 
-// 統一取得模型實例 (強制預設 2.5-flash)
 const getModel = (apiKey: string, modelName: string = "gemini-2.5-flash") => {
   console.log(`[Gemini] Init Model: ${modelName}`);
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({ model: modelName });
 };
 
+// [新增] 強力 JSON 清理函式
+function cleanJson(text: string): string {
+  try {
+    // 1. 移除 Markdown
+    let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    // 2. 只抓取第一個 { 到最後一個 } 之間的內容
+    const firstOpen = clean.indexOf('{');
+    const lastClose = clean.lastIndexOf('}');
+    if (firstOpen !== -1 && lastClose !== -1) {
+      clean = clean.substring(firstOpen, lastClose + 1);
+    }
+    return clean;
+  } catch (e) {
+    return text;
+  }
+}
+
 export async function validateApiKey(apiKey: string) {
   try {
     const cleanKey = apiKey.trim();
     if (!cleanKey) throw new Error("Key is empty");
-    
-    // 強制使用 2.5 進行驗證，因為 1.5 在您的環境會 404
     const model = getModel(cleanKey, "gemini-2.5-flash");
     console.log("[Gemini] Sending validation request...");
-    
     await model.generateContent("Hi");
-    
     console.log("[Gemini] Validation Success!");
     return { valid: true, models: ["gemini-2.5-flash", "gemini-1.5-flash"] };
   } catch (e: any) {
@@ -64,13 +76,11 @@ export async function validateApiKey(apiKey: string) {
   }
 }
 
-// 通用請求處理器 (含錯誤處理與日誌)
 async function sendPrompt(prompt: string, imageBase64?: string) {
   try {
     const settings = await getSettings();
     if (!settings.apiKey) throw new Error("API Key not set");
 
-    // 優先使用設定值，若無則使用 2.5-flash
     const modelName = settings.model || "gemini-2.5-flash";
     const model = getModel(settings.apiKey.trim(), modelName);
     
@@ -82,10 +92,9 @@ async function sendPrompt(prompt: string, imageBase64?: string) {
 
     const result = await model.generateContent(content);
     const text = result.response.text();
-    console.log("[Gemini] Response Received (First 50 chars):", text.substring(0, 50).replace(/\n/g, ' '));
+    console.log("[Gemini] Raw Response:", text.substring(0, 100).replace(/\n/g, ' '));
     
-    // 清理 Markdown 格式
-    const jsonStr = text.replace(/```json|```/g, "").trim();
+    const jsonStr = cleanJson(text);
     return JSON.parse(jsonStr);
   } catch (e: any) {
     console.error("[Gemini] Request FAILED:", e.message);
@@ -104,7 +113,11 @@ export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW',
     const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
     const prompt = mode === 'OCR' 
       ? `OCR task. Extract nutrition facts label. Output Language: ${lang}. Return JSON: { "foodName": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": 100 }`
-      : `Nutritionist task. Analyze food image. Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string (Health advice)" }`;
+      : `Nutritionist task. Analyze food image. Output Language: ${lang}. 
+         Requirements:
+         1. "description_suffix": Short composition description (e.g. "Fried, with sauce").
+         2. "detailed_analysis": Provide composition details AND specific intake advice (e.g. "High fat, reduce intake").
+         Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string" }`;
     
     return await sendPrompt(prompt, base64);
   } catch (e) {
@@ -114,18 +127,28 @@ export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW',
 }
 
 export async function analyzeFoodText(textInput: string, lang: string = 'zh-TW') {
-  const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
+  const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. 
+    Requirements: "detailed_analysis" must include ingredients and health advice.
+    Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
   return await sendPrompt(prompt);
 }
 
 export async function suggestRecipe(remainingCal: number, type: 'STORE'|'COOK', lang: string) {
-  // [修正] 明確指定 Output Language
-  const prompt = `Suggest a ${type} recipe/meal under ${remainingCal}kcal. Output Language: ${lang}. Return JSON: { "title": "string", "calories": number, "ingredients": ["string"], "steps": ["string"], "reason": "string" }`;
+  const prompt = `Suggest a ${type} recipe/meal under ${Math.abs(remainingCal)}kcal. Output Language: ${lang}. Return JSON: { "title": "string", "calories": number, "ingredients": ["string"], "steps": ["string"], "reason": "string" }`;
   return await sendPrompt(prompt);
 }
 
 export async function suggestWorkout(profile: any, remainingCal: number, lang: string) {
-  // [修正] 明確指定 Output Language
-  const prompt = `Suggest a workout for weight ${profile?.currentWeightKg}kg to burn calories (budget: ${remainingCal}). Output Language: ${lang}. Return JSON: { "activity": "string", "duration_minutes": number, "estimated_calories": number, "reason": "string", "video_url": "string" }`;
+  // [修正] 根據熱量正負值提供不同建議
+  const isOver = remainingCal < 0;
+  const goal = isOver 
+    ? `User is OVER budget by ${Math.abs(remainingCal)} kcal. Suggest a High-Intensity/Cardio workout to burn it off.`
+    : `User has ${remainingCal} kcal remaining. Suggest a moderate/maintenance workout for health.`;
+
+  const prompt = `
+    Context: Weight ${profile?.currentWeightKg}kg. ${goal}
+    Output Language: ${lang}. 
+    Return JSON: { "activity": "string", "duration_minutes": number, "estimated_calories": number, "reason": "string", "video_url": "string" }
+  `;
   return await sendPrompt(prompt);
 }

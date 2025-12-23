@@ -12,13 +12,8 @@ import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
 
-// 設定通知處理器 (消除警示)
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: false, shouldSetBadge: false }),
 });
 
 export default function RecipesScreen() {
@@ -26,34 +21,24 @@ export default function RecipesScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
-  const lang = useLanguage(); // 使用 Hook 確保語言同步
+  const lang = useLanguage();
 
   const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
   const [loading, setLoading] = useState(false);
-  // 分開儲存兩種建議，避免切換時覆蓋
   const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
 
-  // 初始化：讀取持久化的建議
   useEffect(() => {
      async function init() {
        try {
          const advice = await getAIAdvice();
-         if (advice) {
-           setAdviceData({
-             RECIPE: advice.RECIPE || null,
-             WORKOUT: advice.WORKOUT || null
-           });
-         }
-       } catch (e) {
-         console.error("Failed to load saved advice", e);
-       }
+         if (advice) setAdviceData({ RECIPE: advice.RECIPE || null, WORKOUT: advice.WORKOUT || null });
+       } catch (e) { console.error(e); }
      }
      init();
   }, []);
 
-  // 每次進入頁面更新熱量數據
   useFocusEffect(useCallback(() => {
     async function syncData() {
        const p = await getProfileLocal();
@@ -66,20 +51,16 @@ export default function RecipesScreen() {
     syncData();
   }, []));
 
-  // 取得當前 Tab 應顯示的資料
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
-    const { status } = await Notifications.getPermissionsAsync();
-    let finalStatus = status;
-    if (status !== 'granted') {
-      const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      finalStatus = newStatus;
-    }
-
-    setLoading(true);
+    // [修正] 加入緩衝提示 Alert
+    Alert.alert(t('ai_coach', lang), "AI 正在分析您的數據，請稍候片刻...", [{ text: "好" }]);
     
-    // 延遲執行以避免 UI 卡頓
+    setLoading(true);
+    const { status } = await Notifications.getPermissionsAsync();
+    
+    // 延遲 1 秒再發送請求，給使用者緩衝感
     setTimeout(async () => {
        try {
          let res;
@@ -90,12 +71,11 @@ export default function RecipesScreen() {
          }
          
          if (res) {
-           // 更新狀態與 storage
            const newAdvice = { ...adviceData, [activeTab]: res };
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
            
-           if (finalStatus === 'granted') {
+           if (status === 'granted') {
              await Notifications.scheduleNotificationAsync({
                content: { 
                  title: t('ai_coach', lang), 
@@ -105,159 +85,58 @@ export default function RecipesScreen() {
              });
            }
          } else {
-           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
+           Alert.alert("分析失敗", "AI 暫無回應，請稍後再試");
          }
        } catch (e) {
          Alert.alert("錯誤", "發生未知錯誤");
        } finally {
          setLoading(false);
        }
-    }, 100);
+    }, 1000); 
   };
 
-  const openVideo = () => { 
-    if (currentResult?.video_url) {
-      Linking.openURL(currentResult.video_url);
-    }
-  };
+  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
 
-  // [修正] 完整實作 PDF 匯出 HTML 生成
   const handleExportPDF = async () => {
     if (!currentResult) return;
-    
-    // 根據當前 Tab 生成對應內容
     const contentHtml = activeTab === 'RECIPE' ? 
-      `
-        <div class="section">
-          <h3>🛒 ${t('ingredients', lang)}</h3>
-          <ul>
-            ${currentResult.ingredients?.map((item: string) => `<li>${item}</li>`).join('') || '<li>無資料</li>'}
-          </ul>
-        </div>
-        <div class="section">
-          <h3>📝 ${t('steps', lang)}</h3>
-          <ol>
-            ${currentResult.steps?.map((step: string) => `<li>${step}</li>`).join('') || '<li>無資料</li>'}
-          </ol>
-        </div>
-        <div class="highlight">
-          🔥 <strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal
-        </div>
-      ` : 
-      `
-        <div class="section">
-          <h3>🏋️ 運動詳情</h3>
-          <p><strong>項目:</strong> ${currentResult.activity}</p>
-          <p><strong>時間:</strong> ${currentResult.duration_minutes} 分鐘</p>
-          <div class="highlight">
-            ⚡ <strong>預估消耗:</strong> ${currentResult.estimated_calories} kcal
-          </div>
-        </div>
-      `;
+      `<div class="section"><h3>🛒 ${t('ingredients', lang)}</h3><ul>${currentResult.ingredients?.map((item: string) => `<li>${item}</li>`).join('') || '<li>無資料</li>'}</ul></div><div class="section"><h3>📝 ${t('steps', lang)}</h3><ol>${currentResult.steps?.map((step: string) => `<li>${step}</li>`).join('') || '<li>無資料</li>'}</ol></div><div class="highlight">🔥 <strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal</div>` : 
+      `<div class="section"><h3>🏋️ 運動詳情</h3><p><strong>項目:</strong> ${currentResult.activity}</p><p><strong>時間:</strong> ${currentResult.duration_minutes} 分鐘</p><div class="highlight">⚡ <strong>預估消耗:</strong> ${currentResult.estimated_calories} kcal</div></div>`;
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 40px; line-height: 1.6; color: #333; }
-            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 15px; }
-            h2 { color: #444; margin-top: 0; }
-            .card { background: #f5f5f5; padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 5px solid #2196F3; }
-            .section { margin-bottom: 20px; }
-            .highlight { font-size: 1.2em; color: #E65100; font-weight: bold; margin-top: 10px; }
-            li { margin-bottom: 8px; }
-            .footer { text-align: center; color: #999; margin-top: 60px; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <h1>${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
-          
-          <div class="card">
-            <h2>${activeTab === 'RECIPE' ? currentResult.title : currentResult.activity}</h2>
-            <p><strong>💡 ${t('reason', lang)}:</strong></p>
-            <p>${currentResult.reason}</p>
-          </div>
-          
-          <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-          
-          ${contentHtml}
-          
-          <div class="footer">
-            Generated by Nutrition Tracker AI • ${new Date().toLocaleDateString()}
-          </div>
-        </body>
-      </html>
-    `;
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Helvetica,Arial,sans-serif;padding:40px;line-height:1.6;color:#333}h1{color:#2196F3;border-bottom:2px solid #eee;padding-bottom:15px}h2{color:#444;margin-top:0}.card{background:#f5f5f5;padding:20px;border-radius:12px;margin:20px 0;border-left:5px solid #2196F3}.section{margin-bottom:20px}.highlight{font-size:1.2em;color:#E65100;font-weight:bold;margin-top:10px}li{margin-bottom:8px}.footer{text-align:center;color:#999;margin-top:60px;font-size:0.8em;border-top:1px solid #eee;padding-top:20px}</style></head><body><h1>${activeTab==='RECIPE'?t('recipe_suggestion',lang):t('workout_suggestion',lang)}</h1><div class="card"><h2>${activeTab==='RECIPE'?currentResult.title:currentResult.activity}</h2><p><strong>💡 ${t('reason',lang)}:</strong></p><p>${currentResult.reason}</p></div><hr style="border:0;border-top:1px solid #eee;margin:30px 0"/>${contentHtml}<div class="footer">Generated by Nutrition Tracker AI • ${new Date().toLocaleDateString()}</div></body></html>`;
 
     try {
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      if (Platform.OS === "ios") {
-        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-      } else {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('export_pdf', lang) });
-      }
-    } catch (e) {
-      Alert.alert("匯出失敗", "請檢查裝置是否支援列印或分享功能");
-    }
+      if (Platform.OS === "ios") await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      else await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('export_pdf', lang) });
+    } catch (e) { Alert.alert("匯出失敗"); }
   };
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
           <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
-          {currentResult && (
-            <Pressable onPress={handleExportPDF} style={{padding: 8}}>
-               <Ionicons name="share-outline" size={24} color={tintColor} />
-            </Pressable>
-          )}
+          {currentResult && (<Pressable onPress={handleExportPDF} style={{padding: 8}}><Ionicons name="share-outline" size={24} color={tintColor} /></Pressable>)}
        </View>
-       
        <View style={{flexDirection: 'row', padding: 16, gap: 10}}>
-          <Pressable onPress={() => setActiveTab('RECIPE')} style={[styles.tab, activeTab === 'RECIPE' && {backgroundColor: tintColor, borderColor: tintColor}]}>
-             <ThemedText style={{color: activeTab==='RECIPE'?'white':'#666', fontWeight:'bold'}}>{t('recipe_suggestion', lang)}</ThemedText>
-          </Pressable>
-          <Pressable onPress={() => setActiveTab('WORKOUT')} style={[styles.tab, activeTab === 'WORKOUT' && {backgroundColor: tintColor, borderColor: tintColor}]}>
-             <ThemedText style={{color: activeTab==='WORKOUT'?'white':'#666', fontWeight:'bold'}}>{t('workout_suggestion', lang)}</ThemedText>
-          </Pressable>
+          <Pressable onPress={() => setActiveTab('RECIPE')} style={[styles.tab, activeTab === 'RECIPE' && {backgroundColor: tintColor, borderColor: tintColor}]}><ThemedText style={{color: activeTab==='RECIPE'?'white':'#666', fontWeight:'bold'}}>{t('recipe_suggestion', lang)}</ThemedText></Pressable>
+          <Pressable onPress={() => setActiveTab('WORKOUT')} style={[styles.tab, activeTab === 'WORKOUT' && {backgroundColor: tintColor, borderColor: tintColor}]}><ThemedText style={{color: activeTab==='WORKOUT'?'white':'#666', fontWeight:'bold'}}>{t('workout_suggestion', lang)}</ThemedText></Pressable>
        </View>
-       
        <ScrollView style={{paddingHorizontal: 16}}>
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{textAlign: 'center', color: '#666'}}>{t('remaining_budget', lang)}</ThemedText>
              <ThemedText style={{textAlign: 'center', fontSize: 32, fontWeight: 'bold', color: tintColor}}>{remaining} kcal</ThemedText>
           </View>
-
           <Pressable onPress={handleGenerate} style={[styles.btn, {backgroundColor: tintColor}]} disabled={loading}>
              {loading ? <ActivityIndicator color="white"/> : <ThemedText style={{color: 'white', fontWeight: 'bold'}}>{t('generate_plan', lang)}</ThemedText>}
           </Pressable>
-
           {currentResult && (
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20, marginBottom: 40}]}>
                 <ThemedText type="title">{activeTab==='RECIPE' ? currentResult.title : currentResult.activity}</ThemedText>
-                
-                {activeTab === 'WORKOUT' && currentResult.video_url && (
-                  <Pressable onPress={openVideo} style={{marginVertical: 10}}>
-                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText>
-                  </Pressable>
-                )}
-
-                <ThemedText style={{marginTop: 8}}>
-                   {activeTab==='RECIPE' ? `🔥 ${t('calories', lang)}: ${currentResult.calories} kcal` : `⏱️ 時間: ${currentResult.duration_minutes} min (-${currentResult.estimated_calories} kcal)`}
-                </ThemedText>
-                
-                <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 {t('reason', lang)}：</ThemedText>
-                <ThemedText style={{lineHeight: 20}}>{currentResult.reason}</ThemedText>
-                
-                {activeTab === 'RECIPE' && (
-                  <>
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>
-                    {currentResult.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>
-                    {currentResult.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
-                  </>
-                )}
+                {activeTab === 'WORKOUT' && currentResult.video_url && (<Pressable onPress={openVideo} style={{marginVertical: 10}}><ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText></Pressable>)}
+                <ThemedText style={{marginTop: 8}}>{activeTab==='RECIPE' ? `🔥 ${t('calories', lang)}: ${currentResult.calories} kcal` : `⏱️ 時間: ${currentResult.duration_minutes} min (-${currentResult.estimated_calories} kcal)`}</ThemedText>
+                <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 {t('reason', lang)}：</ThemedText><ThemedText style={{lineHeight: 20}}>{currentResult.reason}</ThemedText>
+                {activeTab === 'RECIPE' && (<><ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>{currentResult.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}<ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>{currentResult.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}</>)}
              </View>
           )}
        </ScrollView>

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { View, StyleSheet, Image, Pressable, ScrollView, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImageManipulator from 'expo-image-manipulator'; // [新增]
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
@@ -30,19 +31,19 @@ export default function FoodRecognitionScreen() {
   const insets = useSafeAreaInsets();
   const lang = useLanguage();
   
-  const imageUri = params.imageUri as string;
+  const originalUri = params.imageUri as string;
   const isEditMode = params.mode === 'EDIT';
-  const isBarcodeFallback = params.source === 'barcode_fallback'; // 判斷是否為 OCR 模式
+  const isBarcodeFallback = params.source === 'barcode_fallback';
   const editId = params.id ? Number(params.id) : null;
 
+  const [imageUri, setImageUri] = useState(originalUri);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [mode, setMode] = useState<'AI' | 'MANUAL'>(params.mode === 'MANUAL' ? 'MANUAL' : 'AI');
   const [mealType, setMealType] = useState(getMealTypeByTime());
 
-  // 標準數據
   const [stdData, setStdData] = useState({ 
     name: "", cal: "0", pro: "0", carb: "0", fat: "0", sod: "0", stdWeight: "100",
-    descSuffix: "", detailedAnalysis: "" // 新增詳情欄位
+    descSuffix: "", detailedAnalysis: ""
   });
   
   const [inputType, setInputType] = useState<'serving'|'gram'>('serving');
@@ -56,8 +57,10 @@ export default function FoodRecognitionScreen() {
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
 
+  // [修正] 初始化：處理圖片壓縮與 AI 分析
   useEffect(() => {
     async function init() {
+      // 1. 編輯模式
       if (isEditMode && editId) {
         setMode('MANUAL');
         const logs = await getFoodLogsLocal();
@@ -66,7 +69,6 @@ export default function FoodRecognitionScreen() {
           setOriginalLog(log);
           setMealType(log.mealType || getMealTypeByTime());
           
-          // 嘗試解析 foodName (e.g. "Name (Suffix)")
           let name = log.foodName;
           let suffix = "";
           if (name.includes(" (")) {
@@ -75,44 +77,34 @@ export default function FoodRecognitionScreen() {
              suffix = parts[1].replace(")", "");
           }
 
-          const product = await getProductByBarcode(name);
-          if (product) {
-             setStdData({
-               name: name,
-               descSuffix: suffix,
-               cal: product.cal.toString(),
-               pro: product.pro.toString(),
-               carb: product.carb.toString(),
-               fat: product.fat.toString(),
-               sod: product.sod.toString(),
-               stdWeight: product.stdWeight.toString(),
-               detailedAnalysis: log.notes // 假設 notes 存了詳情
-             });
-             const ratio = log.totalCalories / (product.cal || 1);
-             setInputAmount(ratio.toFixed(1));
-             setInputType('serving');
-          } else {
-             setStdData({
-               name: name,
-               descSuffix: suffix,
-               cal: log.totalCalories.toString(),
-               pro: log.totalProteinG.toString(),
-               carb: log.totalCarbsG.toString(),
-               fat: log.totalFatG.toString(),
-               sod: log.totalSodiumMg.toString(),
-               stdWeight: "100",
-               detailedAnalysis: log.notes
-             });
-             setInputAmount("1");
-          }
+          setStdData({
+             name: name,
+             descSuffix: suffix,
+             cal: log.totalCalories.toString(),
+             pro: log.totalProteinG.toString(),
+             carb: log.totalCarbsG.toString(),
+             fat: log.totalFatG.toString(),
+             sod: log.totalSodiumMg.toString(),
+             stdWeight: "100",
+             detailedAnalysis: log.notes
+          });
         }
       } 
-      // 進入 AI 分析 (確保 URI 存在且不是編輯模式)
-      else if (imageUri && mode === 'AI' && !stdData.name && !isAnalyzing) {
+      // 2. AI 模式：先壓縮圖片再分析
+      else if (originalUri && mode === 'AI' && !stdData.name && !isAnalyzing) {
         setIsAnalyzing(true);
         try {
+          // 壓縮圖片 (Resize to 800px width, JPEG 0.7 quality)
+          // 這能大幅減少 Base64 字串長度，解決 "Request Entity Too Large" 或讀取失敗
+          const manipulated = await ImageManipulator.manipulateAsync(
+            originalUri,
+            [{ resize: { width: 800 } }],
+            { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          setImageUri(manipulated.uri); // 更新為壓縮後的 URI
+
           const result = await analyzeFoodImage(
-            imageUri, 
+            manipulated.uri, // 使用壓縮後的圖片
             lang, 
             isBarcodeFallback ? 'OCR' : 'NORMAL'
           );
@@ -120,11 +112,12 @@ export default function FoodRecognitionScreen() {
           if (result && result.foodName) {
             fillStdData(result);
           } else {
-            Alert.alert("分析失敗", "無法識別食物，請手動輸入");
+            Alert.alert("分析失敗", "無法識別食物，請切換手動輸入");
             setMode('MANUAL');
           }
         } catch(e) {
-          Alert.alert("錯誤", "AI 連線異常");
+          console.error(e);
+          Alert.alert("錯誤", "圖片處理或連線異常");
           setMode('MANUAL');
         } finally {
           setIsAnalyzing(false);
@@ -132,7 +125,7 @@ export default function FoodRecognitionScreen() {
       }
     }
     init();
-  }, [imageUri, isEditMode, editId]);
+  }, [originalUri, isEditMode, editId]);
 
   const fillStdData = (data: any) => {
     setStdData({
@@ -204,7 +197,6 @@ export default function FoodRecognitionScreen() {
 
   const saveToLog = async () => {
     const final = getFinal();
-    // 組合名稱與後綴
     const fullName = stdData.descSuffix ? `${stdData.name} (${stdData.descSuffix})` : stdData.name;
     
     const logData = {
@@ -216,7 +208,7 @@ export default function FoodRecognitionScreen() {
       totalFatG: final.fat,
       totalSodiumMg: final.sod,
       imageUrl: imageUri || originalLog?.imageUrl,
-      notes: stdData.detailedAnalysis // 將詳細分析存在 notes 中
+      notes: stdData.detailedAnalysis
     };
 
     if (isEditMode && editId) {
@@ -331,7 +323,6 @@ export default function FoodRecognitionScreen() {
                 onChangeText={(t) => setStdData({...stdData, name: t})}
                 onBlur={handleNameBlur}
               />
-              {/* 顯示 AI 分析後綴，例如 (雞肉、花生) */}
               {stdData.descSuffix ? <ThemedText style={{fontSize:12, color:textSecondary, marginTop:4}}>({stdData.descSuffix})</ThemedText> : null}
             </View>
             
@@ -350,7 +341,6 @@ export default function FoodRecognitionScreen() {
              </View>
           </View>
 
-          {/* AI 分析詳情區塊 */}
           {stdData.detailedAnalysis ? (
             <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 16 }]}>
                <ThemedText style={{fontWeight:'bold', marginBottom:8}}>{t('ai_analysis_result', lang)}</ThemedText>
