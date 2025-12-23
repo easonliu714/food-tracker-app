@@ -1,7 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Platform } from "react-native";
-// [修改] 移除 expo-notifications 以解決 SDK 54 Android Expo Go 崩潰問題
-// import * as Notifications from 'expo-notifications'; 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,9 +10,6 @@ import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice } from
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
-
-// [移除] 移除通知處理器設定
-// Notifications.setNotificationHandler({...});
 
 export default function RecipesScreen() {
   const insets = useSafeAreaInsets();
@@ -29,6 +24,7 @@ export default function RecipesScreen() {
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
 
+  // 初始載入儲存的建議
   useEffect(() => {
      async function init() {
        try {
@@ -46,6 +42,7 @@ export default function RecipesScreen() {
      init();
   }, []);
 
+  // 每次進入頁面更新剩餘熱量與個人檔案
   useFocusEffect(useCallback(() => {
     async function syncData() {
        const p = await getProfileLocal();
@@ -61,8 +58,6 @@ export default function RecipesScreen() {
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
-    // [修改] 移除通知權限請求
-    
     setLoading(true);
     
     // 延遲執行以避免 UI 卡頓
@@ -70,7 +65,8 @@ export default function RecipesScreen() {
        try {
          let res;
          if (activeTab === 'RECIPE') {
-            res = await suggestRecipe(remaining, 'STORE', lang);
+            // [修正] 傳遞完整 profile 以便 AI 讀取年齡與訓練目標
+            res = await suggestRecipe(remaining, 'STORE', lang, profile);
          } else {
             res = await suggestWorkout(profile, remaining, lang);
          }
@@ -80,11 +76,10 @@ export default function RecipesScreen() {
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
            
-           // [修改] 改用 Alert 替代推播通知
            Alert.alert(
              t('ai_coach', lang), 
              (activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)) + 
-             "\n(模擬器不支援推播，此訊息代表通知已觸發)"
+             "\n(已根據您的訓練目標與剩餘熱量更新建議)"
            );
 
          } else {
@@ -208,7 +203,12 @@ export default function RecipesScreen() {
        <ScrollView style={{paddingHorizontal: 16}}>
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{textAlign: 'center', color: '#666'}}>{t('remaining_budget', lang)}</ThemedText>
-             <ThemedText style={{textAlign: 'center', fontSize: 32, fontWeight: 'bold', color: tintColor}}>{remaining} kcal</ThemedText>
+             <ThemedText style={{textAlign: 'center', fontSize: 32, fontWeight: 'bold', color: remaining < 0 ? 'red' : tintColor}}>{remaining} kcal</ThemedText>
+             {remaining < 0 && (
+               <ThemedText style={{textAlign:'center', color:'red', fontSize:12, marginTop:4}}>
+                 ⚠️ 已超標，AI 將建議高強度運動或低卡飲食
+               </ThemedText>
+             )}
           </View>
 
           <Pressable onPress={handleGenerate} style={[styles.btn, {backgroundColor: tintColor}]} disabled={loading}>
@@ -236,6 +236,7 @@ export default function RecipesScreen() {
                   <>
                     <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>
                     {currentResult.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
+                    
                     <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>
                     {currentResult.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
                   </>

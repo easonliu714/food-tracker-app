@@ -16,15 +16,28 @@ import {
   deleteActivityLogLocal, updateFoodLogLocal, 
   updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems, getFrequentActivityTypes
 } from "@/lib/storage";
-import { calculateWorkoutCalories } from "@/lib/gemini";
 import { NumberInput } from "@/components/NumberInput";
-import { t, useLanguage } from "@/lib/i18n"; // [修正] 引入 Hook
+import { t, useLanguage } from "@/lib/i18n";
+
+// 定義常見運動的 METs (消耗係數)
+const METS: Record<string, number> = {
+  '走路': 3.5,
+  '跑步': 8.0,
+  '爬梯': 8.0,
+  '打掃': 3.0,
+  '瑜珈': 2.5,
+  '慢走': 2.0,
+  '快走': 5.0,
+  '慢跑': 6.0,
+  '快跑': 10.0,
+  '一般運動': 4.0
+};
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
-  const lang = useLanguage(); // [修正] 全域語言 Hook
+  const lang = useLanguage();
 
   const [refreshing, setRefreshing] = useState(false);
   const [summary, setSummary] = useState<any>(null);
@@ -42,7 +55,9 @@ export default function HomeScreen() {
   const [actType, setActType] = useState("");
   const [customActType, setCustomActType] = useState("");
   const [isCustomAct, setIsCustomAct] = useState(false);
-  const [duration, setDuration] = useState("30");
+  
+  // [修正] 時間預設為 0
+  const [duration, setDuration] = useState("0");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
   const [floors, setFloors] = useState("0");
@@ -65,7 +80,6 @@ export default function HomeScreen() {
   };
 
   const loadData = useCallback(async () => {
-    // [修正] 不需要再去 getSettings 取語言了，Hook 會處理
     const p = await getProfileLocal();
     setProfile(p);
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
@@ -81,25 +95,42 @@ export default function HomeScreen() {
     if (!actType && w.length > 0) setActType(w[0]);
   }, [selectedDate, actType]);
 
-  useFocusEffect(useCallback(() => { if (isAuthenticated) loadData(); }, [isAuthenticated, loadData]));
+  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  // 自動計算
+  // [修正] 自動計算熱量 (使用 METs 公式)
   useFocusEffect(useCallback(() => {
     if (modalVisible) {
       const type = isCustomAct ? customActType : actType;
-      const cal = calculateWorkoutCalories(type, parseFloat(duration)||0, profile?.currentWeightKg||70, parseFloat(dist), parseFloat(steps));
-      const fCal = (parseFloat(floors)||0) * 0.5;
-      setEstCal(Math.round(cal + fCal));
+      const weight = profile?.currentWeightKg || 60; // 預設 60kg
+      const mins = parseFloat(duration) || 0;
+      
+      // 公式: METs * 體重(kg) * 時間(hr)
+      // 若是爬梯或走路，也可考慮用步數輔助，這裡優先用時間
+      let met = METS[type] || 4.0; // 預設 4.0 (中度運動)
+      let cal = met * weight * (mins / 60);
+
+      // 若有爬樓層，額外加成 (每層約 0.5~1 kcal)
+      const f = parseFloat(floors) || 0;
+      cal += (f * 0.5);
+
+      setEstCal(Math.round(cal));
     }
-  }, [actType, customActType, isCustomAct, duration, steps, dist, floors, modalVisible]));
+  }, [actType, customActType, isCustomAct, duration, steps, dist, floors, modalVisible, profile]));
 
   const handleSaveWorkout = async () => {
     const type = isCustomAct ? customActType : actType;
     if (!type) return Alert.alert("請輸入項目");
+    
+    // 詳細資訊字串
+    let details = `${duration}分`;
+    if (parseFloat(steps) > 0) details += ` / ${steps}步`;
+    if (parseFloat(dist) > 0) details += ` / ${dist}km`;
+    if (parseFloat(floors) > 0) details += ` / ${floors}樓`;
+
     const newLog = {
       activityType: type,
       caloriesBurned: estCal,
-      details: `${duration}分 / ${steps}步 / ${dist}km / ${floors}樓`,
+      details: details,
       loggedAt: selectedDate.toISOString()
     };
     if (editingWorkout) {
@@ -122,9 +153,9 @@ export default function HomeScreen() {
     }
     const parts = (log.details || "").split(' / ');
     setDuration(parts[0]?.replace('分','') || "0");
-    setSteps(parts[1]?.replace('步','') || "0");
-    setDist(parts[2]?.replace('km','') || "0");
-    setFloors(parts[3]?.replace('樓','') || "0");
+    setSteps(parts.find((s:string)=>s.includes('步'))?.replace('步','') || "0");
+    setDist(parts.find((s:string)=>s.includes('km'))?.replace('km','') || "0");
+    setFloors(parts.find((s:string)=>s.includes('樓'))?.replace('樓','') || "0");
     setModalVisible(true);
   };
 
@@ -134,6 +165,15 @@ export default function HomeScreen() {
   
   const renderRightActions = (id: number, type: 'food'|'activity') => ( <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}><Ionicons name="trash" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>{t('delete', lang)}</ThemedText></Pressable> );
   const renderLeftActions = (item: any, type: 'food'|'activity') => ( <Pressable onPress={() => type === 'food' ? handleEditFood(item) : handleEditWorkout(item)} style={styles.editBtn}><Ionicons name="create" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>{t('edit', lang)}</ThemedText></Pressable> );
+
+  const openWorkoutModal = () => {
+    setEditingWorkout(null);
+    setDuration("0"); // 重置
+    setSteps("0");
+    setDist("0");
+    setFloors("0");
+    setModalVisible(true);
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -187,7 +227,7 @@ export default function HomeScreen() {
                <Ionicons name="create" size={24} color="white"/>
                <ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText>
             </Pressable>
-            <Pressable onPress={() => {setEditingWorkout(null); setModalVisible(true);}} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}>
+            <Pressable onPress={openWorkoutModal} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}>
                <Ionicons name="fitness" size={24} color="white"/>
                <ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText>
             </Pressable>
@@ -221,7 +261,6 @@ export default function HomeScreen() {
           <View style={{height: 100}}/>
         </ScrollView>
 
-        {/* Modal 保持不變，省略以節省空間 */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -260,7 +299,6 @@ export default function HomeScreen() {
         </Modal>
 
         <Modal visible={editModalVisible} transparent animationType="slide">
-           {/* 飲食 Modal 略，保持原樣 */}
            <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor: cardBackground}]}><ThemedText type="title">{t('edit', lang)}</ThemedText><TextInput style={[styles.input, {color:'#000', backgroundColor:'white'}]} value={editName} onChangeText={setEditName}/><NumberInput label="熱量" value={editCal} onChange={setEditCal} step={10}/><View style={{flexDirection:'row', gap:10}}><Pressable onPress={()=>setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth:1}]}><ThemedText>取消</ThemedText></Pressable><Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor:tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable></View></View></View>
         </Modal>
       </View>

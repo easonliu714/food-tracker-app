@@ -1,15 +1,14 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
-import { Button, StyleSheet, View, Alert, ActivityIndicator } from 'react-native';
+import { Button, StyleSheet, Text, View, Alert, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
-import { getProductByBarcode, saveProductLocal } from '@/lib/storage';
+import { getProductByBarcode } from '@/lib/storage';
 import { t, useLanguage } from '@/lib/i18n';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function BarcodeScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
   const lang = useLanguage();
 
@@ -17,63 +16,61 @@ export default function BarcodeScannerScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <ThemedText style={{ textAlign: 'center' }}>We need your permission to show the camera</ThemedText>
+        <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
         <Button onPress={requestPermission} title="grant permission" />
       </View>
     );
   }
 
-  const handleBarCodeScanned = async ({ type, data }: any) => {
+  const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
     setScanned(true);
-    setLoading(true);
-
+    
     // 1. 檢查本地資料庫
     const localProduct = await getProductByBarcode(data);
     if (localProduct) {
-      setLoading(false);
-      router.replace({ pathname: "/barcode-product", params: { barcode: data } });
+      router.push({ pathname: "/food-recognition", params: { mode: "BARCODE", barcode: data } });
       return;
     }
 
-    // 2. 檢查 OpenFoodFacts
+    // 2. 查詢 OpenFoodFacts
     try {
       const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${data}.json`);
       const json = await response.json();
       
       if (json.status === 1 && json.product) {
         const p = json.product;
-        // 儲存到本地
-        const productData = {
-          barcode: data,
-          foodName: p.product_name || "Unknown Product",
-          calories: p.nutriments?.['energy-kcal_100g'] || 0,
-          protein: p.nutriments?.proteins_100g || 0,
-          carbs: p.nutriments?.carbohydrates_100g || 0,
-          fat: p.nutriments?.fat_100g || 0,
-          sodium: (p.nutriments?.sodium_100g || 0) * 1000,
-          servingSize: 100, // 預設 100g
-          unit: 'g'
+        // 整理資料傳遞給確認頁
+        const externalData = {
+          foodName: p.product_name || p.product_name_en || "Unknown Product",
+          calories_100g: p.nutriments?.["energy-kcal_100g"] || 0,
+          protein_100g: p.nutriments?.proteins_100g || 0,
+          carbs_100g: p.nutriments?.carbohydrates_100g || 0,
+          fat_100g: p.nutriments?.fat_100g || 0,
+          sodium_100g: (p.nutriments?.salt_100g || 0) * 400, // salt to sodium mg approx
         };
-        await saveProductLocal(data, productData);
-        setLoading(false);
-        router.replace({ pathname: "/barcode-product", params: { barcode: data } });
+        
+        router.push({ 
+          pathname: "/food-recognition", 
+          params: { 
+            mode: "EXTERNAL_DB", 
+            barcode: data,
+            initialData: JSON.stringify(externalData) 
+          } 
+        });
         return;
       }
     } catch (e) {
-      console.log("OpenFoodFacts error:", e);
+      console.log("External DB Error", e);
     }
 
-    setLoading(false);
-    // 3. 查無資料，提示使用相機 OCR
+    // 3. 查無資料，跳出選項
     Alert.alert(
-      t('scan_failed_title', lang),
-      `${t('scan_failed_msg', lang)}`,
+      t('scan_failed', lang),
+      t('scan_failed_msg', lang),
       [
-        { text: "OK", onPress: () => setScanned(false) },
-        { 
-          text: t('use_camera', lang), 
-          onPress: () => router.replace({ pathname: '/camera', params: { source: 'barcode_fallback' } }) 
-        }
+        { text: t('input_manual', lang), onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) },
+        { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera" }) }, // 引導至 AI 拍照
+        { text: "Cancel", style: "cancel", onPress: () => setScanned(false) }
       ]
     );
   };
@@ -84,20 +81,22 @@ export default function BarcodeScannerScreen() {
         style={StyleSheet.absoluteFillObject}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
-          barcodeTypes: ["qr", "ean13", "ean8", "upc_a", "upc_e"],
+          barcodeTypes: ["qr", "ean13", "ean8", "upc_a"],
         }}
       />
       <View style={styles.overlay}>
-        <ThemedText style={{color: 'white', fontSize: 18, fontWeight: 'bold'}}>{t('scan', lang)}</ThemedText>
-        <View style={styles.box} />
-        {loading && <ActivityIndicator size="large" color="white" style={{marginTop: 20}} />}
+        <Text style={styles.text}>{t('scan', lang)}</Text>
+        <Pressable onPress={() => router.back()} style={{marginTop: 20}}>
+          <Ionicons name="close-circle" size={48} color="white"/>
+        </Pressable>
       </View>
+      {scanned && <Button title={'Tap to Scan Again'} onPress={() => setScanned(false)} />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center' },
-  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  box: { width: 250, height: 250, borderWidth: 2, borderColor: 'white', backgroundColor: 'transparent' }
+  overlay: { position: 'absolute', top: 50, width: '100%', alignItems: 'center' },
+  text: { color: 'white', fontSize: 20, fontWeight: 'bold', backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 8 }
 });

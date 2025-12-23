@@ -21,24 +21,25 @@ export const TRANSLATIONS = {
     
     // Common
     activity_level: '活動量',
-    sedentary: '久坐',
-    lightly_active: '輕度活動',
-    moderately_active: '中度活動',
-    very_active: '高度活動',
-    extra_active: '極度活動',
+    sedentary: '久坐 (BMR x 1.2)',
+    lightly_active: '輕度 (BMR x 1.375)',
+    moderately_active: '中度 (BMR x 1.55)',
+    very_active: '高度 (BMR x 1.725)',
     gender: '性別',
     male: '男',
     female: '女',
-    birth_year: '出生年',
+    birth_year: '出生西元年',
     height: '身高(cm)',
     weight: '體重(kg)',
     body_fat: '體脂率(%)',
     target_weight: '目標(kg)',
-    goal: '目標',
-    lose_weight: '減重',
-    maintain: '維持',
-    gain_weight: '增重',
-    daily_target: '每日目標',
+    training_goal: '訓練目標',
+    goal_maintain: '維持身形',
+    goal_fat_loss: '降低體脂',
+    goal_tone_up: '強化塑身',
+    goal_upper_strength: '增加上半身肌力',
+    goal_lower_strength: '增加下半身肌力',
+
     save_settings: '儲存設定',
     logout: '登出',
     version_history: '版次歷程',
@@ -82,6 +83,17 @@ export const TRANSLATIONS = {
     export_pdf: '匯出 PDF',
     edit: '編輯',
     delete: '刪除',
+    
+    // New
+    serving_weight: '每份重量 (g)',
+    per_100g_base: '每 100g 基準數值',
+    ai_analysis_result: 'AI 分析結果',
+    composition: '組成',
+    intake_advice: '攝取建議',
+    scan_failed: '查無資料',
+    scan_failed_msg: '本地與雲端資料庫皆無此商品，請選擇輸入方式：',
+    scan_ai_label: 'AI 辨識標示',
+    input_manual: '手動輸入',
   },
   'en': {
     tab_home: 'Home',
@@ -94,7 +106,6 @@ export const TRANSLATIONS = {
     lightly_active: 'Lightly Active',
     moderately_active: 'Moderately Active',
     very_active: 'Very Active',
-    extra_active: 'Extra Active',
     gender: 'Gender',
     male: 'Male',
     female: 'Female',
@@ -103,11 +114,13 @@ export const TRANSLATIONS = {
     weight: 'Weight (kg)',
     body_fat: 'Body Fat (%)',
     target_weight: 'Target (kg)',
-    goal: 'Goal',
-    lose_weight: 'Lose Weight',
-    maintain: 'Maintain',
-    gain_weight: 'Gain Weight',
-    daily_target: 'Daily Target',
+    training_goal: 'Training Goal',
+    goal_maintain: 'Maintain',
+    goal_fat_loss: 'Fat Loss',
+    goal_tone_up: 'Tone Up',
+    goal_upper_strength: 'Upper Strength',
+    goal_lower_strength: 'Lower Strength',
+
     save_settings: 'Save Settings',
     logout: 'Logout',
     version_history: 'Version History',
@@ -151,6 +164,16 @@ export const TRANSLATIONS = {
     export_pdf: 'Export PDF',
     edit: 'Edit',
     delete: 'Delete',
+    
+    serving_weight: 'Serving Weight (g)',
+    per_100g_base: 'Per 100g Base',
+    ai_analysis_result: 'AI Analysis',
+    composition: 'Composition',
+    intake_advice: 'Advice',
+    scan_failed: 'Not Found',
+    scan_failed_msg: 'Product not found. Choose input method:',
+    scan_ai_label: 'AI Label Scan',
+    input_manual: 'Manual Input',
   },
   'ja': {
     tab_home: 'ホーム',
@@ -430,7 +453,10 @@ export const TRANSLATIONS = {
   },
 };
 
+
 export const VERSION_LOGS = [
+  { version: '1.0.6', date: '2025-12-23', content: '新增訓練目標與年齡推算；強化 AI 教練建議邏輯；優化掃碼功能(支援外部資料庫查詢)；食物確認頁面改版(分離基準值)。' },
+  { version: '1.0.5', date: '2025-12-22', content: '修復推播導致的閃退問題；優化運動熱量計算公式；新增營養素攝取比例圖表。' },
   { version: '1.0.4', date: '2025-12-21', content: 'UI/UX全面優化：解決語言切換延遲問題；新增相簿匯入功能；AI教練建議分開儲存；鈉含量單位修正。' },
   { version: '1.0.3', date: '2025-12-20', content: '新增多語言支援；新增體脂率紀錄；趨勢分析增加年/月/週切換；AI 邏輯優化。' },
   { version: '1.0.2', date: '2025-12-18', content: '修正 AI 金鑰失效問題，開放自訂 Key；修正條碼掃描；優化趨勢圖表。' },
@@ -442,7 +468,6 @@ export const t = (key: string, lang: string = 'zh-TW') => {
   return dict[key as keyof typeof dict] || TRANSLATIONS['zh-TW'][key as any] || key;
 };
 
-// 簡單的事件訂閱機制，讓非元件也能觸發更新
 const listeners: ((lang: string) => void)[] = [];
 
 export const subscribeLanguageChange = (callback: (lang: string) => void) => {
@@ -453,7 +478,6 @@ export const subscribeLanguageChange = (callback: (lang: string) => void) => {
   };
 };
 
-// 全域語言變數 (in-memory)
 let currentLang = 'zh-TW';
 
 export const getCurrentLang = () => currentLang;
@@ -461,22 +485,18 @@ export const getCurrentLang = () => currentLang;
 export const setAppLanguage = (lang: string) => {
   currentLang = lang;
   listeners.forEach(cb => cb(lang));
-  // 異步存入 Storage，不阻塞 UI
   saveSettings({ language: lang });
 };
 
-// Hook
 export const useLanguage = () => {
   const [lang, setLang] = useState(currentLang);
   useEffect(() => {
-    // 初始載入
     getSettings().then(s => { 
       if(s.language && s.language !== currentLang) {
         currentLang = s.language;
         setLang(s.language);
       }
     });
-    // 訂閱變更
     return subscribeLanguageChange(setLang);
   }, []);
   return lang;
