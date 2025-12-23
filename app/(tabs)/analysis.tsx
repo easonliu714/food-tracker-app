@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Dimensions } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BarChart } from "react-native-gifted-charts";
 import { useFocusEffect } from "expo-router";
@@ -28,12 +28,11 @@ export default function AnalysisScreen() {
     const profile = await getProfileLocal();
     if (profile?.dailyCalorieTarget) {
       const cal = profile.dailyCalorieTarget;
-      // 簡單的動態計算
       setDailyTargets({
         p: Math.round((cal * 0.2) / 4),
         c: Math.round((cal * 0.5) / 4),
         f: Math.round((cal * 0.3) / 9),
-        s: 2300 // 鈉通常固定，或可依年齡調整
+        s: 2300
       });
     }
 
@@ -86,13 +85,12 @@ export default function AnalysisScreen() {
 
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
         <View style={{ paddingHorizontal: 16 }}>
-          {/* Chart 1: Calorie Trend */}
           <View style={[styles.card, { backgroundColor: cardBackground }]}>
             <ThemedText type="subtitle" style={{marginBottom: 20}}>{t('trend_analysis', lang)} (Kcal)</ThemedText>
             <BarChart
               data={chartData}
               barWidth={22}
-              height={220} // [修正] 增加高度
+              height={220}
               noOfSections={4}
               barBorderRadius={4}
               frontColor={tintColor}
@@ -100,26 +98,24 @@ export default function AnalysisScreen() {
               xAxisThickness={0}
               hideRules
               yAxisTextStyle={{color: textColor}}
-              // [修正] X 軸文字轉 -90 度 (垂直)
               xAxisLabelTextStyle={{color: textColor, fontSize: 10, width: 40, textAlign:'center', transform: [{rotate: '-90deg'}]}}
               showGradient={false}
             />
           </View>
 
-          {/* Chart 2: Nutrient Trend */}
           <View style={[styles.card, { backgroundColor: cardBackground, marginTop: 20 }]}>
             <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('nutrition_distribution', lang)}</ThemedText>
             <View style={{flexDirection:'row', flexWrap:'wrap', gap:10, marginBottom:15, padding:10, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius:8}}>
                <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#4CAF50', marginRight:4}}/><ThemedText style={{fontSize:10}}>Pro: {dailyTargets.p}g</ThemedText></View>
                <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#2196F3', marginRight:4}}/><ThemedText style={{fontSize:10}}>Carb: {dailyTargets.c}g</ThemedText></View>
                <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#FF9800', marginRight:4}}/><ThemedText style={{fontSize:10}}>Fat: {dailyTargets.f}g</ThemedText></View>
-               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#9C27B0', marginRight:4}}/><ThemedText style={{fontSize:10}}>Sod: 2300mg</ThemedText></View>
+               <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8,height:8,backgroundColor:'#9C27B0', marginRight:4}}/><ThemedText style={{fontSize:10}}>Sod: {dailyTargets.s}mg</ThemedText></View>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <BarChart
                 data={macroData}
                 barWidth={8}
-                height={220} // [修正] 增加高度
+                height={220}
                 spacing={24}
                 roundedTop
                 hideRules
