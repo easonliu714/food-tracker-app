@@ -16,9 +16,10 @@ export default function ProfileScreen() {
   const { isAuthenticated, logout } = useAuth();
   
   const lang = useLanguage();
-  const versionLogs = getVersionLogs(lang); // 根據語言取得對應歷程
+  const versionLogs = getVersionLogs(lang);
 
   const [apiKey, setApiKey] = useState("");
+  // [關鍵修正] UI 預設顯示也改為 2.5
   const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
   const [modelList, setModelList] = useState<string[]>([]);
   
@@ -85,11 +86,11 @@ export default function ProfileScreen() {
 
   const handleSave = async () => {
     try {
-      const cleanKey = apiKey.trim(); // [Fix]
-      setApiKey(cleanKey); // Update state view
+      const cleanKey = apiKey.trim();
+      setApiKey(cleanKey);
 
       setAppLanguage(lang); 
-      await saveSettings({ apiKey, model: selectedModel, language: lang });
+      await saveSettings({ apiKey: cleanKey, model: selectedModel, language: lang });
       
       const weight = parseFloat(currentWeight) || 70;
       const height = parseFloat(heightCm) || 170;
@@ -124,11 +125,12 @@ export default function ProfileScreen() {
     if (!cleanKey) return Alert.alert("請輸入 API Key");
     
     setTestingKey(true);
-    const res = await validateApiKey(cleanKey); // Pass trimmed key
+    const res = await validateApiKey(cleanKey);
     setTestingKey(false);
     
     if (res.valid && res.models) {
       setModelList(res.models);
+      // [關鍵修正] 測試成功後，優先選取 2.5
       const recommended = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
       const bestMatch = recommended.find(m => res.models.includes(m)) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
@@ -137,6 +139,8 @@ export default function ProfileScreen() {
       Alert.alert("測試失敗", res.error || "無法連線");
     }
   };
+
+  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems:'center'}]}><ActivityIndicator size="large" color={tintColor}/></View>;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -159,6 +163,7 @@ export default function ProfileScreen() {
                 value={apiKey} 
                 onChangeText={setApiKey} 
                 placeholder={t('api_key_placeholder', lang)} 
+                placeholderTextColor={textSecondary}
               />
               <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>
                  {t('api_key_warning', lang)}
@@ -181,6 +186,7 @@ export default function ProfileScreen() {
 
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
             <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
+            {/* 省略部分重複 UI 程式碼，確保下方的 gender, weight, height 等欄位都保留 */}
             <View style={{marginBottom: 12}}>
                <ThemedText style={{marginBottom:5}}>{t('gender', lang)}</ThemedText>
                <View style={styles.row}>
@@ -223,7 +229,7 @@ export default function ProfileScreen() {
          </Pressable>
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.6)</ThemedText>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.7)</ThemedText>
          </Pressable>
          <View style={{height:50}}/>
       </ScrollView>

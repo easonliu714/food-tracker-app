@@ -9,7 +9,6 @@ if (typeof global.TextEncoder === 'undefined') {
   global.TextDecoder = TextDecoder;
 }
 
-// METs table (Strict English Keys)
 const METS: Record<string, number> = {
   'running': 9.8, 'walking': 3.8, 'cycling': 7.5, 'swimming': 8.0,
   'yoga': 2.5, 'pilates': 3.0, 'weight_lifting': 5.0, 'hiit': 8.0,
@@ -29,12 +28,19 @@ export const calculateWorkoutCalories = (
   else if (typeKey.includes('run')) met = 9.8;
   else if (typeKey.includes('walk')) met = 3.8;
   
-  const calories = (met * 3.5 * weightKg / 200) * durationMin;
-  return Math.round(calories);
+  if (distanceKm && durationMin > 0) {
+    const speed = distanceKm / (durationMin/60);
+    if(typeKey === 'running' && speed > 10) met = 11.0;
+  }
+  
+  const burned = (met * 3.5 * weightKg / 200) * durationMin;
+  console.log(`[Calc] Type:${typeKey} Min:${durationMin} W:${weightKg} -> ${burned} kcal`);
+  return Math.round(burned);
 };
 
-// 取得模型實例 (統一管理)
-const getModel = (apiKey: string, modelName: string) => {
+// 統一取得模型實例 (強制預設 2.5-flash)
+const getModel = (apiKey: string, modelName: string = "gemini-2.5-flash") => {
+  console.log(`[Gemini] Init Model: ${modelName}`);
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({ model: modelName });
 };
@@ -44,94 +50,82 @@ export async function validateApiKey(apiKey: string) {
     const cleanKey = apiKey.trim();
     if (!cleanKey) throw new Error("Key is empty");
     
-    const genAI = new GoogleGenerativeAI(cleanKey);
+    // 強制使用 2.5 進行驗證，因為 1.5 在您的環境會 404
+    const model = getModel(cleanKey, "gemini-2.5-flash");
+    console.log("[Gemini] Sending validation request...");
     
-    // 嘗試順序：1.5-flash -> 1.5-pro -> gemini-pro (舊版穩定)
-    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
-    let validModel = "";
-
-    for (const m of modelsToTry) {
-      try {
-        const model = genAI.getGenerativeModel({ model: m });
-        await model.generateContent("Hello");
-        validModel = m;
-        break; // 成功就跳出
-      } catch (innerE) {
-        console.log(`Model ${m} failed, trying next...`);
-      }
-    }
-
-    if (!validModel) throw new Error("All models failed. Check API Key.");
+    await model.generateContent("Hi");
     
-    // 回傳成功與可用模型列表
-    return { valid: true, models: modelsToTry };
+    console.log("[Gemini] Validation Success!");
+    return { valid: true, models: ["gemini-2.5-flash", "gemini-1.5-flash"] };
   } catch (e: any) {
-    console.error("API Validation Fatal Error:", e);
-    return { valid: false, error: e.message || "Invalid Key" };
+    console.error("[Gemini] Validation FAILED:", e.message);
+    return { valid: false, error: e.message || "Unknown Error" };
+  }
+}
+
+// 通用請求處理器 (含錯誤處理與日誌)
+async function sendPrompt(prompt: string, imageBase64?: string) {
+  try {
+    const settings = await getSettings();
+    if (!settings.apiKey) throw new Error("API Key not set");
+
+    // 優先使用設定值，若無則使用 2.5-flash
+    const modelName = settings.model || "gemini-2.5-flash";
+    const model = getModel(settings.apiKey.trim(), modelName);
+    
+    console.log(`[Gemini] Sending Request... Prompt Length: ${prompt.length}`);
+    
+    const content = imageBase64 
+      ? [{ inlineData: { data: imageBase64, mimeType: "image/jpeg" } }, prompt] 
+      : prompt;
+
+    const result = await model.generateContent(content);
+    const text = result.response.text();
+    console.log("[Gemini] Response Received (First 50 chars):", text.substring(0, 50).replace(/\n/g, ' '));
+    
+    // 清理 Markdown 格式
+    const jsonStr = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch (e: any) {
+    console.error("[Gemini] Request FAILED:", e.message);
+    return null;
   }
 }
 
 export async function identifyWorkoutType(input: string) {
-  try {
-    const settings = await getSettings();
-    if (!settings.apiKey) return { key: 'custom', name: input };
-
-    // 優先使用設定的模型，若無則預設 flash
-    const modelName = settings.model || "gemini-1.5-flash";
-    const model = getModel(settings.apiKey.trim(), modelName);
-
-    const prompt = `
-      Map activity "${input}" to one of: 
-      [running, walking, cycling, swimming, yoga, pilates, weight_lifting, hiit, basketball, soccer, tennis, hiking, stair_climbing, dance, cleaning].
-      If unclear, return "custom".
-      Return JSON: { "key": "string" }
-    `;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    return { key: 'custom', name: input };
-  }
+  const prompt = `Identify workout: "${input}". Return JSON { "key": "running|walking|cycling|swimming|yoga|pilates|weight_lifting|hiit|basketball|soccer|tennis|hiking|stair_climbing|dance|cleaning" } (default "custom")`;
+  const res = await sendPrompt(prompt);
+  return res || { key: 'custom', name: input };
 }
 
 export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW', mode: 'NORMAL' | 'OCR' = 'NORMAL') {
   try {
-    const settings = await getSettings();
-    if (!settings.apiKey) throw new Error("No API Key");
-
-    const modelName = settings.model || "gemini-1.5-flash";
-    const model = getModel(settings.apiKey.trim(), modelName);
     const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
+    const prompt = mode === 'OCR' 
+      ? `OCR task. Extract nutrition facts label. Output Language: ${lang}. Return JSON: { "foodName": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": 100 }`
+      : `Nutritionist task. Analyze food image. Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string (Health advice)" }`;
     
-    let prompt = mode === 'OCR' ? 
-      `Extract nutrition from label. Language: ${lang}. Return JSON: { "foodName": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": 100 }` :
-      `Analyze food image. Identify dish, ingredients. Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string" }`;
-
-    const result = await model.generateContent([
-      { inlineData: { data: base64, mimeType: "image/jpeg" } },
-      prompt
-    ]);
-
-    const text = result.response.text();
-    const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(jsonStr);
+    return await sendPrompt(prompt, base64);
   } catch (e) {
-    console.error("Analysis Error:", e);
+    console.error("Read File Error:", e);
     return null;
   }
 }
 
 export async function analyzeFoodText(textInput: string, lang: string = 'zh-TW') {
-  // (與 analyzeFoodImage 類似邏輯，略過重複代碼以節省空間，請確保這部分存在)
-  try {
-    const settings = await getSettings();
-    if (!settings.apiKey) throw new Error("No API Key");
-    const model = getModel(settings.apiKey.trim(), settings.model || "gemini-1.5-flash");
-    const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
-  } catch (e) { return null; }
+  const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
+  return await sendPrompt(prompt);
+}
+
+export async function suggestRecipe(remainingCal: number, type: 'STORE'|'COOK', lang: string) {
+  // [修正] 明確指定 Output Language
+  const prompt = `Suggest a ${type} recipe/meal under ${remainingCal}kcal. Output Language: ${lang}. Return JSON: { "title": "string", "calories": number, "ingredients": ["string"], "steps": ["string"], "reason": "string" }`;
+  return await sendPrompt(prompt);
+}
+
+export async function suggestWorkout(profile: any, remainingCal: number, lang: string) {
+  // [修正] 明確指定 Output Language
+  const prompt = `Suggest a workout for weight ${profile?.currentWeightKg}kg to burn calories (budget: ${remainingCal}). Output Language: ${lang}. Return JSON: { "activity": "string", "duration_minutes": number, "estimated_calories": number, "reason": "string", "video_url": "string" }`;
+  return await sendPrompt(prompt);
 }

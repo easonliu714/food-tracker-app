@@ -24,31 +24,29 @@ export const getSettings = async () => {
     const data = await AsyncStorage.getItem(KEYS.SETTINGS);
     const settings = data ? JSON.parse(data) : {};
 
-    // [修正] 如果 Storage 中沒有 API Key，則嘗試讀取環境變數
-    // 請確保您的 .env 檔案中有 EXPO_PUBLIC_GEMINI_API_KEY
+    // [修正] 讀取環境變數
     if (!settings.apiKey) {
       settings.apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || "";
     }
 
-    // [修正] 預設模型改為穩定的 1.5-flash，避免 2.5-flash 造成 404
-    if (!settings.model) settings.model = "gemini-1.5-flash";
+    // [關鍵修正] 將預設模型改為您測試成功的 gemini-2.5-flash
+    if (!settings.model) settings.model = "gemini-2.5-flash";
     
-    // 預設語言
     if (!settings.language) settings.language = "zh-TW";
 
     return settings;
   } catch (e) {
     console.error("Error reading settings:", e);
-    // 發生錯誤時的回退預設值
+    // [關鍵修正] 錯誤回退時也使用 2.5
     return { 
       apiKey: process.env.EXPO_PUBLIC_GEMINI_API_KEY || "", 
-      model: "gemini-1.5-flash", 
+      model: "gemini-2.5-flash", 
       language: "zh-TW" 
     };
   }
 };
 
-// --- 使用者 ---
+// --- (以下函式保持不變，請保留原有的內容) ---
 export const loginLocal = async (name: string) => {
   const user = { name, id: 'local_user', email: 'local@device' };
   await AsyncStorage.setItem(KEYS.USER_SESSION, JSON.stringify(user));
@@ -64,11 +62,9 @@ export const getLocalUser = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// --- 體重 & 體脂歷史 ---
 export const saveWeightLog = async (weight: number, bodyFat?: number) => {
   const data = await AsyncStorage.getItem(KEYS.WEIGHTS);
   const history = data ? JSON.parse(data) : [];
-  // 使用 UTC 日期字串作為 Key，避免時區問題導致同一天多筆
   const today = new Date().toISOString().split('T')[0];
   
   const existingIndex = history.findIndex((h: any) => h.date.startsWith(today));
@@ -79,7 +75,6 @@ export const saveWeightLog = async (weight: number, bodyFat?: number) => {
     history.push({ date: new Date().toISOString(), weight, bodyFat: bodyFat || 0 });
   }
   
-  // 保留最近 365 筆
   if (history.length > 365) history.shift();
   await AsyncStorage.setItem(KEYS.WEIGHTS, JSON.stringify(history));
 };
@@ -89,7 +84,6 @@ export const getWeightHistory = async () => {
   return data ? JSON.parse(data) : [];
 };
 
-// --- 個人檔案 ---
 export const saveProfileLocal = async (profileData: any) => {
   await AsyncStorage.setItem(KEYS.PROFILE, JSON.stringify(profileData));
   if (profileData.currentWeightKg) {
@@ -103,7 +97,6 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// --- 產品資料庫 (Barcode / 名稱) ---
 export const saveProductLocal = async (barcode: string, productData: any) => {
   const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
   const products = data ? JSON.parse(data) : {};
@@ -117,7 +110,6 @@ export const getProductByBarcode = async (barcode: string) => {
   return products[barcode] || null;
 };
 
-// --- 飲食紀錄 ---
 export const getFoodLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.FOOD_LOGS);
   return data ? JSON.parse(data) : [];
@@ -145,7 +137,6 @@ export const deleteFoodLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.FOOD_LOGS, JSON.stringify(updatedLogs));
 };
 
-// --- 運動紀錄 ---
 export const getActivityLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.ACTIVITY_LOGS);
   return data ? JSON.parse(data) : [];
@@ -173,13 +164,11 @@ export const deleteActivityLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
-// --- Helper: 處理時區問題，回傳 YYYY-MM-DD ---
 function toLocalISOString(date: Date) {
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().split('T')[0];
 }
 
-// --- 每日摘要 ---
 export const getDailySummaryLocal = async (date: Date = new Date()) => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
@@ -201,7 +190,6 @@ export const getDailySummaryLocal = async (date: Date = new Date()) => {
   };
 };
 
-// --- 常用項目 ---
 export const getFrequentFoodItems = async () => {
   const logs = await getFoodLogsLocal();
   const frequency: Record<string, number> = {};
@@ -224,11 +212,9 @@ export const getFrequentActivityTypes = async () => {
   });
   
   const sorted = Object.keys(frequency).sort((a, b) => frequency[b] - frequency[a]);
-  // 合併並去重
   return Array.from(new Set([...sorted, ...DEFAULT_TYPES]));
 };
 
-// --- 歷史聚合查詢 (Analysis 專用) ---
 export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_week'|'year') => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
@@ -238,14 +224,13 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
   const now = new Date();
 
   let days = 7;
-  let keyFunc = (d: Date) => toLocalISOString(d); // 預設: 日期
+  let keyFunc = (d: Date) => toLocalISOString(d);
 
   if (period === 'month_day') {
     days = 30;
   } else if (period === 'month_week') {
     days = 90;
     keyFunc = (d: Date) => {
-      // 簡單的月+週計算
       const month = d.getMonth() + 1;
       const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
       const week = Math.ceil((d.getDate() + firstDay.getDay()) / 7);
@@ -256,7 +241,6 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
     keyFunc = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}`;
   }
 
-  // 聚合函式
   const processLog = (logs: any[], type: 'food'|'activity'|'weight') => {
     logs.forEach((log: any) => {
       const d = new Date(log.loggedAt || log.date);
@@ -288,7 +272,6 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
     const avgW = wCount > 0 ? item.weights.reduce((s:number, x:any)=>s+x.w, 0)/wCount : 0;
     const avgF = wCount > 0 ? item.weights.reduce((s:number, x:any)=>s+x.f, 0)/wCount : 0;
     
-    // 如果是週/月模式，數值需除以天數以顯示「平均」
     let divisor = 1;
     if (period === 'month_week') divisor = 7;
     if (period === 'year') divisor = 30;
@@ -306,17 +289,12 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
     };
   });
 
-  // 排序
   result.sort((a: any, b: any) => a.label.localeCompare(b.label));
-  
-  // 截取適當長度
   return result.slice(- (period === 'year' ? 12 : period === 'month_week' ? 12 : 7));
 };
 
-// 為了相容舊版分析
 export const getHistory7DaysLocal = async () => getAggregatedHistory('week');
 
-// --- AI 建議持久化 ---
 export const saveAIAdvice = async (type: 'RECIPE' | 'WORKOUT', advice: any) => {
   const current = await getAIAdvice();
   const updated = { ...current, [type]: advice };

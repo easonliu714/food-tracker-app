@@ -13,8 +13,8 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { 
   getDailySummaryLocal, getProfileLocal, 
   deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems,
-  getSettings, saveSettings, updateActivityLogLocal 
+  deleteActivityLogLocal, updateActivityLogLocal,
+  getSettings, saveSettings 
 } from "@/lib/storage";
 import { calculateWorkoutCalories, identifyWorkoutType, validateApiKey } from "@/lib/gemini"; 
 import { NumberInput } from "@/components/NumberInput";
@@ -35,20 +35,19 @@ export default function HomeScreen() {
   const [summary, setSummary] = useState<any>(null);
   const [targetCalories, setTargetCalories] = useState(2000);
   const [profile, setProfile] = useState<any>(null);
-  const [frequentItems, setFrequentItems] = useState<any[]>([]);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Workout Modal
+  // Workout Modal State
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
-  
   const [actType, setActType] = useState("running");
   const [customInput, setCustomInput] = useState(""); 
   const [isCustomAct, setIsCustomAct] = useState(false);
   const [identifying, setIdentifying] = useState(false);
 
+  // Inputs
   const [duration, setDuration] = useState("");
   const [steps, setSteps] = useState("");
   const [dist, setDist] = useState("");
@@ -69,39 +68,14 @@ export default function HomeScreen() {
     const p = await getProfileLocal();
     setProfile(p);
     if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
-    
     const sum = await getDailySummaryLocal(selectedDate);
     setSummary(sum);
-    
-    const f = await getFrequentFoodItems();
-    setFrequentItems(f);
   }, [selectedDate]);
 
   const checkApiKeyStatus = async () => {
     const settings = await getSettings();
-    const key = settings.apiKey?.trim();
-
-    if (!key) {
-      Alert.alert(
-        t('tab_settings', lang),
-        "歡迎使用！請先設定您的 Gemini API Key 才能開始使用 AI 功能。",
-        [{ text: "前往設定", onPress: () => router.push("/profile") }]
-      );
-      return;
-    }
-
-    try {
-      const result = await validateApiKey(key);
-      if (!result.valid) {
-        await saveSettings({ apiKey: "" }); 
-        Alert.alert(
-          "API Key 已失效",
-          "偵測到您的 API Key 無法使用或已過期，系統已將其重置。請重新輸入有效的 Key。",
-          [{ text: "前往設定", onPress: () => router.push("/profile") }]
-        );
-      }
-    } catch (e) {
-      console.error("API Validation Failed:", e);
+    if (!settings.apiKey) {
+      Alert.alert(t('tab_settings', lang), "請先設定 Gemini API Key", [{ text: "設定", onPress: () => router.push("/profile") }]);
     }
   };
 
@@ -112,15 +86,16 @@ export default function HomeScreen() {
     }
   }, [isAuthenticated, loadData]));
 
-  // [修正] 將計算邏輯移出 useFocusEffect，改用 useEffect 監聽數值變化
-  // 這樣只要 duration 或 actType 改變，就會立即執行計算
+  // [修正] 運動熱量即時計算
   useEffect(() => {
     if (modalVisible && !identifying) {
       const dur = parseFloat(duration) || 0;
-      const w = profile?.currentWeightKg || 70;
+      // 若 profile 尚未載入，預設 70kg 避免算不出數值
+      const w = profile?.currentWeightKg || 70; 
       
-      // 只要有時間，即使是 0 分鐘也算一次 (歸零)
       if (actType) {
+        // 加入 Log 以便觀察
+        console.log(`Calculating: Type=${actType}, Time=${dur}, W=${w}`);
         const cal = calculateWorkoutCalories(actType, dur, w, parseFloat(dist)||0, parseFloat(steps)||0);
         const fCal = (parseFloat(floors)||0) * 0.5;
         setEstCal(Math.round(cal + fCal));
@@ -143,7 +118,7 @@ export default function HomeScreen() {
   };
 
   const handleSaveWorkout = async () => {
-    if (!actType) return Alert.alert("Error");
+    if (!actType) return;
     
     let detailsParts = [];
     if(duration) detailsParts.push(`${duration} min`);
@@ -170,7 +145,6 @@ export default function HomeScreen() {
 
   const handleEditWorkoutLocal = (log: any) => {
     setEditingWorkout(log);
-    
     const isStandard = STANDARD_WORKOUTS.includes(log.activityType);
     if (isStandard) {
       setActType(log.activityType);
@@ -192,7 +166,6 @@ export default function HomeScreen() {
     setDist(getVal("km"));
     setFloors(getVal("floors"));
     setEstCal(log.caloriesBurned); 
-
     setModalVisible(true);
   };
 
@@ -205,9 +178,7 @@ export default function HomeScreen() {
     setModalVisible(true);
   };
 
-  const renderActivityName = (type: string) => {
-    return t(type, lang) === type && type !== 'custom' ? type : t(type, lang);
-  };
+  const renderActivityName = (type: string) => t(type, lang) === type && type !== 'custom' ? type : t(type, lang);
 
   const renderDeleteAction = (id: number, type: 'food'|'activity') => ( 
     <Pressable onPress={async () => { 
@@ -231,7 +202,6 @@ export default function HomeScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[styles.container, { backgroundColor }]}>
         <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
-          {/* Header */}
           <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
              <ThemedText type="title">{t('today_overview', lang)}</ThemedText>
           </View>
@@ -250,38 +220,28 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Quick Actions */}
           <View style={styles.quickActions}>
             <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
-               <Ionicons name="camera" size={24} color="white"/>
-               <ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText>
+               <Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText>
             </Pressable>
             <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}>
-               <Ionicons name="barcode" size={24} color="white"/>
-               <ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText>
+               <Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText>
             </Pressable>
             <Pressable onPress={() => router.push("/food-recognition?mode=MANUAL")} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}>
-               <Ionicons name="create" size={24} color="white"/>
-               <ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText>
+               <Ionicons name="create" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText>
             </Pressable>
             <Pressable onPress={resetModal} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}>
-               <Ionicons name="fitness" size={24} color="white"/>
-               <ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText>
+               <Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText>
             </Pressable>
           </View>
 
-          {/* Lists */}
           <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
             <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
                 <ThemedText type="subtitle">{t('intake', lang)}</ThemedText>
                 <ThemedText style={{fontSize:10, color:textSecondary}}>{t('swipe_hint', lang)}</ThemedText>
             </View>
             {summary?.foodLogs?.map((log: any) => (
-              <Swipeable 
-                key={log.id} 
-                renderRightActions={() => renderDeleteAction(log.id, 'food')} 
-                renderLeftActions={() => renderEditAction(log, 'food')}
-              >
+              <Swipeable key={log.id} renderRightActions={() => renderDeleteAction(log.id, 'food')} renderLeftActions={() => renderEditAction(log, 'food')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{log.foodName}</ThemedText>
                   <ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText>
@@ -296,11 +256,7 @@ export default function HomeScreen() {
                 <ThemedText style={{fontSize:10, color:textSecondary}}>{t('swipe_hint', lang)}</ThemedText>
             </View>
             {summary?.activityLogs?.map((log: any) => (
-              <Swipeable 
-                key={log.id} 
-                renderRightActions={() => renderDeleteAction(log.id, 'activity')}
-                renderLeftActions={() => renderEditAction(log, 'activity')}
-              >
+              <Swipeable key={log.id} renderRightActions={() => renderDeleteAction(log.id, 'activity')} renderLeftActions={() => renderEditAction(log, 'activity')}>
                 <View style={[styles.listItem, {backgroundColor: cardBackground}]}>
                   <ThemedText>{renderActivityName(log.activityType)}</ThemedText>
                   <ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText>
@@ -311,7 +267,6 @@ export default function HomeScreen() {
           <View style={{height: 100}}/>
         </ScrollView>
 
-        {/* Modal */}
         <Modal visible={modalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
@@ -322,12 +277,7 @@ export default function HomeScreen() {
               
               {isCustomAct ? (
                  <View>
-                   <TextInput 
-                     style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} 
-                     placeholder={t('manual_input', lang)}
-                     value={customInput} 
-                     onChangeText={setCustomInput} 
-                   />
+                   <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} placeholder={t('manual_input', lang)} value={customInput} onChangeText={setCustomInput} />
                    <Pressable onPress={handleIdentify} style={[styles.modalBtn, {backgroundColor: tintColor, marginTop: 8, flexDirection:'row', justifyContent:'center'}]}>
                       {identifying ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white'}}>{t('ai_identify_workout', lang)}</ThemedText>}
                    </Pressable>
@@ -357,9 +307,7 @@ export default function HomeScreen() {
               
               <View style={{flexDirection: 'row', gap: 10}}>
                 <Pressable onPress={() => setModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
-                <Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>
-                  {editingWorkout ? t('save_settings', lang) : "新增"}
-                </ThemedText></Pressable>
+                <Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>{editingWorkout ? t('save_settings', lang) : "新增"}</ThemedText></Pressable>
               </View>
             </View>
           </View>
