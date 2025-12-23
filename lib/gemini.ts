@@ -34,25 +34,16 @@ export const calculateWorkoutCalories = (
   }
   
   const burned = (met * 3.5 * weightKg / 200) * durationMin;
-  console.log(`[Calc] Type:${typeKey} Min:${durationMin} W:${weightKg} -> ${burned} kcal`);
+  console.log(`[Mobile Log] Calc: Type=${typeKey} Min=${durationMin} W=${weightKg} -> ${burned} kcal`);
   return Math.round(burned);
 };
 
-// [關鍵修正] 模型優先順序: latest > 2.5 > 1.5
+// 建立模型實例
 const getModel = (apiKey: string, modelName: string) => {
-  let targetModel = modelName || 'gemini-flash-latest';
-  
-  // 防止舊設定殘留 1.5-flash
-  if (targetModel === 'gemini-1.5-flash') {
-      targetModel = 'gemini-flash-latest';
-  }
-
-  console.log(`[Gemini] Init Model: ${targetModel}`);
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: targetModel });
+  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: modelName });
 };
 
-// [新增] 強力 JSON 清理函式
+// JSON 清理工具
 function cleanJson(text: string): string {
   try {
     let clean = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -67,21 +58,52 @@ function cleanJson(text: string): string {
   }
 }
 
+// [核心] 執行請求 (含自動降級邏輯)
+async function executeRequestWithFallback(apiKey: string, content: any, primaryModel: string = "gemini-flash-latest") {
+  const secondaryModel = "gemini-1.5-flash";
+
+  try {
+    // 嘗試優先模型
+    console.log(`[Mobile Log] 正在嘗試主模型: ${primaryModel}`);
+    const model = getModel(apiKey, primaryModel);
+    const result = await model.generateContent(content);
+    return result;
+  } catch (error: any) {
+    console.error(`[Mobile Error] 主模型 (${primaryModel}) 失敗:`, error.message);
+    
+    // 如果主模型失敗，且主模型不是 1.5-flash，則嘗試降級
+    if (primaryModel !== secondaryModel) {
+      console.log(`[Mobile Log] 自動切換至備用模型: ${secondaryModel} 重試中...`);
+      try {
+        const fallbackModel = getModel(apiKey, secondaryModel);
+        const fallbackResult = await fallbackModel.generateContent(content);
+        console.log(`[Mobile Log] 備用模型 (${secondaryModel}) 執行成功！`);
+        return fallbackResult;
+      } catch (fallbackError: any) {
+        console.error(`[Mobile Error] 備用模型 (${secondaryModel}) 也失敗:`, fallbackError.message);
+        throw fallbackError; // 兩個都失敗才拋出錯誤
+      }
+    } else {
+      throw error;
+    }
+  }
+}
+
 export async function validateApiKey(apiKey: string) {
   try {
     const cleanKey = apiKey.trim();
     if (!cleanKey) throw new Error("Key is empty");
     
-    // 優先使用 latest 測試
-    const model = getModel(cleanKey, "gemini-flash-latest");
-    console.log("[Gemini] Sending validation request...");
-    await model.generateContent("Hi");
-    console.log("[Gemini] Validation Success!");
+    const content = "Hi";
+    // 這裡我們直接用 executeRequestWithFallback 來測試
+    // 如果 latest 失敗但 1.5 成功，也會視為驗證通過
+    await executeRequestWithFallback(cleanKey, content, "gemini-flash-latest");
     
-    // 回傳列表：latest 優先，2.5 次之
-    return { valid: true, models: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-pro"] };
+    console.log("[Mobile Log] API Key 驗證成功 (含自動降級測試)");
+    
+    return { valid: true, models: ["gemini-flash-latest", "gemini-1.5-flash"] };
   } catch (e: any) {
-    console.error("[Gemini] Validation FAILED:", e.message);
+    console.error("[Mobile Error] API Key 驗證全數失敗:", e.message);
     return { valid: false, error: e.message || "Unknown Error" };
   }
 }
@@ -91,25 +113,27 @@ async function sendPrompt(prompt: string, imageBase64?: string) {
     const settings = await getSettings();
     if (!settings.apiKey) throw new Error("API Key not set");
 
-    const modelName = settings.model || "gemini-flash-latest";
-    const model = getModel(settings.apiKey.trim(), modelName);
+    // 優先使用設定的模型，預設為 latest
+    const preferredModel = settings.model || "gemini-flash-latest";
+    const apiKey = settings.apiKey.trim();
     
-    console.log(`[Gemini] Sending Request... Prompt Length: ${prompt.length}`);
+    console.log(`[Mobile Log] 發送請求 Prompt長度: ${prompt.length}`);
     
     const content = imageBase64 
       ? [{ inlineData: { data: imageBase64, mimeType: "image/jpeg" } }, prompt] 
       : prompt;
 
-    const result = await model.generateContent(content);
+    // 呼叫具備降級功能的執行器
+    const result = await executeRequestWithFallback(apiKey, content, preferredModel);
+    
     const text = result.response.text();
-    console.log("[Gemini] Raw Response:", text.substring(0, 100).replace(/\n/g, ' '));
+    console.log("[Mobile Log] 收到回應 (前100字):", text.substring(0, 100).replace(/\n/g, ' '));
     
     const jsonStr = cleanJson(text);
     return JSON.parse(jsonStr);
   } catch (e: any) {
-    console.error("[Gemini] Request FAILED:", e.message);
-    console.error("[Gemini] Full Error:", JSON.stringify(e, null, 2));
-    throw e;
+    console.error("[Mobile Error] 最終請求失敗:", e.message);
+    return null; // 回傳 null 讓 UI 處理
   }
 }
 
@@ -131,12 +155,12 @@ export async function analyzeFoodImage(imageUri: string, lang: string = 'zh-TW',
       : `Nutritionist task. Analyze food image. Output Language: ${lang}. 
          Requirements:
          1. "description_suffix": Short composition description (e.g. "Fried, with sauce").
-         2. "detailed_analysis": Provide composition details AND specific intake advice (e.g. "High fat, reduce intake").
+         2. "detailed_analysis": Provide composition details AND specific intake advice.
          Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": {"protein": number, "carbs": number, "fat": number, "sodium": number}, "estimated_weight_g": number, "detailed_analysis": "string" }`;
     
     return await sendPrompt(prompt, base64);
-  } catch (e) {
-    console.error("Analyze Image Error:", e);
+  } catch (e: any) {
+    console.error("[Mobile Error] 圖片讀取失敗:", e.message);
     return null;
   }
 }
@@ -145,11 +169,7 @@ export async function analyzeFoodText(textInput: string, lang: string = 'zh-TW')
   const prompt = `Analyze food: "${textInput}". Output Language: ${lang}. 
     Requirements: "detailed_analysis" must include ingredients and health advice.
     Return JSON: { "foodName": "string", "description_suffix": "string", "calories": number, "macros": { "protein": number, "carbs": number, "fat": number, "sodium": number }, "estimated_weight_g": number, "detailed_analysis": "string" }`;
-  try {
-    return await sendPrompt(prompt);
-  } catch (e) {
-    return null;
-  }
+  return await sendPrompt(prompt);
 }
 
 export async function suggestRecipe(remainingCal: number, type: 'STORE'|'COOK', lang: string) {

@@ -55,7 +55,6 @@ export default function RecipesScreen() {
     Alert.alert(t('ai_coach', lang), "AI 正在分析，請稍候...", [{ text: "OK" }]);
     setLoading(true);
     
-    // 緩衝 1.5 秒
     setTimeout(async () => {
        try {
          let res;
@@ -70,19 +69,17 @@ export default function RecipesScreen() {
            setAdviceData(newAdvice);
            await saveAIAdvice(activeTab, res);
          } else {
-           console.error("[Recipes] AI returned null");
-           Alert.alert("分析失敗", "AI 無回應，請檢查終端機日誌");
+           console.error("[Mobile Error] AI 建議回傳空值 (null)");
+           Alert.alert("分析失敗", "AI 無回應，請查看終端機錯誤日誌");
          }
        } catch (e: any) {
-         console.error("[Recipes] Generate Error:", e);
-         Alert.alert("錯誤", e.message || "發生未知錯誤");
+         console.error("[Mobile Error] AI 教練執行錯誤:", e.message);
+         Alert.alert("錯誤", "發生未知錯誤，請檢查連線或配額");
        } finally {
          setLoading(false);
        }
     }, 1500); 
   };
-
-  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
 
   const handleExportPDF = async () => {
     if (!currentResult) return;
@@ -98,6 +95,8 @@ export default function RecipesScreen() {
       else await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('export_pdf', lang) });
     } catch (e) { Alert.alert("匯出失敗"); }
   };
+
+  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
 
   return (
     <View style={[styles.container, { backgroundColor }]}>

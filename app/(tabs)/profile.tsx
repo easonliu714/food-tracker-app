@@ -18,6 +18,7 @@ export default function ProfileScreen() {
   const versionLogs = getVersionLogs(lang);
 
   const [apiKey, setApiKey] = useState("");
+  // [修正] UI 預設顯示 gemini-flash-latest
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
@@ -123,12 +124,10 @@ export default function ProfileScreen() {
     setTestingKey(false);
     if (res.valid && res.models) {
       setModelList(res.models);
-      // 自動選取 gemini-flash-latest
-      if(res.models.includes('gemini-flash-latest')) {
-          setSelectedModel('gemini-flash-latest');
-      } else if(res.models.length > 0) {
-          setSelectedModel(res.models[0]);
-      }
+      // [修正] 自動選取 gemini-flash-latest
+      if(res.models.includes('gemini-flash-latest')) setSelectedModel('gemini-flash-latest');
+      else if(res.models.length > 0) setSelectedModel(res.models[0]);
+      
       Alert.alert("測試成功", `金鑰有效！已切換至 ${selectedModel}`);
     } else {
       Alert.alert("測試失敗", res.error || "無法連線");
@@ -220,6 +219,7 @@ export default function ProfileScreen() {
          <View style={{height:50}}/>
       </ScrollView>
 
+      {/* Modals... (省略重複) */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
