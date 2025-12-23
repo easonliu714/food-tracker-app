@@ -20,9 +20,11 @@ import {
 import { NumberInput } from "@/components/NumberInput";
 import { t, useLanguage } from "@/lib/i18n";
 
+// METs 表更新
 const METS: Record<string, number> = {
   '走路': 3.5, '跑步': 8.0, '爬梯': 8.0, '打掃': 3.0, '瑜珈': 2.5,
-  '慢走': 2.0, '快走': 5.0, '慢跑': 6.0, '快跑': 10.0, '一般運動': 4.0
+  '慢走': 2.0, '快走': 5.0, '慢跑': 6.0, '快跑': 10.0, '一般運動': 4.0,
+  '健身': 5.0, '游泳': 6.0, '單車': 7.5
 };
 
 export default function HomeScreen() {
@@ -85,35 +87,56 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  // [修正] 改用 useEffect 確保 Modal 開啟且數值變動時自動計算
+  // [重要修正] 運動熱量四維估算
   useEffect(() => {
     if (modalVisible) {
       const type = isCustomAct ? customActType : actType;
-      const weight = profile?.currentWeightKg || 60;
-      const mins = parseFloat(duration) || 0;
+      const weight = profile?.currentWeightKg || 60; // 預設 60kg
       
-      let met = METS[type] || 4.0;
-      let cal = met * weight * (mins / 60);
+      const mins = parseFloat(duration) || 0;
+      const d = parseFloat(dist) || 0;
+      const s = parseFloat(steps) || 0;
       const f = parseFloat(floors) || 0;
-      cal += (f * 0.5);
+      
+      let baseBurn = 0;
+      const met = METS[type] || 4.0;
 
-      setEstCal(Math.round(cal));
+      // 優先級計算邏輯：
+      if (mins > 0) {
+        // 1. 若有時間：METs 公式 (最準確)
+        // Formula: METs * Kg * Hour
+        baseBurn = met * weight * (mins / 60);
+      } else if (d > 0) {
+        // 2. 若無時間但有距離：距離公式
+        // 跑步/走路約 1.036 kcal/kg/km
+        baseBurn = weight * d * 1.036; 
+      } else if (s > 0) {
+        // 3. 若僅有步數：步數公式
+        // 假設平均步幅，約 0.04 kcal/step (隨體重浮動)
+        baseBurn = s * 0.04 * (weight / 60);
+      }
+
+      // 額外加上爬樓層消耗 (每層約 0.5 kcal)
+      baseBurn += (f * 0.5);
+
+      setEstCal(Math.round(baseBurn));
     }
-  }, [actType, customActType, isCustomAct, duration, floors, modalVisible, profile]);
+  }, [actType, customActType, isCustomAct, duration, dist, steps, floors, modalVisible, profile]);
 
   const handleSaveWorkout = async () => {
     const type = isCustomAct ? customActType : actType;
     if (!type) return Alert.alert("請輸入項目");
     
-    let details = `${duration}分`;
-    if (parseFloat(steps) > 0) details += ` / ${steps}步`;
-    if (parseFloat(dist) > 0) details += ` / ${dist}km`;
-    if (parseFloat(floors) > 0) details += ` / ${floors}樓`;
+    let details = [];
+    if (parseFloat(duration) > 0) details.push(`${duration}分`);
+    if (parseFloat(steps) > 0) details.push(`${steps}步`);
+    if (parseFloat(dist) > 0) details.push(`${dist}km`);
+    if (parseFloat(floors) > 0) details.push(`${floors}樓`);
 
     const newLog = {
       activityType: type,
       caloriesBurned: estCal,
-      details: details,
+      details: details.join(' / '),
       loggedAt: selectedDate.toISOString()
     };
     if (editingWorkout) {
@@ -135,14 +158,13 @@ export default function HomeScreen() {
        setCustomActType(log.activityType);
     }
     const parts = (log.details || "").split(' / ');
-    setDuration(parts[0]?.replace('分','') || "0");
+    setDuration(parts.find((s:string)=>s.includes('分'))?.replace('分','') || "0");
     setSteps(parts.find((s:string)=>s.includes('步'))?.replace('步','') || "0");
     setDist(parts.find((s:string)=>s.includes('km'))?.replace('km','') || "0");
     setFloors(parts.find((s:string)=>s.includes('樓'))?.replace('樓','') || "0");
     setModalVisible(true);
   };
 
-  // [新增] 刪除運動類別
   const handleDeleteWorkoutType = async () => {
     if (!actType) return;
     Alert.alert(
@@ -252,7 +274,6 @@ export default function HomeScreen() {
               <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
                  <ThemedText type="title">{editingWorkout ? t('edit', lang) : "新增"}</ThemedText>
                  <View style={{flexDirection:'row', gap:15}}>
-                   {/* 刪除按鈕 (僅在非手動輸入時顯示) */}
                    {!isCustomAct && actType && (
                      <Pressable onPress={handleDeleteWorkoutType}>
                         <Ionicons name="trash-outline" size={24} color="red" />

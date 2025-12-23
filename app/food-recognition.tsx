@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { View, ScrollView, Image, ActivityIndicator, Pressable, TextInput, Alert, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as FileSystem from 'expo-file-system'; // [新增]
+import * as FileSystem from 'expo-file-system';
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { analyzeFoodImage } from "@/lib/gemini";
@@ -34,20 +34,24 @@ export default function FoodRecognitionScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function process() {
-      // 1. 手動模式：不做事，等待輸入
+      // 1. 手動模式
       if (mode === "MANUAL") return;
 
-      // 2. 外部資料庫模式
+      // 2. 外部資料庫模式 (OpenFoodFacts)
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
           const data = JSON.parse(initialData as string);
-          setFoodName(data.foodName);
-          setBaseCal(data.calories_100g.toString());
-          setBasePro(data.protein_100g.toString());
-          setBaseCarb(data.carbs_100g.toString());
-          setBaseFat(data.fat_100g.toString());
-          setBaseSod(data.sodium_100g.toString());
+          if (isMounted) {
+            setFoodName(data.foodName);
+            setBaseCal(data.calories_100g?.toString() || "0");
+            setBasePro(data.protein_100g?.toString() || "0");
+            setBaseCarb(data.carbs_100g?.toString() || "0");
+            setBaseFat(data.fat_100g?.toString() || "0");
+            setBaseSod(data.sodium_100g?.toString() || "0");
+          }
         } catch(e) { console.error(e); }
         return;
       }
@@ -55,7 +59,7 @@ export default function FoodRecognitionScreen() {
       // 3. 條碼模式：查本地資料庫
       if (mode === "BARCODE" && barcode) {
         const p = await getProductByBarcode(barcode as string);
-        if (p) {
+        if (p && isMounted) {
           setFoodName(p.foodName);
           setBaseCal(p.calories_100g.toString());
           setBasePro(p.protein_100g.toString());
@@ -67,41 +71,51 @@ export default function FoodRecognitionScreen() {
       }
 
       // 4. AI 模式 (拍照/相簿)
-      if (mode === "AI" || base64 || imageUri) {
+      // 只要有 imageUri 或 base64 就嘗試進行 AI 分析
+      if (imageUri || base64 || mode === "AI") {
         setLoading(true);
         try {
           let imageBase64 = base64 as string;
           
-          // 如果沒有直接傳入 base64 但有 uri，手動讀取檔案
+          // 如果沒有直接傳入 base64 但有 uri，需要讀取檔案
           if (!imageBase64 && imageUri) {
-            imageBase64 = await FileSystem.readAsStringAsync(imageUri as string, {
+            console.log("Reading image from URI:", imageUri);
+            const fileContent = await FileSystem.readAsStringAsync(imageUri as string, {
               encoding: FileSystem.EncodingType.Base64,
             });
+            imageBase64 = fileContent;
           }
 
           if (imageBase64) {
             const profile = await getProfileLocal();
             const result = await analyzeFoodImage(imageBase64, lang, profile);
-            if (result) {
-              setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
-              setBaseCal(result.calories_100g?.toString() || "0");
-              setBasePro(result.protein_100g?.toString() || "0");
-              setBaseCarb(result.carbs_100g?.toString() || "0");
-              setBaseFat(result.fat_100g?.toString() || "0");
-              setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
-            } else {
-              Alert.alert("辨識失敗", "AI 無法識別圖片，請手動輸入");
+            
+            if (isMounted) {
+              if (result) {
+                setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
+                setBaseCal(result.calories_100g?.toString() || "0");
+                setBasePro(result.protein_100g?.toString() || "0");
+                setBaseCarb(result.carbs_100g?.toString() || "0");
+                setBaseFat(result.fat_100g?.toString() || "0");
+                setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
+              } else {
+                Alert.alert("辨識失敗", "AI 無法識別圖片內容，請手動輸入");
+              }
             }
+          } else {
+            console.warn("No base64 data available");
           }
         } catch (e) {
-          console.error("AI Process Error", e);
-          Alert.alert("錯誤", "讀取圖片或分析失敗");
+          console.error("AI Process Error:", e);
+          if (isMounted) Alert.alert("錯誤", "讀取圖片或分析失敗，請檢查網路連線");
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       }
     }
+    
     process();
+    return () => { isMounted = false; };
   }, [mode, base64, imageUri, initialData, barcode]);
 
   const handleSave = async () => {
@@ -119,7 +133,6 @@ export default function FoodRecognitionScreen() {
       imageUri: imageUri as string
     };
 
-    // 如果有 barcode (包含掃碼失敗轉手動輸入的情況)，將資料存入本地產品庫
     if (barcode) {
       await saveProductLocal(barcode as string, {
         foodName,

@@ -1,93 +1,94 @@
-import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Alert, Pressable, Platform } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useState, useRef } from 'react';
+import { Button, StyleSheet, Text, View, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
+import { t, useLanguage } from '@/lib/i18n';
 
 export default function CameraScreen() {
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
-  const backgroundColor = useThemeColor({}, 'background');
-  const [loading, setLoading] = useState(false);
+  const lang = useLanguage();
 
-  // 1. 拍照
-  const takePhoto = async () => {
-    setLoading(true);
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert("權限不足", "需要相機權限");
-      setLoading(false);
-      return;
-    }
-    await launchPicker(ImagePicker.launchCameraAsync);
-  };
+  if (!permission) return <View />;
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
+        <Button onPress={requestPermission} title="grant permission" />
+      </View>
+    );
+  }
 
-  // 2. 選取相簿
-  const pickImage = async () => {
-    setLoading(true);
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert("權限不足", "需要相簿權限");
-      setLoading(false);
-      return;
-    }
-    await launchPicker(ImagePicker.launchImageLibraryAsync);
-  };
-
-  const launchPicker = async (launcher: any) => {
-    try {
-      const result = await launcher({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, // 開啟遮罩裁切
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        router.replace({ 
-          pathname: "/food-recognition", 
-          params: { imageUri: result.assets[0].uri, mode: 'AI' } 
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          base64: true,
+          quality: 0.5,
         });
-      } else {
-        setLoading(false);
+        if (photo) {
+          router.push({
+            pathname: "/food-recognition",
+            params: { imageUri: photo.uri, base64: photo.base64, mode: "AI" }
+          });
+        }
+      } catch (error) {
+        Alert.alert("Error", "Failed to take picture");
       }
-    } catch (e) {
-      Alert.alert("錯誤", "操作失敗");
-      setLoading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    // [修正] 使用 ImagePicker.MediaType.Images 替代棄用的 MediaTypeOptions
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaType.Images,
+      allowsEditing: true,
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      router.push({
+        pathname: "/food-recognition",
+        params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
+      });
     }
   };
 
   return (
-    <View style={[styles.container, { backgroundColor }]}>
-      {loading ? (
-        <ActivityIndicator size="large" color="#2196F3" />
-      ) : (
-        <View style={styles.center}>
-          <ThemedText type="title" style={{marginBottom: 40}}>選擇圖片來源</ThemedText>
-          
-          <Pressable onPress={takePhoto} style={styles.btn}>
-             <Ionicons name="camera" size={32} color="white" />
-             <ThemedText style={styles.btnText}>拍照</ThemedText>
+    <View style={styles.container}>
+      <CameraView style={styles.camera} ref={cameraRef}>
+        <View style={styles.buttonContainer}>
+          <Pressable style={styles.button} onPress={() => router.back()}>
+            <Ionicons name="close" size={32} color="white" />
           </Pressable>
-
-          <Pressable onPress={pickImage} style={[styles.btn, {marginTop: 20, backgroundColor: '#FF9800'}]}>
-             <Ionicons name="images" size={32} color="white" />
-             <ThemedText style={styles.btnText}>從相簿選取</ThemedText>
+          <Pressable style={styles.captureBtn} onPress={takePicture}>
+            <View style={styles.innerCircle} />
           </Pressable>
-
-          <Pressable onPress={() => router.back()} style={{marginTop: 50}}>
-             <ThemedText style={{color: '#999', textDecorationLine: 'underline'}}>返回上一頁</ThemedText>
+          <Pressable style={styles.button} onPress={pickImage}>
+            <Ionicons name="images" size={32} color="white" />
           </Pressable>
         </View>
-      )}
+      </CameraView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  center: { alignItems: 'center', width: '100%' },
-  btn: { backgroundColor: '#2196F3', padding: 20, borderRadius: 16, alignItems: 'center', width: 200, flexDirection:'row', justifyContent:'center', gap:10 },
-  btnText: { color:'white', fontWeight:'bold', fontSize: 18 }
+  container: { flex: 1, justifyContent: 'center' },
+  camera: { flex: 1 },
+  buttonContainer: {
+    flex: 1, flexDirection: 'row', backgroundColor: 'transparent', margin: 64,
+    justifyContent: 'space-between', alignItems: 'flex-end'
+  },
+  button: { alignItems: 'center' },
+  captureBtn: {
+    width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center', alignItems: 'center'
+  },
+  innerCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white' },
+  text: { fontSize: 24, fontWeight: 'bold', color: 'white' },
 });
