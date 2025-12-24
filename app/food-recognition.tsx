@@ -266,13 +266,13 @@ export default function FoodRecognitionScreen() {
           {imageUri && <Image source={{ uri: imageUri as string }} style={{ width: '100%', height: 200, borderRadius: 12, marginBottom: 16 }} />}
           
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
-             <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>{t('food_name', lang)}</ThemedText>
+             <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>📦 {t('food_name', lang)}</ThemedText>
              <TextInput style={[styles.textInput, {color: tintColor}]} value={foodName} onChangeText={setFoodName} placeholder="輸入食物名稱"/>
 
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
                 <View style={{flexDirection: 'row', gap: 10}}>
-                   <View style={{flex: 1}}><NumberInput label={t('intake_quantity', lang)} value={quantity} onChange={setQuantity} step={0.5} /></View>
-                   <View style={{flex: 1}}><NumberInput label={t('serving_weight', lang)} value={servingWeight} onChange={setServingWeight} step={10} /></View>
+                   <View style={{flex: 1}}><NumberInput label={`🍽️ ${t('intake_quantity', lang)}`} value={quantity} onChange={setQuantity} step={0.5} /></View>
+                   <View style={{flex: 1}}><NumberInput label={`⚖️ ${t('serving_weight', lang)}`} value={servingWeight} onChange={setServingWeight} step={10} /></View>
                 </View>
                 <ThemedText style={{textAlign:'center', fontSize: 14, color: tintColor, fontWeight: 'bold', marginTop: 8}}>
                   總攝取熱量: {currentTotalCal} kcal
@@ -291,35 +291,35 @@ export default function FoodRecognitionScreen() {
                 <ThemedText style={{fontWeight: 'bold', marginBottom: 10}}>{t('per_100g_base', lang)}</ThemedText>
                 
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="熱量 (kcal)" value={baseCal} onChange={setBaseCal} step={10} /></View>
-                   <View style={{flex:1}}><NumberInput label="鈉 (mg)" value={baseSod} onChange={setBaseSod} step={50} /></View>
+                   <View style={{flex:1}}><NumberInput label="🔥 熱量 (kcal)" value={baseCal} onChange={setBaseCal} step={10} /></View>
+                   <View style={{flex:1}}><NumberInput label="🧂 鈉 (mg)" value={baseSod} onChange={setBaseSod} step={50} /></View>
                 </View>
 
                 {/* 巨量營養素 */}
                 <ThemedText style={styles.sectionTitle}>三大營養素</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="蛋白質 (g)" value={basePro} onChange={setBasePro} /></View>
-                   <View style={{flex:1}}><NumberInput label="總碳水 (g)" value={baseCarb} onChange={setBaseCarb} /></View>
-                   <View style={{flex:1}}><NumberInput label="總脂肪 (g)" value={baseFat} onChange={setBaseFat} /></View>
+                   <View style={{flex:1}}><NumberInput label="🥩 蛋白質 (g)" value={basePro} onChange={setBasePro} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍚 碳水化合物 (g)" value={baseCarb} onChange={setBaseCarb} /></View>
+                   <View style={{flex:1}}><NumberInput label="🥑 脂肪 (g)" value={baseFat} onChange={setBaseFat} /></View>
                 </View>
 
                 {/* 詳細脂肪與糖 */}
                 <ThemedText style={styles.sectionTitle}>詳細脂肪與糖</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
-                   <View style={{flex:1}}><NumberInput label="飽和脂肪 (g)" value={baseSatFat} onChange={setBaseSatFat} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍬 糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
+                   <View style={{flex:1}}><NumberInput label="🥥 飽和脂肪 (g)" value={baseSatFat} onChange={setBaseSatFat} /></View>
                 </View>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>
-                   <View style={{flex:1}}><NumberInput label="膽固醇 (mg)" value={baseChol} onChange={setBaseChol} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍟 反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>
+                   <View style={{flex:1}}><NumberInput label="🥚 膽固醇 (mg)" value={baseChol} onChange={setBaseChol} /></View>
                 </View>
 
                 {/* 礦物質 */}
                 <ThemedText style={styles.sectionTitle}>礦物質</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="鋅 (mg)" value={baseZinc} onChange={setBaseZinc} step={0.1} /></View>
-                   <View style={{flex:1}}><NumberInput label="鎂 (mg)" value={baseMag} onChange={setBaseMag} step={1} /></View>
-                   <View style={{flex:1}}><NumberInput label="鐵 (mg)" value={baseIron} onChange={setBaseIron} step={0.1} /></View>
+                   <View style={{flex:1}}><NumberInput label="🔩 鋅 (mg)" value={baseZinc} onChange={setBaseZinc} step={0.1} /></View>
+                   <View style={{flex:1}}><NumberInput label="🥬 鎂 (mg)" value={baseMag} onChange={setBaseMag} step={1} /></View>
+                   <View style={{flex:1}}><NumberInput label="🩸 鐵 (mg)" value={baseIron} onChange={setBaseIron} step={0.1} /></View>
                 </View>
              </View>
           </View>
