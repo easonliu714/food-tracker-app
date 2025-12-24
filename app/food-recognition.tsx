@@ -22,14 +22,10 @@ export default function FoodRecognitionScreen() {
   const [loading, setLoading] = useState(false);
   const [foodName, setFoodName] = useState("");
   
-  // 攝取量設定
-  const [inputType, setInputType] = useState<'SERVING' | 'GRAM'>('SERVING'); // 模式切換
-  const [inputQty, setInputQty] = useState("1"); // 份數 或 總克數
-  
-  // 單份基準設定 (從 DB 讀取或預設)
+  const [inputType, setInputType] = useState<'SERVING' | 'GRAM'>('SERVING');
+  const [inputQty, setInputQty] = useState("1");
   const [unitWeight, setUnitWeight] = useState("100"); 
   
-  // 100g 基準營養素
   const [baseCal, setBaseCal] = useState("0");
   const [basePro, setBasePro] = useState("0");
   const [baseCarb, setBaseCarb] = useState("0");
@@ -66,19 +62,12 @@ export default function FoodRecognitionScreen() {
     setBaseMag(p.magnesium_100g?.toString() || "0");
     setBaseIron(p.iron_100g?.toString() || "0");
     
-    // [新增] 載入保存的 AI 分析結果
-    if (p.aiAnalysis) {
-      setAiAnalysis(p.aiAnalysis);
-    }
-    // [新增] 載入保存的單份重量
-    if (p.servingWeight) {
-      setUnitWeight(p.servingWeight.toString());
-    }
+    if (p.aiAnalysis) setAiAnalysis(p.aiAnalysis);
+    if (p.servingWeight) setUnitWeight(p.servingWeight.toString());
   };
 
   useEffect(() => {
     let isMounted = true;
-
     async function process() {
       if (barcode) setDisplayBarcode(barcode as string);
 
@@ -91,14 +80,15 @@ export default function FoodRecognitionScreen() {
              setDisplayBarcode(log.barcode);
              const p = await getProductByBarcode(log.barcode);
              if (p) loadProductData(p);
-             else setBaseCal(log.totalCalories?.toString() || "0"); // Fallback
+             else setBaseCal(log.totalCalories?.toString() || "0");
           } else {
-             // 若無 Barcode，嘗試還原
-             setBaseCal(log.totalCalories?.toString() || "0"); 
+             setBaseCal(log.totalCalories?.toString() || "0");
           }
         }
         return;
       }
+
+      if (mode === "MANUAL") return;
 
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
@@ -139,7 +129,7 @@ export default function FoodRecognitionScreen() {
           }
         } catch (e) {
           console.error(e);
-          if (isMounted) Alert.alert("錯誤", "AI 分析失敗");
+          if (isMounted) Alert.alert(t('error_title', lang), t('ai_failed', lang));
         } finally {
           if (isMounted) setLoading(false);
         }
@@ -150,9 +140,8 @@ export default function FoodRecognitionScreen() {
   }, [mode, base64, imageUri, initialData, barcode, logId]);
 
   const handleSave = async () => {
-    if (!foodName) return Alert.alert("請輸入食物名稱");
+    if (!foodName) return Alert.alert(t('food_name_placeholder', lang));
     
-    // 計算總重與比例
     let totalWeight = 0;
     if (inputType === 'SERVING') {
       totalWeight = (parseFloat(inputQty) || 1) * (parseFloat(unitWeight) || 100);
@@ -163,8 +152,8 @@ export default function FoodRecognitionScreen() {
     
     const productData = {
       foodName,
-      servingWeight: parseFloat(unitWeight), // [新增] 保存單份重量
-      aiAnalysis: aiAnalysis, // [新增] 保存 AI 分析結果
+      servingWeight: parseFloat(unitWeight),
+      aiAnalysis: aiAnalysis,
       calories_100g: parseFloat(baseCal) || 0,
       protein_100g: parseFloat(basePro) || 0,
       carbs_100g: parseFloat(baseCarb) || 0,
@@ -195,9 +184,32 @@ export default function FoodRecognitionScreen() {
     }
 
     if (mode === "EDIT" && originalLog) {
-      // 編輯模式同樣更新 Product DB
       if (originalLog.barcode) {
-         await saveProductLocal(originalLog.barcode, productData);
+         const oldP = await getProductByBarcode(originalLog.barcode);
+         if (oldP && oldP.calories_100g !== productData.calories_100g) {
+            Alert.alert(
+              t('save_db_confirm_title', lang), 
+              t('save_db_confirm_msg', lang),
+              [
+                { 
+                  text: t('yes_update_all', lang), 
+                  onPress: async () => {
+                    await saveProductLocal(originalLog.barcode, productData);
+                    await updateFoodLogLocal({ ...originalLog, ...logData });
+                    router.dismissTo("/");
+                  }
+                },
+                {
+                  text: t('no_update_current', lang),
+                  onPress: async () => {
+                    await updateFoodLogLocal({ ...originalLog, ...logData });
+                    router.dismissTo("/");
+                  }
+                }
+              ]
+            );
+            return;
+         }
       }
       await updateFoodLogLocal({ ...originalLog, ...logData });
     } else {
@@ -206,7 +218,6 @@ export default function FoodRecognitionScreen() {
     router.dismissTo("/"); 
   };
 
-  // 即時熱量計算
   let liveTotalWeight = 0;
   if (inputType === 'SERVING') {
     liveTotalWeight = (parseFloat(inputQty) || 0) * (parseFloat(unitWeight) || 0);
@@ -219,7 +230,7 @@ export default function FoodRecognitionScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={tintColor} />
-        <ThemedText style={{marginTop: 20}}>AI 正在分析...</ThemedText>
+        <ThemedText style={{marginTop: 20}}>{t('processing', lang)}</ThemedText>
       </View>
     );
   }
@@ -227,8 +238,8 @@ export default function FoodRecognitionScreen() {
   return (
     <View style={[styles.container, { backgroundColor }]}>
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-          <Pressable onPress={() => router.back()}><ThemedText>取消</ThemedText></Pressable>
-          <ThemedText type="subtitle">確認食物資訊</ThemedText>
+          <Pressable onPress={() => router.back()}><ThemedText>{t('cancel', lang)}</ThemedText></Pressable>
+          <ThemedText type="subtitle">{foodName || t('food_name', lang)}</ThemedText>
           <Pressable onPress={handleSave}><ThemedText style={{color: tintColor, fontWeight:'bold'}}>{t('confirm_save', lang)}</ThemedText></Pressable>
        </View>
        
@@ -237,27 +248,26 @@ export default function FoodRecognitionScreen() {
           
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>📦 {t('food_name', lang)}</ThemedText>
-             <TextInput style={[styles.textInput, {color: tintColor}]} value={foodName} onChangeText={setFoodName} placeholder="輸入食物名稱"/>
+             <TextInput style={[styles.textInput, {color: tintColor}]} value={foodName} onChangeText={setFoodName} placeholder={t('food_name_placeholder', lang)}/>
              
              {displayBarcode && (
-               <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>Barcode: {displayBarcode}</ThemedText>
+               <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>{t('barcode_label', lang)}: {displayBarcode}</ThemedText>
              )}
 
-             {/* [修正] 攝取量與單位切換 */}
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
                 <View style={{flexDirection: 'row', marginBottom: 10, justifyContent: 'center', gap: 10}}>
                    <Pressable onPress={() => setInputType('SERVING')} style={[styles.modeBtn, inputType==='SERVING' && {backgroundColor: tintColor}]}>
-                      <ThemedText style={{color: inputType==='SERVING'?'white':textSecondary, fontSize: 12}}>份數輸入</ThemedText>
+                      <ThemedText style={{color: inputType==='SERVING'?'white':textSecondary, fontSize: 12}}>{t('input_serving_mode', lang)}</ThemedText>
                    </Pressable>
                    <Pressable onPress={() => setInputType('GRAM')} style={[styles.modeBtn, inputType==='GRAM' && {backgroundColor: tintColor}]}>
-                      <ThemedText style={{color: inputType==='GRAM'?'white':textSecondary, fontSize: 12}}>總克數輸入</ThemedText>
+                      <ThemedText style={{color: inputType==='GRAM'?'white':textSecondary, fontSize: 12}}>{t('input_gram_mode', lang)}</ThemedText>
                    </Pressable>
                 </View>
 
                 <View style={{flexDirection: 'row', gap: 10}}>
                    <View style={{flex: 1}}>
                       <NumberInput 
-                        label={inputType==='SERVING' ? "攝取份數" : "總攝取量 (g/ml)"} 
+                        label={inputType==='SERVING' ? t('intake_quantity', lang) : t('total_intake_gram', lang)} 
                         value={inputQty} 
                         onChange={setInputQty} 
                         step={inputType==='SERVING' ? 0.5 : 10} 
@@ -265,16 +275,15 @@ export default function FoodRecognitionScreen() {
                    </View>
                    {inputType === 'SERVING' && (
                      <View style={{flex: 1}}>
-                        <NumberInput label="單份重量 (g)" value={unitWeight} onChange={setUnitWeight} step={10} />
+                        <NumberInput label={t('serving_weight', lang)} value={unitWeight} onChange={setUnitWeight} step={10} />
                      </View>
                    )}
                 </View>
                 <ThemedText style={{textAlign:'center', fontSize: 14, color: tintColor, fontWeight: 'bold', marginTop: 8}}>
-                  當次總熱量: {currentTotalCal} kcal
+                  {t('total_calories_display', lang)}: {currentTotalCal} kcal
                 </ThemedText>
              </View>
 
-             {/* [修正] AI 分析結果區塊 */}
              {aiAnalysis && (
                <View style={{marginTop: 16, padding: 12, backgroundColor: '#E3F2FD', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#2196F3'}}>
                  <ThemedText style={{fontWeight:'bold', color: '#1565C0', marginBottom: 4}}>🤖 {t('ai_analysis_result', lang)}</ThemedText>
@@ -287,36 +296,36 @@ export default function FoodRecognitionScreen() {
                 <ThemedText style={{fontWeight: 'bold', marginBottom: 10}}>{t('per_100g_base', lang)}</ThemedText>
                 
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🔥 熱量 (kcal)" value={baseCal} onChange={setBaseCal} step={10} /></View>
-                   <View style={{flex:1}}><NumberInput label="🧂 鈉 (mg)" value={baseSod} onChange={setBaseSod} step={50} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🔥 ${t('calories', lang)}`} value={baseCal} onChange={setBaseCal} step={10} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🧂 ${t('sodium_mg', lang)}`} value={baseSod} onChange={setBaseSod} step={50} /></View>
                 </View>
 
-                <ThemedText style={styles.sectionTitle}>三大營養素</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('macro_nutrients', lang)}</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🥩 蛋白質 (g)" value={basePro} onChange={setBasePro} /></View>
-                   <View style={{flex:1}}><NumberInput label="🍚 碳水 (g)" value={baseCarb} onChange={setBaseCarb} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🥩 ${t('protein_g', lang)}`} value={basePro} onChange={setBasePro} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🍚 ${t('carbs_g', lang)}`} value={baseCarb} onChange={setBaseCarb} /></View>
                 </View>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🥑 脂肪 (g)" value={baseFat} onChange={setBaseFat} /></View>
-                   <View style={{flex:1}}><NumberInput label="🍬 糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
-                </View>
-
-                <ThemedText style={styles.sectionTitle}>詳細成分</ThemedText>
-                <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🥥 飽和脂肪 (g)" value={baseSatFat} onChange={setBaseSatFat} /></View>
-                   <View style={{flex:1}}><NumberInput label="🍟 反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>
-                </View>
-                <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🥚 膽固醇 (mg)" value={baseChol} onChange={setBaseChol} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🥑 ${t('fat_g', lang)}`} value={baseFat} onChange={setBaseFat} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🍬 ${t('sugar', lang)}`} value={baseSugar} onChange={setBaseSugar} /></View>
                 </View>
 
-                <ThemedText style={styles.sectionTitle}>礦物質</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('detailed_fats', lang)}</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🔩 鋅 (mg)" value={baseZinc} onChange={setBaseZinc} step={0.1} /></View>
-                   <View style={{flex:1}}><NumberInput label="🥬 鎂 (mg)" value={baseMag} onChange={setBaseMag} step={1} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🥥 ${t('sat_fat', lang)}`} value={baseSatFat} onChange={setBaseSatFat} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🍟 ${t('trans_fat', lang)}`} value={baseTransFat} onChange={setBaseTransFat} /></View>
                 </View>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🩸 鐵 (mg)" value={baseIron} onChange={setBaseIron} step={0.1} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🥚 ${t('cholesterol', lang)}`} value={baseChol} onChange={setBaseChol} /></View>
+                </View>
+
+                <ThemedText style={styles.sectionTitle}>{t('minerals', lang)}</ThemedText>
+                <View style={styles.nutrientRow}>
+                   <View style={{flex:1}}><NumberInput label={`🔩 ${t('zinc', lang)}`} value={baseZinc} onChange={setBaseZinc} step={0.1} /></View>
+                   <View style={{flex:1}}><NumberInput label={`🥬 ${t('magnesium', lang)}`} value={baseMag} onChange={setBaseMag} step={1} /></View>
+                </View>
+                <View style={styles.nutrientRow}>
+                   <View style={{flex:1}}><NumberInput label={`🩸 ${t('iron', lang)}`} value={baseIron} onChange={setBaseIron} step={0.1} /></View>
                 </View>
              </View>
           </View>

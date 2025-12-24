@@ -71,14 +71,14 @@ export default function AnalysisScreen() {
              ))}
           </View>
 
-          {/* Chart 1: Calories & Weight & Body Fat */}
+          {/* Chart 1 */}
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
-             <ThemedText type="subtitle" style={{marginBottom: 10}}>熱量、體重與體脂</ThemedText>
+             <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('chart_title_cal_weight', lang)}</ThemedText>
              <View style={{flexDirection: 'row', gap: 10, flexWrap:'wrap'}}>
-                <ThemedText style={{fontSize: 10, color: '#4CAF50'}}>■ {t('intake', lang)} (kcal)</ThemedText>
-                <ThemedText style={{fontSize: 10, color: '#FF9800'}}>■ {t('burned', lang)} (kcal)</ThemedText>
+                <ThemedText style={{fontSize: 10, color: '#4CAF50'}}>■ {t('intake', lang)}</ThemedText>
+                <ThemedText style={{fontSize: 10, color: '#FF9800'}}>■ {t('burned', lang)}</ThemedText>
                 <ThemedText style={{fontSize: 10, color: '#2196F3'}}>━ {t('weight', lang)}</ThemedText>
-                <ThemedText style={{fontSize: 10, color: '#9C27B0'}}>━ {t('body_fat', lang)}</ThemedText>
+                <ThemedText style={{fontSize: 10, color: '#9C27B0'}}>-- {t('body_fat', lang)}</ThemedText>
              </View>
              <Svg height={CHART_H + 30} width={CHART_W} style={{marginTop: 10}}>
                 <Line x1="0" y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke="#ccc" />
@@ -87,11 +87,9 @@ export default function AnalysisScreen() {
                    const hIn = Math.min((day.caloriesIn / MAX_CAL) * CHART_H, CHART_H);
                    const hOut = Math.min((day.caloriesOut / MAX_CAL) * CHART_H, CHART_H);
                    
-                   // Weight Normalization (40-120kg mapped to height)
                    const wNorm = Math.max(0, Math.min(1, (day.weight - 40) / 80)); 
                    const yW = CHART_H - (wNorm * CHART_H);
 
-                   // Body Fat Normalization (5-40% mapped to height)
                    const bfNorm = Math.max(0, Math.min(1, (day.bodyFat - 5) / 35));
                    const yBF = CHART_H - (bfNorm * CHART_H);
                    
@@ -128,8 +126,9 @@ export default function AnalysisScreen() {
              </Svg>
           </View>
 
+          {/* Chart 2 */}
           <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16, marginBottom: 50}]}>
-             <ThemedText type="subtitle" style={{marginBottom: 10}}>營養素攝取比例 (%)</ThemedText>
+             <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('chart_title_nutrients', lang)}</ThemedText>
              <View style={{flexDirection: 'row', gap: 12, flexWrap: 'wrap'}}>
                 {NUTRIENTS.map(n => (
                   <ThemedText key={n.key} style={{fontSize: 10, color: n.color}}>■ {n.label}</ThemedText>

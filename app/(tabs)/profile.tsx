@@ -17,8 +17,6 @@ export default function ProfileScreen() {
   
   const lang = useLanguage();
   const [apiKey, setApiKey] = useState("");
-  // FatSecret 相關 State 已移除
-  
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
@@ -148,6 +146,10 @@ export default function ProfileScreen() {
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>Gemini API Key</ThemedText>
               <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} placeholder={t('api_key_placeholder', lang)} secureTextEntry />
+              {/* [新增] 申請連結 */}
+              <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')} style={{marginTop: 8}}>
+                 <ThemedText style={{color:'#2196F3', fontSize: 12}}>{t('get_api_key_link', lang)}</ThemedText>
+              </Pressable>
             </View>
             <View style={{flexDirection: 'row', gap: 10, marginTop: 12}}>
                 <Pressable onPress={handleTestKey} disabled={testingKey} style={[styles.testBtn, {backgroundColor: tintColor, opacity: testingKey?0.5:1}]}>
@@ -222,7 +224,7 @@ export default function ProfileScreen() {
          )}
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.7)</ThemedText>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.8)</ThemedText>
          </Pressable>
          <View style={{height:50}}/>
       </ScrollView>
@@ -237,7 +239,7 @@ export default function ProfileScreen() {
                     <ThemedText style={{fontWeight: lang===l.code?'bold':'normal', color: lang===l.code?tintColor:textColor}}>{l.label}</ThemedText>
                  </Pressable>
                ))}
-               <Pressable onPress={()=>setShowLangPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>取消</ThemedText></Pressable>
+               <Pressable onPress={()=>setShowLangPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>{t('cancel', lang)}</ThemedText></Pressable>
             </View>
          </View>
       </Modal>
@@ -254,13 +256,13 @@ export default function ProfileScreen() {
                 </Pressable>
               ))}
             </ScrollView>
-            <Pressable onPress={() => setShowModelPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>取消</ThemedText></Pressable>
+            <Pressable onPress={() => setShowModelPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>{t('cancel', lang)}</ThemedText></Pressable>
           </View>
         </View>
       </Modal>
 
       <Modal visible={showVersionModal} transparent animationType="slide">
-         <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>Version History</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
+         <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>{t('version_history', lang)}</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
       </Modal>
     </View>
   );

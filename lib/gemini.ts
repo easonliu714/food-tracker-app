@@ -35,19 +35,26 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE'|'CO
     const goal = profile?.trainingGoal || "維持身形";
     const status = remainingCalories < 0 ? "超標(負值)" : "充足";
     
+    // [修正] 明確指定回傳語言
     const prompt = `
       You are a professional nutritionist AI.
       User Profile: Age ${age}, Goal: ${goal}.
       Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
+      
       Please suggest a recipe/meal plan (Type: ${type}).
-      Language: ${lang}.
+      **IMPORTANT: Reply in language code: ${lang}.**
+      
+      Strategy:
+      - If remaining calories is negative, suggest a strict, low-calorie, high-satiety meal.
+      - If positive, suggest a balanced meal fitting the budget.
+
       Output JSON format:
       {
-        "title": "Meal Name",
+        "title": "Meal Name (in ${lang})",
         "calories": 500,
         "ingredients": ["item1", "item2"],
         "steps": ["step1", "step2"],
-        "reason": "Why this fits the user's current status and goal."
+        "reason": "Reason in ${lang}"
       }
       Only return JSON.
     `;
@@ -67,19 +74,22 @@ export async function suggestWorkout(profile: any, remainingCalories: number, la
     const goal = profile?.trainingGoal || "維持身形";
     const status = remainingCalories < 0 ? "超標(負值)" : "充足";
 
+    // [修正] 明確指定回傳語言
     const prompt = `
       You are a fitness coach AI.
       User Profile: Age ${age}, Gender ${profile?.gender}, Goal: ${goal}.
       Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
+      
       Suggest a workout session.
-      Language: ${lang}.
+      **IMPORTANT: Reply in language code: ${lang}.**
+      
       Output JSON format:
       {
-        "activity": "Activity Name",
+        "activity": "Activity Name (in ${lang})",
         "duration_minutes": 30,
         "estimated_calories": 200,
-        "reason": "Why this workout fits the goal and calorie status.",
-        "video_url": "https://youtube.com/results?search_query=..." (search query link)
+        "reason": "Reason in ${lang}",
+        "video_url": "https://youtube.com/results?search_query=..."
       }
       Only return JSON.
     `;
@@ -98,10 +108,10 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
     const age = profile?.birthYear ? new Date().getFullYear() - parseInt(profile.birthYear) : 30;
     const goal = profile?.trainingGoal || "維持身形";
 
-    // [修正] 優化 Prompt：要求名稱簡潔，詳細資訊分開
+    // [修正] 優化 Prompt：指定語言、單位、欄位
     const prompt = `
       Analyze this food image. 
-      Language: ${lang}.
+      **IMPORTANT: Output all text in language code: ${lang}.**
       User Profile: Age ${age}, Goal: ${goal}.
 
       Provide detailed nutrition facts **PER 100g**.
@@ -112,8 +122,8 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
       - Basic: Calories, Protein, Carbs, Fat, Sodium
       - Detailed: Sugar, Saturated Fat, Trans Fat, Cholesterol
       - Minerals: Zinc, Magnesium, Iron
-      - Composition: Detailed ingredients list.
-      - Suggestion: Advice considering the user's goal.
+      - Composition: Detailed ingredients list (in ${lang}).
+      - Suggestion: Advice considering the user's goal (in ${lang}).
 
       Output JSON format:
       {
@@ -130,8 +140,8 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
         "zinc_100g": 0.5,
         "magnesium_100g": 10,
         "iron_100g": 1.2,
-        "composition": "Short composition description",
-        "suggestion": "Advice considering the user's goal."
+        "composition": "Ingredients description",
+        "suggestion": "Dietary advice"
       }
       Only return JSON.
     `;
