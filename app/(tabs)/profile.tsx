@@ -1,3 +1,6 @@
+// 僅更新 useEffect 中的 load 函式與相關選項，其餘介面維持不變
+// 請直接覆蓋檔案以確保最新設定生效
+
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal } from "react-native";
@@ -17,7 +20,8 @@ export default function ProfileScreen() {
   
   const lang = useLanguage();
   const [apiKey, setApiKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemini-1.5-flash");
+  // 預設為最新模型
+  const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
   const [gender, setGender] = useState<"male"|"female">("male");
@@ -74,12 +78,10 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     await saveSettings({ apiKey, model: selectedModel, language: lang });
     
-    // 計算 BMR 與 TDEE
     const w = parseFloat(currentWeight) || 60;
     const h = parseInt(heightCm) || 170;
     const age = new Date().getFullYear() - (parseInt(birthYear) || 1990);
     
-    // Mifflin-St Jeor
     let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
     
     const activityMultipliers: Record<string, number> = {
@@ -90,7 +92,6 @@ export default function ProfileScreen() {
     };
     const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
     
-    // 根據目標調整熱量
     let targetCal = tdee;
     if (trainingGoal === 'goal_fat_loss') targetCal -= 400;
     else if (trainingGoal.includes('strength') || trainingGoal === 'goal_tone_up') targetCal += 200;
@@ -117,8 +118,8 @@ export default function ProfileScreen() {
     
     if (res.valid && res.models) {
       setModelList(res.models);
-      // 優先選 1.5 flash
-      const bestMatch = res.models.find(m => m.includes('1.5-flash')) || res.models[0];
+      // 優先選 flash-latest
+      const bestMatch = res.models.find(m => m.includes('flash-latest')) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
       Alert.alert("測試成功", `金鑰有效！已預選 ${bestMatch}`);
     } else {
@@ -224,7 +225,7 @@ export default function ProfileScreen() {
          )}
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.6)</ThemedText>
+            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.7)</ThemedText>
          </Pressable>
          <View style={{height:50}}/>
       </ScrollView>

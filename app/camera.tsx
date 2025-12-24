@@ -1,29 +1,31 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState, useRef } from 'react';
-import { Button, StyleSheet, Text, View, Pressable, Alert } from 'react-native';
+import { StyleSheet, View, Pressable, Alert, ActivityIndicator, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { t, useLanguage } from '@/lib/i18n';
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
-  const lang = useLanguage();
+  const [processing, setProcessing] = useState(false);
 
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
-        <Button onPress={requestPermission} title="grant permission" />
+        <Text style={{ textAlign: 'center', color:'white' }}>Need camera permission</Text>
+        <Pressable onPress={requestPermission} style={{padding:10, backgroundColor:'white', marginTop:10}}>
+           <Text>Grant Permission</Text>
+        </Pressable>
       </View>
     );
   }
 
   const takePicture = async () => {
-    if (cameraRef.current) {
+    if (cameraRef.current && !processing) {
+      setProcessing(true);
       try {
         const photo = await cameraRef.current.takePictureAsync({
           base64: true,
@@ -37,12 +39,12 @@ export default function CameraScreen() {
         }
       } catch (error) {
         Alert.alert("Error", "Failed to take picture");
+        setProcessing(false);
       }
     }
   };
 
   const pickImage = async () => {
-    // [修正] 使用 ImagePicker.MediaType.Images 替代棄用的 MediaTypeOptions
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaType.Images,
       allowsEditing: true,
@@ -60,35 +62,48 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} ref={cameraRef}>
+      <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} />
+      
+      {/* 覆蓋層：控制按鈕 (移出 CameraView 以解決警告) */}
+      <View style={styles.overlay}>
         <View style={styles.buttonContainer}>
-          <Pressable style={styles.button} onPress={() => router.back()}>
+          <Pressable style={styles.button} onPress={() => router.back()} disabled={processing}>
             <Ionicons name="close" size={32} color="white" />
           </Pressable>
-          <Pressable style={styles.captureBtn} onPress={takePicture}>
-            <View style={styles.innerCircle} />
+          
+          <Pressable style={styles.captureBtn} onPress={takePicture} disabled={processing}>
+            {processing ? <ActivityIndicator color="black" /> : <View style={styles.innerCircle} />}
           </Pressable>
-          <Pressable style={styles.button} onPress={pickImage}>
+          
+          <Pressable style={styles.button} onPress={pickImage} disabled={processing}>
             <Ionicons name="images" size={32} color="white" />
           </Pressable>
         </View>
-      </CameraView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center' },
-  camera: { flex: 1 },
-  buttonContainer: {
-    flex: 1, flexDirection: 'row', backgroundColor: 'transparent', margin: 64,
-    justifyContent: 'space-between', alignItems: 'flex-end'
+  container: { flex: 1, backgroundColor: 'black' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    paddingBottom: 50,
   },
-  button: { alignItems: 'center' },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  button: { 
+    alignItems: 'center', 
+    padding: 10 
+  },
   captureBtn: {
-    width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.8)',
     justifyContent: 'center', alignItems: 'center'
   },
-  innerCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white' },
-  text: { fontSize: 24, fontWeight: 'bold', color: 'white' },
+  innerCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white', borderWidth: 2, borderColor: '#ddd' },
 });

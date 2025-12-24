@@ -18,6 +18,10 @@ export default function FoodRecognitionScreen() {
   
   const [loading, setLoading] = useState(false);
   const [foodName, setFoodName] = useState("");
+  
+  // [新增] 攝取份數 (預設 1)
+  const [quantity, setQuantity] = useState("1");
+  // [修改] 單份重量 (預設 100g)
   const [servingWeight, setServingWeight] = useState("100"); 
   
   const [baseCal, setBaseCal] = useState("0");
@@ -37,10 +41,8 @@ export default function FoodRecognitionScreen() {
     let isMounted = true;
 
     async function process() {
-      // 1. 手動模式
       if (mode === "MANUAL") return;
 
-      // 2. 外部資料庫模式 (OpenFoodFacts)
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
           const data = JSON.parse(initialData as string);
@@ -56,7 +58,6 @@ export default function FoodRecognitionScreen() {
         return;
       }
 
-      // 3. 條碼模式：查本地資料庫
       if (mode === "BARCODE" && barcode) {
         const p = await getProductByBarcode(barcode as string);
         if (p && isMounted) {
@@ -70,26 +71,19 @@ export default function FoodRecognitionScreen() {
         return;
       }
 
-      // 4. AI 模式 (拍照/相簿)
-      // 只要有 imageUri 或 base64 就嘗試進行 AI 分析
       if (imageUri || base64 || mode === "AI") {
         setLoading(true);
         try {
           let imageBase64 = base64 as string;
-          
-          // 如果沒有直接傳入 base64 但有 uri，需要讀取檔案
           if (!imageBase64 && imageUri) {
-            console.log("Reading image from URI:", imageUri);
-            const fileContent = await FileSystem.readAsStringAsync(imageUri as string, {
+            imageBase64 = await FileSystem.readAsStringAsync(imageUri as string, {
               encoding: FileSystem.EncodingType.Base64,
             });
-            imageBase64 = fileContent;
           }
 
           if (imageBase64) {
             const profile = await getProfileLocal();
             const result = await analyzeFoodImage(imageBase64, lang, profile);
-            
             if (isMounted) {
               if (result) {
                 setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
@@ -102,18 +96,15 @@ export default function FoodRecognitionScreen() {
                 Alert.alert("辨識失敗", "AI 無法識別圖片內容，請手動輸入");
               }
             }
-          } else {
-            console.warn("No base64 data available");
           }
         } catch (e) {
           console.error("AI Process Error:", e);
-          if (isMounted) Alert.alert("錯誤", "讀取圖片或分析失敗，請檢查網路連線");
+          if (isMounted) Alert.alert("錯誤", "讀取圖片或分析失敗");
         } finally {
           if (isMounted) setLoading(false);
         }
       }
     }
-    
     process();
     return () => { isMounted = false; };
   }, [mode, base64, imageUri, initialData, barcode]);
@@ -121,7 +112,12 @@ export default function FoodRecognitionScreen() {
   const handleSave = async () => {
     if (!foodName) return Alert.alert("請輸入食物名稱");
     
-    const ratio = (parseFloat(servingWeight) || 0) / 100;
+    // 計算邏輯：(單份重量 * 攝取份數) = 總攝取克數
+    // 總熱量 = 總攝取克數 * (每100g熱量 / 100)
+    const qty = parseFloat(quantity) || 1;
+    const unitWt = parseFloat(servingWeight) || 100;
+    const totalWeight = qty * unitWt;
+    const ratio = totalWeight / 100;
     
     const finalLog = {
       foodName,
@@ -157,6 +153,9 @@ export default function FoodRecognitionScreen() {
     );
   }
 
+  // 即時計算總熱量顯示
+  const currentTotalCal = Math.round(parseFloat(baseCal) * ((parseFloat(quantity) * parseFloat(servingWeight)) / 100) || 0);
+
   return (
     <View style={[styles.container, { backgroundColor }]}>
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
@@ -170,17 +169,20 @@ export default function FoodRecognitionScreen() {
           
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>{t('food_name', lang)}</ThemedText>
-             <TextInput 
-               style={[styles.textInput, {color: tintColor}]} 
-               value={foodName} 
-               onChangeText={setFoodName} 
-               placeholder="輸入食物名稱"
-             />
+             <TextInput style={[styles.textInput, {color: tintColor}]} value={foodName} onChangeText={setFoodName} placeholder="輸入食物名稱"/>
 
+             {/* [新增] 攝取量計算區塊 */}
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
-                <NumberInput label={t('serving_weight', lang)} value={servingWeight} onChange={setServingWeight} step={10} />
-                <ThemedText style={{textAlign:'center', fontSize: 12, color: '#666', marginTop: 4}}>
-                  總熱量: {Math.round(parseFloat(baseCal) * (parseFloat(servingWeight)/100) || 0)} kcal
+                <View style={{flexDirection: 'row', gap: 10}}>
+                   <View style={{flex: 1}}>
+                      <NumberInput label={t('intake_quantity', lang)} value={quantity} onChange={setQuantity} step={0.5} />
+                   </View>
+                   <View style={{flex: 1}}>
+                      <NumberInput label={t('serving_weight', lang)} value={servingWeight} onChange={setServingWeight} step={10} />
+                   </View>
+                </View>
+                <ThemedText style={{textAlign:'center', fontSize: 14, color: tintColor, fontWeight: 'bold', marginTop: 8}}>
+                  總攝取熱量: {currentTotalCal} kcal
                 </ThemedText>
              </View>
 

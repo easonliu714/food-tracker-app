@@ -5,31 +5,23 @@ import { getSettings } from "./storage";
 export async function validateApiKey(apiKey: string) {
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    // 使用 listModels 測試連線
-    const modelQuery = await genAI.getGenerativeModel({ model: "gemini-pro" }); 
-    // 實際上 listModels 需要 Admin SDK 或直接發 requests，這邊用簡單的 generateContent 測試
-    // 但為了取得模型清單，正規做法如下，若失敗代表 Key 無效
-    
-    // 為了更準確測試，我們嘗試一個極小的生成請求
-    const testModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // 假設使用較新模型
+    // 使用 flash-latest 進行輕量測試
+    const testModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); 
     try {
       await testModel.generateContent("Hi");
     } catch (e: any) {
-      // 捕捉特定錯誤
       if (e.message?.includes("API key not valid") || e.message?.includes("key expired") || e.status === 400) {
          return { valid: false, error: "API Key 無效或已過期" };
       }
-      // 若是 Model 不存在，Key 可能是好的，繼續往下
     }
 
-    // 模擬回傳模型清單 (Gemini Client SDK 目前不一定支援 listModels，通常手動維護清單)
-    // 這裡我們列出目前支援的穩定模型
+    // 更新模型清單，優先推薦 flash-latest
     const availableModels = [
-      "gemini-2.0-flash", 
-      "gemini-1.5-flash", 
+      "gemini-flash-latest",
+      "gemini-2.0-flash-exp",
+      "gemini-1.5-flash",
       "gemini-1.5-pro", 
-      "gemini-pro", 
-      "gemini-flash-latest"
+      "gemini-pro"
     ];
     
     return { valid: true, models: availableModels };
@@ -43,7 +35,8 @@ async function getModel() {
   const { apiKey, model } = await getSettings();
   if (!apiKey) throw new Error("API Key not found");
   const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: model || "gemini-1.5-flash" });
+  // 若設定中的模型失效，自動 fallback 到 gemini-flash-latest
+  return genAI.getGenerativeModel({ model: model || "gemini-flash-latest" });
 }
 
 // --- AI 功能 ---
@@ -163,19 +156,4 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
     console.error(e);
     return null;
   }
-}
-
-// 簡單的熱量計算 (非 AI)
-export function calculateWorkoutCalories(type: string, duration: number, weight: number, dist?: number, steps?: number) {
-  // 簡易 METs 表
-  const mets: Record<string, number> = {
-    'walk': 3.5, 'run': 8, 'yoga': 2.5, 'swim': 6, 'cycle': 5,
-    '快走': 4.5, '慢跑': 7, '爬梯': 8, '健身': 5
-  };
-  let met = 4;
-  for(const k in mets) {
-     if(type.includes(k)) met = mets[k];
-  }
-  // Formula: kcal = MET * weight(kg) * duration(hr)
-  return Math.round(met * weight * (duration/60));
 }

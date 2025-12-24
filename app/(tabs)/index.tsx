@@ -20,7 +20,6 @@ import {
 import { NumberInput } from "@/components/NumberInput";
 import { t, useLanguage } from "@/lib/i18n";
 
-// METs 表更新
 const METS: Record<string, number> = {
   '走路': 3.5, '跑步': 8.0, '爬梯': 8.0, '打掃': 3.0, '瑜珈': 2.5,
   '慢走': 2.0, '快走': 5.0, '慢跑': 6.0, '快跑': 10.0, '一般運動': 4.0,
@@ -42,22 +41,23 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // 運動 Modal
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [actType, setActType] = useState("");
   const [customActType, setCustomActType] = useState("");
   const [isCustomAct, setIsCustomAct] = useState(false);
-  
   const [duration, setDuration] = useState("0");
   const [steps, setSteps] = useState("0");
   const [dist, setDist] = useState("0");
   const [floors, setFloors] = useState("0");
   const [estCal, setEstCal] = useState(0);
 
+  // 食物編輯 Modal (調整份數)
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editName, setEditName] = useState("");
-  const [editCal, setEditCal] = useState("");
+  const [portionMultiplier, setPortionMultiplier] = useState("1.0"); // 預設倍率
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -87,11 +87,11 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  // [重要修正] 運動熱量四維估算
+  // 運動熱量四維估算
   useEffect(() => {
     if (modalVisible) {
       const type = isCustomAct ? customActType : actType;
-      const weight = profile?.currentWeightKg || 60; // 預設 60kg
+      const weight = profile?.currentWeightKg || 60;
       
       const mins = parseFloat(duration) || 0;
       const d = parseFloat(dist) || 0;
@@ -101,24 +101,14 @@ export default function HomeScreen() {
       let baseBurn = 0;
       const met = METS[type] || 4.0;
 
-      // 優先級計算邏輯：
       if (mins > 0) {
-        // 1. 若有時間：METs 公式 (最準確)
-        // Formula: METs * Kg * Hour
         baseBurn = met * weight * (mins / 60);
       } else if (d > 0) {
-        // 2. 若無時間但有距離：距離公式
-        // 跑步/走路約 1.036 kcal/kg/km
         baseBurn = weight * d * 1.036; 
       } else if (s > 0) {
-        // 3. 若僅有步數：步數公式
-        // 假設平均步幅，約 0.04 kcal/step (隨體重浮動)
         baseBurn = s * 0.04 * (weight / 60);
       }
-
-      // 額外加上爬樓層消耗 (每層約 0.5 kcal)
       baseBurn += (f * 0.5);
-
       setEstCal(Math.round(baseBurn));
     }
   }, [actType, customActType, isCustomAct, duration, dist, steps, floors, modalVisible, profile]);
@@ -186,8 +176,36 @@ export default function HomeScreen() {
     );
   };
 
-  const handleEditFood = (log: any) => { setEditingLog(log); setEditName(log.foodName); setEditCal(log.totalCalories.toString()); setEditModalVisible(true); };
-  const handleSaveEditFood = async () => { if (editingLog) { await updateFoodLogLocal({ ...editingLog, foodName: editName, totalCalories: parseInt(editCal) || 0 }); setEditModalVisible(false); setEditingLog(null); loadData(); } };
+  // 飲食編輯邏輯：載入並重設倍率
+  const handleEditFood = (log: any) => { 
+    setEditingLog(log); 
+    setEditName(log.foodName); 
+    setPortionMultiplier("1.0"); // 預設為 1.0 倍 (不變)
+    setEditModalVisible(true); 
+  };
+
+  const handleSaveEditFood = async () => { 
+    if (editingLog) { 
+      const multiplier = parseFloat(portionMultiplier) || 1;
+      
+      // 按比例更新所有營養素
+      const newLog = { 
+        ...editingLog, 
+        foodName: editName, 
+        totalCalories: Math.round(editingLog.totalCalories * multiplier),
+        totalProteinG: Math.round((editingLog.totalProteinG || 0) * multiplier),
+        totalCarbsG: Math.round((editingLog.totalCarbsG || 0) * multiplier),
+        totalFatG: Math.round((editingLog.totalFatG || 0) * multiplier),
+        totalSodiumMg: Math.round((editingLog.totalSodiumMg || 0) * multiplier),
+      };
+      
+      await updateFoodLogLocal(newLog); 
+      setEditModalVisible(false); 
+      setEditingLog(null); 
+      loadData(); 
+    } 
+  };
+
   const handleQuickAdd = async (item: any) => { Alert.alert(t('quick_record', lang), `再吃一次「${item.foodName}」？`, [{ text: "取消", style: "cancel" }, { text: "確定", onPress: async () => { await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() }); loadData(); } }]); };
   
   const renderRightActions = (id: number, type: 'food'|'activity') => ( <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}><Ionicons name="trash" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>{t('delete', lang)}</ThemedText></Pressable> );
@@ -269,6 +287,7 @@ export default function HomeScreen() {
         </ScrollView>
 
         <Modal visible={modalVisible} transparent animationType="slide">
+          {/* Workout Modal Content (Same as before) */}
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
@@ -312,8 +331,40 @@ export default function HomeScreen() {
           </View>
         </Modal>
 
+        {/* Edit Food Modal (Portion Adjustment) */}
         <Modal visible={editModalVisible} transparent animationType="slide">
-           <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor: cardBackground}]}><ThemedText type="title">{t('edit', lang)}</ThemedText><TextInput style={[styles.input, {color:'#000', backgroundColor:'white'}]} value={editName} onChangeText={setEditName}/><NumberInput label="熱量" value={editCal} onChange={setEditCal} step={10}/><View style={{flexDirection:'row', gap:10}}><Pressable onPress={()=>setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth:1}]}><ThemedText>取消</ThemedText></Pressable><Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor:tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable></View></View></View>
+           <View style={styles.modalOverlay}>
+             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
+               <ThemedText type="title">{t('edit', lang)}</ThemedText>
+               
+               <TextInput style={[styles.input, {color:'#000', backgroundColor:'white', marginTop:10}]} value={editName} onChangeText={setEditName}/>
+               
+               <View style={{marginTop: 15, padding: 10, backgroundColor: '#F0F0F0', borderRadius: 8}}>
+                 <NumberInput label={t('adjust_portion', lang)} value={portionMultiplier} onChange={setPortionMultiplier} step={0.5} />
+                 
+                 {editingLog && (
+                   <View style={{flexDirection:'row', justifyContent:'space-between', marginTop: 10}}>
+                     <View>
+                        <ThemedText style={{fontSize:12, color:textSecondary}}>{t('original_val', lang)}</ThemedText>
+                        <ThemedText>{editingLog.totalCalories} kcal</ThemedText>
+                     </View>
+                     <Ionicons name="arrow-forward" size={20} color={tintColor} style={{alignSelf:'center'}}/>
+                     <View>
+                        <ThemedText style={{fontSize:12, color:textSecondary}}>{t('new_val', lang)}</ThemedText>
+                        <ThemedText style={{fontWeight:'bold', color:tintColor}}>
+                          {Math.round(editingLog.totalCalories * (parseFloat(portionMultiplier)||1))} kcal
+                        </ThemedText>
+                     </View>
+                   </View>
+                 )}
+               </View>
+
+               <View style={{flexDirection:'row', gap:10, marginTop: 20}}>
+                 <Pressable onPress={()=>setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth:1}]}><ThemedText>取消</ThemedText></Pressable>
+                 <Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor:tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
+               </View>
+             </View>
+           </View>
         </Modal>
       </View>
     </GestureHandlerRootView>
