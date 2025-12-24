@@ -31,7 +31,7 @@ export default function FoodRecognitionScreen() {
   const [baseCarb, setBaseCarb] = useState("0");
   const [baseFat, setBaseFat] = useState("0");
   const [baseSod, setBaseSod] = useState("0");
-  // Advanced Nutrients
+  // Advanced
   const [baseSugar, setBaseSugar] = useState("0");
   const [baseSatFat, setBaseSatFat] = useState("0");
   const [baseTransFat, setBaseTransFat] = useState("0");
@@ -41,7 +41,7 @@ export default function FoodRecognitionScreen() {
   const [baseIron, setBaseIron] = useState("0");
 
   const [aiAnalysis, setAiAnalysis] = useState<{composition?: string, suggestion?: string} | null>(null);
-  const [originalLog, setOriginalLog] = useState<any>(null); // For Edit Mode comparison
+  const [originalLog, setOriginalLog] = useState<any>(null);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -52,15 +52,14 @@ export default function FoodRecognitionScreen() {
     let isMounted = true;
 
     async function process() {
-      // Mode: EDIT (Existing Log)
+      // Debug log
+      console.log(`[FoodRecognition] Mode: ${mode}, Barcode: ${barcode}`);
+
       if (mode === "EDIT" && logId) {
         const log = await getFoodLogById(Number(logId));
         if (log && isMounted) {
           setOriginalLog(log);
           setFoodName(log.foodName);
-          // 回推基準值 (假設 log 儲存時有保留 base_nutrients，若無則只能根據總值反推或設為預設)
-          // 這裡簡化：若無 product 資料，則無法精確回推每 100g，暫時將總值當作 100g (若無更好參考)
-          // 但若該 log 是從 barcode 來的，我們可以查 product
           if (log.barcode) {
              const p = await getProductByBarcode(log.barcode);
              if (p) {
@@ -68,11 +67,16 @@ export default function FoodRecognitionScreen() {
                setBasePro(p.protein_100g?.toString());
                setBaseCarb(p.carbs_100g?.toString());
                setBaseFat(p.fat_100g?.toString());
-               // ... load others
+               setBaseSod(p.sodium_100g?.toString());
+               setBaseSugar(p.sugar_100g?.toString());
+               setBaseSatFat(p.saturated_fat_100g?.toString());
+               setBaseTransFat(p.trans_fat_100g?.toString());
+               setBaseChol(p.cholesterol_100g?.toString());
+               setBaseZinc(p.zinc_100g?.toString());
+               setBaseMag(p.magnesium_100g?.toString());
+               setBaseIron(p.iron_100g?.toString());
              }
           } else {
-             // 若無 barcode 關聯，則假設當初輸入的總量就是目前顯示的，反推 100g 有困難，
-             // 建議直接顯示總量讓用戶改。但為了 UI 一致性，我們這裡顯示總量，將份數設為 1，每份 100g (虛擬)
              setBaseCal(log.totalCalories?.toString());
              setBasePro(log.totalProteinG?.toString());
              setBaseCarb(log.totalCarbsG?.toString());
@@ -108,11 +112,10 @@ export default function FoodRecognitionScreen() {
         if (p && isMounted) {
           setFoodName(p.foodName);
           setBaseCal(p.calories_100g?.toString() || "0");
-          setBasePro(p.protein_100g?.toString() || "0");
-          setBaseCarb(p.carbs_100g?.toString() || "0");
-          setBaseFat(p.fat_100g?.toString() || "0");
+          setBasePro(p.protein_100g.toString());
+          setBaseCarb(p.carbs_100g.toString());
+          setBaseFat(p.fat_100g.toString());
           setBaseSod(p.sodium_100g?.toString() || "0");
-          // Load extra fields if they exist
           setBaseSugar(p.sugar_100g?.toString() || "0");
           setBaseSatFat(p.saturated_fat_100g?.toString() || "0");
           setBaseTransFat(p.trans_fat_100g?.toString() || "0");
@@ -170,7 +173,6 @@ export default function FoodRecognitionScreen() {
     const totalWeight = qty * unitWt;
     const ratio = totalWeight / 100;
     
-    // 準備要儲存的產品基準資料 (每 100g)
     const productData = {
       foodName,
       calories_100g: parseFloat(baseCal),
@@ -187,7 +189,6 @@ export default function FoodRecognitionScreen() {
       iron_100g: parseFloat(baseIron),
     };
 
-    // 準備這筆紀錄的總值
     const logData = {
       foodName,
       totalCalories: Math.round(productData.calories_100g * ratio),
@@ -196,21 +197,19 @@ export default function FoodRecognitionScreen() {
       totalFatG: Math.round(productData.fat_100g * ratio),
       totalSodiumMg: Math.round(productData.sodium_100g * ratio),
       imageUri: imageUri as string,
-      barcode: barcode as string, // 保留 barcode 關聯
+      barcode: barcode as string, 
     };
 
-    // 如果是掃碼模式 (包含失敗轉手動且有帶 barcode)，必定更新本地資料庫
+    // [關鍵修正] 確保條碼被儲存
     if (barcode) {
+      console.log(`[Save] Saving product to local DB with barcode: ${barcode}`);
       await saveProductLocal(barcode as string, productData);
     }
 
-    // 編輯模式處理
     if (mode === "EDIT" && originalLog) {
-      // 檢查是否需要同步更新產品庫 (若該紀錄有 barcode)
       if (originalLog.barcode) {
          const oldP = await getProductByBarcode(originalLog.barcode);
          if (oldP && JSON.stringify(oldP) !== JSON.stringify(productData)) {
-            // 數值有變，詢問用戶
             Alert.alert(
               "營養成分變更", 
               "您修改了基準營養數值，是否要同步更新資料庫？(這將影響所有使用此條碼的紀錄)",
@@ -237,7 +236,6 @@ export default function FoodRecognitionScreen() {
       }
       await updateFoodLogLocal({ ...originalLog, ...logData });
     } else {
-      // 新增模式
       await saveFoodLogLocal(logData);
     }
     router.dismissTo("/"); 
@@ -290,35 +288,37 @@ export default function FoodRecognitionScreen() {
              <View style={{marginTop: 20}}>
                 <ThemedText style={{fontWeight: 'bold', marginBottom: 10}}>{t('per_100g_base', lang)}</ThemedText>
                 
+                {/* [修正] UI Layout: 調整為每行兩個項目 */}
                 <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🔥 熱量 (kcal)" value={baseCal} onChange={setBaseCal} step={10} /></View>
                    <View style={{flex:1}}><NumberInput label="🧂 鈉 (mg)" value={baseSod} onChange={setBaseSod} step={50} /></View>
                 </View>
 
-                {/* 巨量營養素 */}
                 <ThemedText style={styles.sectionTitle}>三大營養素</ThemedText>
                 <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🥩 蛋白質 (g)" value={basePro} onChange={setBasePro} /></View>
-                   <View style={{flex:1}}><NumberInput label="🍚 碳水化合物 (g)" value={baseCarb} onChange={setBaseCarb} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍚 碳水 (g)" value={baseCarb} onChange={setBaseCarb} /></View>
+                </View>
+                <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🥑 脂肪 (g)" value={baseFat} onChange={setBaseFat} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍬 糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
                 </View>
 
-                {/* 詳細脂肪與糖 */}
-                <ThemedText style={styles.sectionTitle}>詳細脂肪與糖</ThemedText>
+                <ThemedText style={styles.sectionTitle}>詳細脂肪</ThemedText>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🍬 糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
                    <View style={{flex:1}}><NumberInput label="🥥 飽和脂肪 (g)" value={baseSatFat} onChange={setBaseSatFat} /></View>
+                   <View style={{flex:1}}><NumberInput label="🍟 反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>
                 </View>
                 <View style={styles.nutrientRow}>
-                   <View style={{flex:1}}><NumberInput label="🍟 反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>
                    <View style={{flex:1}}><NumberInput label="🥚 膽固醇 (mg)" value={baseChol} onChange={setBaseChol} /></View>
                 </View>
 
-                {/* 礦物質 */}
                 <ThemedText style={styles.sectionTitle}>礦物質</ThemedText>
                 <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🔩 鋅 (mg)" value={baseZinc} onChange={setBaseZinc} step={0.1} /></View>
                    <View style={{flex:1}}><NumberInput label="🥬 鎂 (mg)" value={baseMag} onChange={setBaseMag} step={1} /></View>
+                </View>
+                <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🩸 鐵 (mg)" value={baseIron} onChange={setBaseIron} step={0.1} /></View>
                 </View>
              </View>

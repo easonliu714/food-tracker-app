@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// (前面 KEYS 和其他函式保持不變)
 const KEYS = {
   USER_SESSION: 'user_session',
   PROFILE: 'user_profile',
@@ -82,22 +83,34 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// --- 產品資料庫 (包含詳細營養素) ---
+// [重點修正] 產品資料庫存取 (加入日誌)
 export const saveProductLocal = async (barcode: string, productData: any) => {
-  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
-  const products = data ? JSON.parse(data) : {};
-  // 這裡儲存的是每 100g 的基準值
-  products[barcode] = productData;
-  await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
+  try {
+    console.log(`[Storage] Saving product: ${barcode}`, productData.foodName);
+    const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+    const products = data ? JSON.parse(data) : {};
+    products[barcode] = productData;
+    await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
+    console.log(`[Storage] Product saved successfully.`);
+  } catch (e) {
+    console.error(`[Storage] Failed to save product`, e);
+  }
 };
 
 export const getProductByBarcode = async (barcode: string) => {
-  const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
-  const products = data ? JSON.parse(data) : {};
-  return products[barcode] || null;
+  try {
+    const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
+    const products = data ? JSON.parse(data) : {};
+    const product = products[barcode];
+    console.log(`[Storage] Get product for ${barcode}:`, product ? "Found" : "Not Found");
+    return product || null;
+  } catch (e) {
+    console.error(`[Storage] Failed to get product`, e);
+    return null;
+  }
 };
 
-// --- 飲食紀錄 (包含詳細營養素) ---
+// ... (以下為飲食紀錄、運動紀錄等，保持原樣)
 export const getFoodLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.FOOD_LOGS);
   return data ? JSON.parse(data) : [];
@@ -130,7 +143,6 @@ export const deleteFoodLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.FOOD_LOGS, JSON.stringify(updatedLogs));
 };
 
-// --- 運動紀錄 ---
 export const getActivityLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.ACTIVITY_LOGS);
   return data ? JSON.parse(data) : [];
@@ -170,7 +182,6 @@ function toLocalISOString(date: Date) {
   return new Date(date.getTime() - offset).toISOString().split('T')[0];
 }
 
-// --- 每日摘要 ---
 export const getDailySummaryLocal = async (date: Date = new Date()) => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();

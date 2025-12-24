@@ -1,97 +1,135 @@
-import { useState } from 'react';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useState, useRef } from 'react';
 import { StyleSheet, View, Pressable, Alert, Text, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function CameraScreen() {
-  const [loading, setLoading] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
+  const [processing, setProcessing] = useState(false);
 
-  // 使用系統相機拍照 (支援裁切)
+  if (!permission) return <View />;
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', color:'white' }}>Need camera permission</Text>
+        <Pressable onPress={requestPermission} style={{padding:10, backgroundColor:'white', marginTop:10}}>
+           <Text>Grant Permission</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   const takePicture = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
+    // 改用系統相機以支援裁切
+    // 檢查權限
+    const camPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!camPermission.granted) {
       Alert.alert("Permission required", "Please allow camera access.");
       return;
     }
 
-    setLoading(true);
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      allowsEditing: true, // 啟用裁切編輯器
-      quality: 0.8,
-      base64: true,
-    });
-    setLoading(false);
+    if (!processing) {
+      setProcessing(true);
+      try {
+        const result = await ImagePicker.launchCameraAsync({
+          // [修正] 改回 MediaTypeOptions 以解決 undefined 錯誤
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 0.8,
+          base64: true,
+        });
 
-    if (!result.canceled) {
-      router.push({
-        pathname: "/food-recognition",
-        params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
-      });
+        if (!result.canceled) {
+          router.push({
+            pathname: "/food-recognition",
+            params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
+          });
+        }
+      } catch (error) {
+        Alert.alert("Error", "Failed to take picture");
+        console.error(error);
+      } finally {
+        setProcessing(false);
+      }
     }
   };
 
-  // 選取圖庫 (支援裁切)
   const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images, // 修正 deprecated 選項
-      allowsEditing: true, // 啟用裁切編輯器
-      quality: 0.8,
-      base64: true,
-    });
+    if (!processing) {
+      setProcessing(true);
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          // [修正] 改回 MediaTypeOptions
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          quality: 0.8,
+          base64: true,
+        });
 
-    if (!result.canceled) {
-      router.push({
-        pathname: "/food-recognition",
-        params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
-      });
+        if (!result.canceled) {
+          router.push({
+            pathname: "/food-recognition",
+            params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
+          });
+        }
+      } catch (error) {
+        Alert.alert("Error", "Failed to pick image");
+        console.error(error);
+      } finally {
+        setProcessing(false);
+      }
     }
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>請選擇輸入方式</Text>
-        <Text style={styles.subtitle}>拍照或選取照片後可進行裁切編輯</Text>
-        
-        {loading ? (
-          <ActivityIndicator size="large" color="white" style={{marginTop: 50}}/>
-        ) : (
-          <View style={styles.buttonContainer}>
-            <Pressable style={styles.button} onPress={takePicture}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="camera" size={40} color="black" />
-              </View>
-              <Text style={styles.btnText}>拍照 (含編輯)</Text>
-            </Pressable>
-
-            <Pressable style={styles.button} onPress={pickImage}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="images" size={40} color="black" />
-              </View>
-              <Text style={styles.btnText}>從相簿選取</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
+      <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} />
       
-      <Pressable style={styles.closeBtn} onPress={() => router.back()}>
-        <Ionicons name="close-circle" size={48} color="white" />
-      </Pressable>
+      <View style={styles.overlay}>
+        <View style={styles.buttonContainer}>
+          <Pressable style={styles.button} onPress={() => router.back()} disabled={processing}>
+            <Ionicons name="close" size={32} color="white" />
+          </Pressable>
+          
+          {/* 拍照按鈕 */}
+          <Pressable style={styles.captureBtn} onPress={takePicture} disabled={processing}>
+            {processing ? <ActivityIndicator color="black" /> : <View style={styles.innerCircle} />}
+          </Pressable>
+          
+          {/* 相簿按鈕 */}
+          <Pressable style={styles.button} onPress={pickImage} disabled={processing}>
+            <Ionicons name="images" size={32} color="white" />
+          </Pressable>
+        </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
-  content: { alignItems: 'center', width: '100%' },
-  title: { color: 'white', fontSize: 24, fontWeight: 'bold', marginBottom: 10 },
-  subtitle: { color: '#ccc', fontSize: 14, marginBottom: 50 },
-  buttonContainer: { flexDirection: 'row', gap: 40 },
-  button: { alignItems: 'center' },
-  iconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  btnText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  closeBtn: { position: 'absolute', bottom: 50 }
+  container: { flex: 1, backgroundColor: 'black' },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    paddingBottom: 50,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  button: { 
+    alignItems: 'center', 
+    padding: 10 
+  },
+  captureBtn: {
+    width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.8)',
+    justifyContent: 'center', alignItems: 'center'
+  },
+  innerCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white', borderWidth: 2, borderColor: '#ddd' },
 });
