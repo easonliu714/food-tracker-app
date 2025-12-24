@@ -22,16 +22,19 @@ export default function FoodRecognitionScreen() {
   const [loading, setLoading] = useState(false);
   const [foodName, setFoodName] = useState("");
   
-  const [quantity, setQuantity] = useState("1");
-  const [servingWeight, setServingWeight] = useState("100"); 
+  // 攝取量設定
+  const [inputType, setInputType] = useState<'SERVING' | 'GRAM'>('SERVING'); // 模式切換
+  const [inputQty, setInputQty] = useState("1"); // 份數 或 總克數
   
-  // Base Nutrients (per 100g)
+  // 單份基準設定 (從 DB 讀取或預設)
+  const [unitWeight, setUnitWeight] = useState("100"); 
+  
+  // 100g 基準營養素
   const [baseCal, setBaseCal] = useState("0");
   const [basePro, setBasePro] = useState("0");
   const [baseCarb, setBaseCarb] = useState("0");
   const [baseFat, setBaseFat] = useState("0");
   const [baseSod, setBaseSod] = useState("0");
-  // Advanced
   const [baseSugar, setBaseSugar] = useState("0");
   const [baseSatFat, setBaseSatFat] = useState("0");
   const [baseTransFat, setBaseTransFat] = useState("0");
@@ -42,7 +45,6 @@ export default function FoodRecognitionScreen() {
 
   const [aiAnalysis, setAiAnalysis] = useState<{composition?: string, suggestion?: string} | null>(null);
   const [originalLog, setOriginalLog] = useState<any>(null);
-  
   const [displayBarcode, setDisplayBarcode] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, "background");
@@ -56,7 +58,6 @@ export default function FoodRecognitionScreen() {
     setBaseCarb(p.carbs_100g?.toString() || "0");
     setBaseFat(p.fat_100g?.toString() || "0");
     setBaseSod(p.sodium_100g?.toString() || "0");
-    
     setBaseSugar(p.sugar_100g?.toString() || "0");
     setBaseSatFat(p.saturated_fat_100g?.toString() || "0");
     setBaseTransFat(p.trans_fat_100g?.toString() || "0");
@@ -64,13 +65,21 @@ export default function FoodRecognitionScreen() {
     setBaseZinc(p.zinc_100g?.toString() || "0");
     setBaseMag(p.magnesium_100g?.toString() || "0");
     setBaseIron(p.iron_100g?.toString() || "0");
+    
+    // [新增] 載入保存的 AI 分析結果
+    if (p.aiAnalysis) {
+      setAiAnalysis(p.aiAnalysis);
+    }
+    // [新增] 載入保存的單份重量
+    if (p.servingWeight) {
+      setUnitWeight(p.servingWeight.toString());
+    }
   };
 
   useEffect(() => {
     let isMounted = true;
 
     async function process() {
-      console.log(`[FoodRecognition] Mode: ${mode}, Barcode: ${barcode}, LogID: ${logId}`);
       if (barcode) setDisplayBarcode(barcode as string);
 
       if (mode === "EDIT" && logId) {
@@ -81,23 +90,15 @@ export default function FoodRecognitionScreen() {
           if (log.barcode) {
              setDisplayBarcode(log.barcode);
              const p = await getProductByBarcode(log.barcode);
-             if (p) {
-               loadProductData(p);
-             } else {
-               setBaseCal(log.totalCalories?.toString() || "0");
-             }
+             if (p) loadProductData(p);
+             else setBaseCal(log.totalCalories?.toString() || "0"); // Fallback
           } else {
-             setBaseCal(log.totalCalories?.toString() || "0");
-             setBasePro(log.totalProteinG?.toString() || "0");
-             setBaseCarb(log.totalCarbsG?.toString() || "0");
-             setBaseFat(log.totalFatG?.toString() || "0");
-             setBaseSod(log.totalSodiumMg?.toString() || "0");
+             // 若無 Barcode，嘗試還原
+             setBaseCal(log.totalCalories?.toString() || "0"); 
           }
         }
         return;
       }
-
-      if (mode === "MANUAL") return;
 
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
@@ -106,7 +107,7 @@ export default function FoodRecognitionScreen() {
             setFoodName(data.foodName);
             loadProductData(data);
           }
-        } catch(e) { console.error(e); }
+        } catch(e) {}
         return;
       }
 
@@ -124,28 +125,21 @@ export default function FoodRecognitionScreen() {
         try {
           let imageBase64 = base64 as string;
           if (!imageBase64 && imageUri) {
-            imageBase64 = await FileSystem.readAsStringAsync(imageUri as string, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
+            imageBase64 = await FileSystem.readAsStringAsync(imageUri as string, { encoding: FileSystem.EncodingType.Base64 });
           }
 
           if (imageBase64) {
             const profile = await getProfileLocal();
             const result = await analyzeFoodImage(imageBase64, lang, profile);
-            if (isMounted) {
-              if (result) {
-                // [修正] AI 名稱不再自動帶入 composition
-                setFoodName(result.foodName); 
-                loadProductData(result);
-                setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
-              } else {
-                Alert.alert("辨識失敗", "AI 無法識別，請手動輸入");
-              }
+            if (isMounted && result) {
+              setFoodName(result.foodName);
+              loadProductData(result);
+              setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
             }
           }
         } catch (e) {
-          console.error("AI Process Error:", e);
-          if (isMounted) Alert.alert("錯誤", "讀取圖片失敗");
+          console.error(e);
+          if (isMounted) Alert.alert("錯誤", "AI 分析失敗");
         } finally {
           if (isMounted) setLoading(false);
         }
@@ -158,13 +152,19 @@ export default function FoodRecognitionScreen() {
   const handleSave = async () => {
     if (!foodName) return Alert.alert("請輸入食物名稱");
     
-    const qty = parseFloat(quantity) || 1;
-    const unitWt = parseFloat(servingWeight) || 100;
-    const totalWeight = qty * unitWt;
+    // 計算總重與比例
+    let totalWeight = 0;
+    if (inputType === 'SERVING') {
+      totalWeight = (parseFloat(inputQty) || 1) * (parseFloat(unitWeight) || 100);
+    } else {
+      totalWeight = parseFloat(inputQty) || 100;
+    }
     const ratio = totalWeight / 100;
     
     const productData = {
       foodName,
+      servingWeight: parseFloat(unitWeight), // [新增] 保存單份重量
+      aiAnalysis: aiAnalysis, // [新增] 保存 AI 分析結果
       calories_100g: parseFloat(baseCal) || 0,
       protein_100g: parseFloat(basePro) || 0,
       carbs_100g: parseFloat(baseCarb) || 0,
@@ -190,39 +190,14 @@ export default function FoodRecognitionScreen() {
       barcode: displayBarcode || undefined, 
     };
 
-    // [關鍵] 只要有 displayBarcode (包含掃碼轉 AI 的情況)，都必須更新 Product DB
     if (displayBarcode) {
-      console.log(`[Save] Saving/Updating Product DB for ${displayBarcode}`);
       await saveProductLocal(displayBarcode, productData);
     }
 
     if (mode === "EDIT" && originalLog) {
+      // 編輯模式同樣更新 Product DB
       if (originalLog.barcode) {
-         const oldP = await getProductByBarcode(originalLog.barcode);
-         if (oldP && JSON.stringify(oldP) !== JSON.stringify(productData)) {
-            Alert.alert(
-              "營養成分變更", 
-              "您修改了基準營養數值，是否要同步更新資料庫？(這將影響所有使用此條碼的紀錄)",
-              [
-                { 
-                  text: "是，同步更新", 
-                  onPress: async () => {
-                    await saveProductLocal(originalLog.barcode, productData);
-                    await updateFoodLogLocal({ ...originalLog, ...logData });
-                    router.dismissTo("/");
-                  }
-                },
-                {
-                  text: "否，僅修紀錄",
-                  onPress: async () => {
-                    await updateFoodLogLocal({ ...originalLog, ...logData });
-                    router.dismissTo("/");
-                  }
-                }
-              ]
-            );
-            return;
-         }
+         await saveProductLocal(originalLog.barcode, productData);
       }
       await updateFoodLogLocal({ ...originalLog, ...logData });
     } else {
@@ -231,7 +206,14 @@ export default function FoodRecognitionScreen() {
     router.dismissTo("/"); 
   };
 
-  const currentTotalCal = Math.round(parseFloat(baseCal) * ((parseFloat(quantity) * parseFloat(servingWeight)) / 100) || 0);
+  // 即時熱量計算
+  let liveTotalWeight = 0;
+  if (inputType === 'SERVING') {
+    liveTotalWeight = (parseFloat(inputQty) || 0) * (parseFloat(unitWeight) || 0);
+  } else {
+    liveTotalWeight = parseFloat(inputQty) || 0;
+  }
+  const currentTotalCal = Math.round((parseFloat(baseCal) || 0) * (liveTotalWeight / 100));
 
   if (loading) {
     return (
@@ -261,16 +243,38 @@ export default function FoodRecognitionScreen() {
                <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>Barcode: {displayBarcode}</ThemedText>
              )}
 
+             {/* [修正] 攝取量與單位切換 */}
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
+                <View style={{flexDirection: 'row', marginBottom: 10, justifyContent: 'center', gap: 10}}>
+                   <Pressable onPress={() => setInputType('SERVING')} style={[styles.modeBtn, inputType==='SERVING' && {backgroundColor: tintColor}]}>
+                      <ThemedText style={{color: inputType==='SERVING'?'white':textSecondary, fontSize: 12}}>份數輸入</ThemedText>
+                   </Pressable>
+                   <Pressable onPress={() => setInputType('GRAM')} style={[styles.modeBtn, inputType==='GRAM' && {backgroundColor: tintColor}]}>
+                      <ThemedText style={{color: inputType==='GRAM'?'white':textSecondary, fontSize: 12}}>總克數輸入</ThemedText>
+                   </Pressable>
+                </View>
+
                 <View style={{flexDirection: 'row', gap: 10}}>
-                   <View style={{flex: 1}}><NumberInput label={`🍽️ ${t('intake_quantity', lang)}`} value={quantity} onChange={setQuantity} step={0.5} /></View>
-                   <View style={{flex: 1}}><NumberInput label={`⚖️ ${t('serving_weight', lang)}`} value={servingWeight} onChange={setServingWeight} step={10} /></View>
+                   <View style={{flex: 1}}>
+                      <NumberInput 
+                        label={inputType==='SERVING' ? "攝取份數" : "總攝取量 (g/ml)"} 
+                        value={inputQty} 
+                        onChange={setInputQty} 
+                        step={inputType==='SERVING' ? 0.5 : 10} 
+                      />
+                   </View>
+                   {inputType === 'SERVING' && (
+                     <View style={{flex: 1}}>
+                        <NumberInput label="單份重量 (g)" value={unitWeight} onChange={setUnitWeight} step={10} />
+                     </View>
+                   )}
                 </View>
                 <ThemedText style={{textAlign:'center', fontSize: 14, color: tintColor, fontWeight: 'bold', marginTop: 8}}>
                   當次總熱量: {currentTotalCal} kcal
                 </ThemedText>
              </View>
 
+             {/* [修正] AI 分析結果區塊 */}
              {aiAnalysis && (
                <View style={{marginTop: 16, padding: 12, backgroundColor: '#E3F2FD', borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#2196F3'}}>
                  <ThemedText style={{fontWeight:'bold', color: '#1565C0', marginBottom: 4}}>🤖 {t('ai_analysis_result', lang)}</ThemedText>
@@ -328,5 +332,6 @@ const styles = StyleSheet.create({
   card: { padding: 16, borderRadius: 16 },
   textInput: { fontSize: 18, fontWeight: 'bold', borderBottomWidth: 1, borderColor: '#ddd', paddingVertical: 8 },
   nutrientRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  sectionTitle: { marginTop: 15, marginBottom: 5, fontSize: 12, fontWeight: 'bold', color: '#888' }
+  sectionTitle: { marginTop: 15, marginBottom: 5, fontSize: 12, fontWeight: 'bold', color: '#888' },
+  modeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#ccc' }
 });

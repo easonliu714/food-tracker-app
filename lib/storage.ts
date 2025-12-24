@@ -83,13 +83,22 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// [重點修正] 產品資料庫存取 (加入日誌)
+// [修改] 產品資料庫存取 (新增 AI 分析欄位支援)
 export const saveProductLocal = async (barcode: string, productData: any) => {
   try {
+    // 過濾掉無效的 barcode (如 URL)
+    if (!barcode || barcode.startsWith('http')) {
+      console.warn(`[Storage] Invalid barcode ignored: ${barcode}`);
+      return;
+    }
+    
     console.log(`[Storage] Saving product: ${barcode}`, productData.foodName);
     const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
     const products = data ? JSON.parse(data) : {};
-    products[barcode] = productData;
+    
+    // 合併更新，保留舊有欄位 (避免覆蓋未修改的資料)
+    products[barcode] = { ...products[barcode], ...productData };
+    
     await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
     console.log(`[Storage] Product saved successfully.`);
   } catch (e) {
@@ -99,6 +108,7 @@ export const saveProductLocal = async (barcode: string, productData: any) => {
 
 export const getProductByBarcode = async (barcode: string) => {
   try {
+    if (!barcode) return null;
     const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
     const products = data ? JSON.parse(data) : {};
     const product = products[barcode];

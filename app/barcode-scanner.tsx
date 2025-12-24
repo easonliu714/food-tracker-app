@@ -24,9 +24,16 @@ export default function BarcodeScannerScreen() {
 
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
     if (scanned) return;
-    setScanned(true);
     
-    // 1. 檢查本地資料庫 (Product DB)
+    // [修正] 忽略 URL 格式 (防止誤掃 QR Code)
+    if (data.startsWith('http') || data.startsWith('www')) {
+      return; 
+    }
+
+    setScanned(true);
+    console.log(`[Scanner] Scanned: ${data} (${type})`);
+    
+    // 1. 檢查本地資料庫
     const localProduct = await getProductByBarcode(data);
     if (localProduct) {
       router.push({ pathname: "/food-recognition", params: { mode: "BARCODE", barcode: data } });
@@ -40,17 +47,20 @@ export default function BarcodeScannerScreen() {
       
       if (json.status === 1 && json.product) {
         const p = json.product;
+        const n = p.nutriments || {};
+        
+        // [修正] 加強 OFF 資料對應，防止 undefined
         const externalData = {
           foodName: p.product_name || p.product_name_en || "Unknown Product",
-          calories_100g: p.nutriments?.["energy-kcal_100g"] || 0,
-          protein_100g: p.nutriments?.proteins_100g || 0,
-          carbs_100g: p.nutriments?.carbohydrates_100g || 0,
-          fat_100g: p.nutriments?.fat_100g || 0,
-          sodium_100g: (p.nutriments?.salt_100g || 0) * 400,
-          sugar_100g: p.nutriments?.sugars_100g || 0,
-          saturated_fat_100g: p.nutriments?.["saturated-fat_100g"] || 0,
-          trans_fat_100g: p.nutriments?.["trans-fat_100g"] || 0,
-          cholesterol_100g: p.nutriments?.cholesterol_100g ? p.nutriments.cholesterol_100g * 1000 : 0, 
+          calories_100g: n["energy-kcal_100g"] || n["energy-kcal"] || 0,
+          protein_100g: n.proteins_100g || n.proteins || 0,
+          carbs_100g: n.carbohydrates_100g || n.carbohydrates || 0,
+          fat_100g: n.fat_100g || n.fat || 0,
+          sodium_100g: (n.salt_100g || n.salt || 0) * 400, // salt g to sodium mg
+          sugar_100g: n.sugars_100g || n.sugars || 0,
+          saturated_fat_100g: n["saturated-fat_100g"] || 0,
+          trans_fat_100g: n["trans-fat_100g"] || 0,
+          cholesterol_100g: n.cholesterol_100g ? n.cholesterol_100g * 1000 : 0, 
         };
         
         router.push({ 
@@ -67,20 +77,13 @@ export default function BarcodeScannerScreen() {
       console.log("OFF Error", e);
     }
 
-    // 3. 查無資料，引導手動/AI (帶入 Barcode 以便存檔)
+    // 3. 查無資料，引導手動/AI
     Alert.alert(
       t('scan_failed', lang),
       `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, 
       [
-        { 
-          text: t('input_manual', lang), 
-          onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) 
-        },
-        { 
-          text: t('scan_ai_label', lang), 
-          // [修正] 跳轉到 Camera 頁面時，將 barcode 一併傳過去
-          onPress: () => router.push({ pathname: "/camera", params: { barcode: data } }) 
-        },
+        { text: t('input_manual', lang), onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) },
+        { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera", params: { barcode: data } }) },
         { text: "Cancel", style: "cancel", onPress: () => setScanned(false) }
       ]
     );
@@ -92,7 +95,7 @@ export default function BarcodeScannerScreen() {
         style={StyleSheet.absoluteFillObject}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
-          barcodeTypes: ["qr", "ean13", "ean8", "upc_a"],
+          barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"], // 僅掃描商品條碼
         }}
       />
       <View style={styles.overlay}>
