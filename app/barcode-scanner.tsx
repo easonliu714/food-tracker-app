@@ -26,7 +26,7 @@ export default function BarcodeScannerScreen() {
     if (scanned) return;
     setScanned(true);
     
-    // 1. 檢查本地資料庫
+    // 1. 檢查本地資料庫 (Product DB)
     const localProduct = await getProductByBarcode(data);
     if (localProduct) {
       router.push({ pathname: "/food-recognition", params: { mode: "BARCODE", barcode: data } });
@@ -49,6 +49,8 @@ export default function BarcodeScannerScreen() {
           sodium_100g: (p.nutriments?.salt_100g || 0) * 400,
           sugar_100g: p.nutriments?.sugars_100g || 0,
           saturated_fat_100g: p.nutriments?.["saturated-fat_100g"] || 0,
+          trans_fat_100g: p.nutriments?.["trans-fat_100g"] || 0,
+          cholesterol_100g: p.nutriments?.cholesterol_100g ? p.nutriments.cholesterol_100g * 1000 : 0, // g to mg if needed
         };
         
         router.push({ 
@@ -65,7 +67,7 @@ export default function BarcodeScannerScreen() {
       console.log("OFF Error", e);
     }
 
-    // 3. 查無資料，引導手動/AI
+    // 3. 查無資料，引導手動/AI (帶入 Barcode 以便存檔)
     Alert.alert(
       t('scan_failed', lang),
       `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, 

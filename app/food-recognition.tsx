@@ -25,7 +25,7 @@ export default function FoodRecognitionScreen() {
   const [quantity, setQuantity] = useState("1");
   const [servingWeight, setServingWeight] = useState("100"); 
   
-  // Base Nutrients (per 100g)
+  // 這些 State 專門儲存「每 100g 基準值」
   const [baseCal, setBaseCal] = useState("0");
   const [basePro, setBasePro] = useState("0");
   const [baseCarb, setBaseCarb] = useState("0");
@@ -42,46 +42,65 @@ export default function FoodRecognitionScreen() {
 
   const [aiAnalysis, setAiAnalysis] = useState<{composition?: string, suggestion?: string} | null>(null);
   const [originalLog, setOriginalLog] = useState<any>(null);
+  
+  // [新增] 顯示用的 Barcode
+  const [displayBarcode, setDisplayBarcode] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
   const textSecondary = useThemeColor({}, "textSecondary");
 
+  // Helper: 統一載入資料到 State，並加上空值檢查防止 crash
+  const loadProductData = (p: any) => {
+    setBaseCal(p.calories_100g?.toString() || "0");
+    setBasePro(p.protein_100g?.toString() || "0");
+    setBaseCarb(p.carbs_100g?.toString() || "0");
+    setBaseFat(p.fat_100g?.toString() || "0");
+    setBaseSod(p.sodium_100g?.toString() || "0");
+    
+    setBaseSugar(p.sugar_100g?.toString() || "0");
+    setBaseSatFat(p.saturated_fat_100g?.toString() || "0");
+    setBaseTransFat(p.trans_fat_100g?.toString() || "0");
+    setBaseChol(p.cholesterol_100g?.toString() || "0");
+    setBaseZinc(p.zinc_100g?.toString() || "0");
+    setBaseMag(p.magnesium_100g?.toString() || "0");
+    setBaseIron(p.iron_100g?.toString() || "0");
+  };
+
   useEffect(() => {
     let isMounted = true;
 
     async function process() {
-      // Debug log
-      console.log(`[FoodRecognition] Mode: ${mode}, Barcode: ${barcode}`);
+      console.log(`[FoodRecognition] Mode: ${mode}, Barcode: ${barcode}, LogID: ${logId}`);
+      if (barcode) setDisplayBarcode(barcode as string);
 
+      // 1. 編輯模式
       if (mode === "EDIT" && logId) {
         const log = await getFoodLogById(Number(logId));
         if (log && isMounted) {
           setOriginalLog(log);
           setFoodName(log.foodName);
+          if (log.barcode) setDisplayBarcode(log.barcode);
+
+          // [關鍵邏輯] 編輯時，優先去撈 Product DB 的 100g 基準值
+          // 這樣才能讓使用者看到的是「產品資料」而不是「上次攝取的總量」
           if (log.barcode) {
              const p = await getProductByBarcode(log.barcode);
              if (p) {
-               setBaseCal(p.calories_100g?.toString());
-               setBasePro(p.protein_100g?.toString());
-               setBaseCarb(p.carbs_100g?.toString());
-               setBaseFat(p.fat_100g?.toString());
-               setBaseSod(p.sodium_100g?.toString());
-               setBaseSugar(p.sugar_100g?.toString());
-               setBaseSatFat(p.saturated_fat_100g?.toString());
-               setBaseTransFat(p.trans_fat_100g?.toString());
-               setBaseChol(p.cholesterol_100g?.toString());
-               setBaseZinc(p.zinc_100g?.toString());
-               setBaseMag(p.magnesium_100g?.toString());
-               setBaseIron(p.iron_100g?.toString());
+               loadProductData(p);
+             } else {
+               // 若 Product DB 沒資料 (異常狀況)，只好用 Log 總值暫代 (不精確但防呆)
+               // 因為 Log 存的是總量，這裡只是不得已的 fallback
+               setBaseCal(log.totalCalories?.toString() || "0");
              }
           } else {
-             setBaseCal(log.totalCalories?.toString());
-             setBasePro(log.totalProteinG?.toString());
-             setBaseCarb(log.totalCarbsG?.toString());
-             setBaseFat(log.totalFatG?.toString());
-             setBaseSod(log.totalSodiumMg?.toString());
+             // 無條碼紀錄 (如手動輸入)，無法還原 100g 基準，暫時顯示總量
+             setBaseCal(log.totalCalories?.toString() || "0");
+             setBasePro(log.totalProteinG?.toString() || "0");
+             setBaseCarb(log.totalCarbsG?.toString() || "0");
+             setBaseFat(log.totalFatG?.toString() || "0");
+             setBaseSod(log.totalSodiumMg?.toString() || "0");
           }
         }
         return;
@@ -89,44 +108,29 @@ export default function FoodRecognitionScreen() {
 
       if (mode === "MANUAL") return;
 
+      // 2. 外部資料庫傳入 (Open Food Facts)
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
           const data = JSON.parse(initialData as string);
           if (isMounted) {
             setFoodName(data.foodName);
-            setBaseCal(data.calories_100g?.toString() || "0");
-            setBasePro(data.protein_100g?.toString() || "0");
-            setBaseCarb(data.carbs_100g?.toString() || "0");
-            setBaseFat(data.fat_100g?.toString() || "0");
-            setBaseSod(data.sodium_100g?.toString() || "0");
-            setBaseSugar(data.sugar_100g?.toString() || "0");
-            setBaseSatFat(data.saturated_fat_100g?.toString() || "0");
-            setBaseChol(data.cholesterol_100g?.toString() || "0");
+            loadProductData(data);
           }
         } catch(e) { console.error(e); }
         return;
       }
 
+      // 3. 掃碼本地查詢
       if (mode === "BARCODE" && barcode) {
         const p = await getProductByBarcode(barcode as string);
         if (p && isMounted) {
           setFoodName(p.foodName);
-          setBaseCal(p.calories_100g?.toString() || "0");
-          setBasePro(p.protein_100g.toString());
-          setBaseCarb(p.carbs_100g.toString());
-          setBaseFat(p.fat_100g.toString());
-          setBaseSod(p.sodium_100g?.toString() || "0");
-          setBaseSugar(p.sugar_100g?.toString() || "0");
-          setBaseSatFat(p.saturated_fat_100g?.toString() || "0");
-          setBaseTransFat(p.trans_fat_100g?.toString() || "0");
-          setBaseChol(p.cholesterol_100g?.toString() || "0");
-          setBaseZinc(p.zinc_100g?.toString() || "0");
-          setBaseMag(p.magnesium_100g?.toString() || "0");
-          setBaseIron(p.iron_100g?.toString() || "0");
+          loadProductData(p);
         }
         return;
       }
 
+      // 4. AI 辨識
       if (imageUri || base64 || mode === "AI") {
         setLoading(true);
         try {
@@ -143,10 +147,7 @@ export default function FoodRecognitionScreen() {
             if (isMounted) {
               if (result) {
                 setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
-                setBaseCal(result.calories_100g?.toString() || "0");
-                setBasePro(result.protein_100g?.toString() || "0");
-                setBaseCarb(result.carbs_100g?.toString() || "0");
-                setBaseFat(result.fat_100g?.toString() || "0");
+                loadProductData(result); // 使用 AI 回傳的 100g 估算值
                 setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
               } else {
                 Alert.alert("辨識失敗", "AI 無法識別，請手動輸入");
@@ -173,22 +174,24 @@ export default function FoodRecognitionScreen() {
     const totalWeight = qty * unitWt;
     const ratio = totalWeight / 100;
     
+    // 準備產品基準資料 (每 100g) - 這會存入 Product DB
     const productData = {
       foodName,
-      calories_100g: parseFloat(baseCal),
-      protein_100g: parseFloat(basePro),
-      carbs_100g: parseFloat(baseCarb),
-      fat_100g: parseFloat(baseFat),
-      sodium_100g: parseFloat(baseSod),
-      sugar_100g: parseFloat(baseSugar),
-      saturated_fat_100g: parseFloat(baseSatFat),
-      trans_fat_100g: parseFloat(baseTransFat),
-      cholesterol_100g: parseFloat(baseChol),
-      zinc_100g: parseFloat(baseZinc),
-      magnesium_100g: parseFloat(baseMag),
-      iron_100g: parseFloat(baseIron),
+      calories_100g: parseFloat(baseCal) || 0,
+      protein_100g: parseFloat(basePro) || 0,
+      carbs_100g: parseFloat(baseCarb) || 0,
+      fat_100g: parseFloat(baseFat) || 0,
+      sodium_100g: parseFloat(baseSod) || 0,
+      sugar_100g: parseFloat(baseSugar) || 0,
+      saturated_fat_100g: parseFloat(baseSatFat) || 0,
+      trans_fat_100g: parseFloat(baseTransFat) || 0,
+      cholesterol_100g: parseFloat(baseChol) || 0,
+      zinc_100g: parseFloat(baseZinc) || 0,
+      magnesium_100g: parseFloat(baseMag) || 0,
+      iron_100g: parseFloat(baseIron) || 0,
     };
 
+    // 準備飲食紀錄資料 (總攝取量) - 這會存入 Log DB
     const logData = {
       foodName,
       totalCalories: Math.round(productData.calories_100g * ratio),
@@ -197,25 +200,27 @@ export default function FoodRecognitionScreen() {
       totalFatG: Math.round(productData.fat_100g * ratio),
       totalSodiumMg: Math.round(productData.sodium_100g * ratio),
       imageUri: imageUri as string,
-      barcode: barcode as string, 
+      barcode: displayBarcode || undefined, 
     };
 
-    // [關鍵修正] 確保條碼被儲存
-    if (barcode) {
-      console.log(`[Save] Saving product to local DB with barcode: ${barcode}`);
-      await saveProductLocal(barcode as string, productData);
+    // [關鍵修正] 確保 Product DB 永遠被更新或建立 (包含手動輸入但有 barcode 的情況)
+    if (displayBarcode) {
+      console.log(`[Save] Updating Product DB for ${displayBarcode}`);
+      await saveProductLocal(displayBarcode, productData);
     }
 
     if (mode === "EDIT" && originalLog) {
+      // 編輯模式：檢查是否需要同步更新 Product DB
       if (originalLog.barcode) {
          const oldP = await getProductByBarcode(originalLog.barcode);
-         if (oldP && JSON.stringify(oldP) !== JSON.stringify(productData)) {
+         // 簡單比較，若基準值有變動則提示
+         if (oldP && oldP.calories_100g !== productData.calories_100g) {
             Alert.alert(
-              "營養成分變更", 
-              "您修改了基準營養數值，是否要同步更新資料庫？(這將影響所有使用此條碼的紀錄)",
+              "基準值變更", 
+              "您修改了每 100g 的營養數值，是否同步更新產品資料庫？(影響未來掃碼結果)",
               [
                 { 
-                  text: "是，全部更新", 
+                  text: "是，同步更新", 
                   onPress: async () => {
                     await saveProductLocal(originalLog.barcode, productData);
                     await updateFoodLogLocal({ ...originalLog, ...logData });
@@ -223,7 +228,7 @@ export default function FoodRecognitionScreen() {
                   }
                 },
                 {
-                  text: "否，僅更新此筆",
+                  text: "否，僅修紀錄",
                   onPress: async () => {
                     await updateFoodLogLocal({ ...originalLog, ...logData });
                     router.dismissTo("/");
@@ -236,6 +241,7 @@ export default function FoodRecognitionScreen() {
       }
       await updateFoodLogLocal({ ...originalLog, ...logData });
     } else {
+      // 新增模式
       await saveFoodLogLocal(logData);
     }
     router.dismissTo("/"); 
@@ -266,6 +272,10 @@ export default function FoodRecognitionScreen() {
           <View style={[styles.card, {backgroundColor: cardBackground}]}>
              <ThemedText style={{marginBottom: 4, fontSize: 12, color: textSecondary}}>📦 {t('food_name', lang)}</ThemedText>
              <TextInput style={[styles.textInput, {color: tintColor}]} value={foodName} onChangeText={setFoodName} placeholder="輸入食物名稱"/>
+             
+             {displayBarcode && (
+               <ThemedText style={{fontSize: 10, color: textSecondary, marginTop: 4}}>Barcode: {displayBarcode}</ThemedText>
+             )}
 
              <View style={{marginTop: 16, padding: 12, backgroundColor: '#F5F5F5', borderRadius: 8}}>
                 <View style={{flexDirection: 'row', gap: 10}}>
@@ -273,7 +283,7 @@ export default function FoodRecognitionScreen() {
                    <View style={{flex: 1}}><NumberInput label={`⚖️ ${t('serving_weight', lang)}`} value={servingWeight} onChange={setServingWeight} step={10} /></View>
                 </View>
                 <ThemedText style={{textAlign:'center', fontSize: 14, color: tintColor, fontWeight: 'bold', marginTop: 8}}>
-                  總攝取熱量: {currentTotalCal} kcal
+                  當次總熱量: {currentTotalCal} kcal
                 </ThemedText>
              </View>
 
@@ -288,7 +298,6 @@ export default function FoodRecognitionScreen() {
              <View style={{marginTop: 20}}>
                 <ThemedText style={{fontWeight: 'bold', marginBottom: 10}}>{t('per_100g_base', lang)}</ThemedText>
                 
-                {/* [修正] UI Layout: 調整為每行兩個項目 */}
                 <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🔥 熱量 (kcal)" value={baseCal} onChange={setBaseCal} step={10} /></View>
                    <View style={{flex:1}}><NumberInput label="🧂 鈉 (mg)" value={baseSod} onChange={setBaseSod} step={50} /></View>
@@ -304,7 +313,7 @@ export default function FoodRecognitionScreen() {
                    <View style={{flex:1}}><NumberInput label="🍬 糖 (g)" value={baseSugar} onChange={setBaseSugar} /></View>
                 </View>
 
-                <ThemedText style={styles.sectionTitle}>詳細脂肪</ThemedText>
+                <ThemedText style={styles.sectionTitle}>詳細成分</ThemedText>
                 <View style={styles.nutrientRow}>
                    <View style={{flex:1}}><NumberInput label="🥥 飽和脂肪 (g)" value={baseSatFat} onChange={setBaseSatFat} /></View>
                    <View style={{flex:1}}><NumberInput label="🍟 反式脂肪 (g)" value={baseTransFat} onChange={setBaseTransFat} /></View>

@@ -24,8 +24,7 @@ export default function CameraScreen() {
   }
 
   const takePicture = async () => {
-    // 改用系統相機以支援裁切
-    // 檢查權限
+    // 檢查系統相機權限
     const camPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!camPermission.granted) {
       Alert.alert("Permission required", "Please allow camera access.");
@@ -35,19 +34,23 @@ export default function CameraScreen() {
     if (!processing) {
       setProcessing(true);
       try {
+        // [修正] 使用系統相機介面，確保能裁切
         const result = await ImagePicker.launchCameraAsync({
-          // [修正] 改回 MediaTypeOptions 以解決 undefined 錯誤
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
+          // 使用舊版相容寫法，忽略 TS 錯誤
+          mediaTypes: ImagePicker.MediaTypeOptions.Images, 
+          allowsEditing: true, // 啟用裁切
           quality: 0.8,
           base64: true,
         });
 
         if (!result.canceled) {
+          console.log("Picture taken, redirecting...");
           router.push({
             pathname: "/food-recognition",
             params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
           });
+        } else {
+          console.log("Camera cancelled");
         }
       } catch (error) {
         Alert.alert("Error", "Failed to take picture");
@@ -63,9 +66,8 @@ export default function CameraScreen() {
       setProcessing(true);
       try {
         const result = await ImagePicker.launchImageLibraryAsync({
-          // [修正] 改回 MediaTypeOptions
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
+          allowsEditing: true, // 啟用裁切
           quality: 0.8,
           base64: true,
         });
@@ -87,6 +89,7 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 僅作為背景預覽，實際操作呼叫系統相機 */}
       <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} />
       
       <View style={styles.overlay}>
@@ -95,16 +98,15 @@ export default function CameraScreen() {
             <Ionicons name="close" size={32} color="white" />
           </Pressable>
           
-          {/* 拍照按鈕 */}
           <Pressable style={styles.captureBtn} onPress={takePicture} disabled={processing}>
             {processing ? <ActivityIndicator color="black" /> : <View style={styles.innerCircle} />}
           </Pressable>
           
-          {/* 相簿按鈕 */}
           <Pressable style={styles.button} onPress={pickImage} disabled={processing}>
             <Ionicons name="images" size={32} color="white" />
           </Pressable>
         </View>
+        <Text style={{color:'white', textAlign:'center', marginBottom: 20}}>使用系統相機以支援裁切編輯</Text>
       </View>
     </View>
   );
@@ -115,13 +117,14 @@ const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    paddingBottom: 50,
+    paddingBottom: 30,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingHorizontal: 20,
+    marginBottom: 20
   },
   button: { 
     alignItems: 'center', 
