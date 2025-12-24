@@ -98,7 +98,7 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
     const age = profile?.birthYear ? new Date().getFullYear() - parseInt(profile.birthYear) : 30;
     const goal = profile?.trainingGoal || "維持身形";
 
-    // [修正] 擴充提示詞，要求詳細營養素
+    // [修正] 優化 Prompt：要求名稱簡潔，詳細資訊分開
     const prompt = `
       Analyze this food image. 
       Language: ${lang}.
@@ -108,13 +108,16 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
       Estimate values if not visible.
       
       Required Fields (per 100g):
+      - foodName: Concise Name ONLY (e.g. "Chicken Salad"). Do NOT include ingredients here.
       - Basic: Calories, Protein, Carbs, Fat, Sodium
       - Detailed: Sugar, Saturated Fat, Trans Fat, Cholesterol
       - Minerals: Zinc, Magnesium, Iron
+      - Composition: Detailed ingredients list.
+      - Suggestion: Advice considering the user's goal.
 
       Output JSON format:
       {
-        "foodName": "Specific Food Name",
+        "foodName": "Concise Food Name",
         "calories_100g": 150,
         "protein_100g": 10,
         "carbs_100g": 20,

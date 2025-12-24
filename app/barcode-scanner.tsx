@@ -50,7 +50,7 @@ export default function BarcodeScannerScreen() {
           sugar_100g: p.nutriments?.sugars_100g || 0,
           saturated_fat_100g: p.nutriments?.["saturated-fat_100g"] || 0,
           trans_fat_100g: p.nutriments?.["trans-fat_100g"] || 0,
-          cholesterol_100g: p.nutriments?.cholesterol_100g ? p.nutriments.cholesterol_100g * 1000 : 0, // g to mg if needed
+          cholesterol_100g: p.nutriments?.cholesterol_100g ? p.nutriments.cholesterol_100g * 1000 : 0, 
         };
         
         router.push({ 
@@ -72,8 +72,15 @@ export default function BarcodeScannerScreen() {
       t('scan_failed', lang),
       `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, 
       [
-        { text: t('input_manual', lang), onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) },
-        { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera" }) },
+        { 
+          text: t('input_manual', lang), 
+          onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) 
+        },
+        { 
+          text: t('scan_ai_label', lang), 
+          // [修正] 跳轉到 Camera 頁面時，將 barcode 一併傳過去
+          onPress: () => router.push({ pathname: "/camera", params: { barcode: data } }) 
+        },
         { text: "Cancel", style: "cancel", onPress: () => setScanned(false) }
       ]
     );

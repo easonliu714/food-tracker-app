@@ -1,59 +1,48 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useState, useRef } from 'react';
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from 'react';
 import { StyleSheet, View, Pressable, Alert, Text, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function CameraScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
-
-  if (!permission) return <View />;
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center', color:'white' }}>Need camera permission</Text>
-        <Pressable onPress={requestPermission} style={{padding:10, backgroundColor:'white', marginTop:10}}>
-           <Text>Grant Permission</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  
+  // [修正] 接收上頁傳來的 barcode (若有)
+  const { barcode } = useLocalSearchParams();
 
   const takePicture = async () => {
     // 檢查系統相機權限
     const camPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!camPermission.granted) {
-      Alert.alert("Permission required", "Please allow camera access.");
+      Alert.alert("需要權限", "請允許使用相機以進行拍照");
       return;
     }
 
     if (!processing) {
       setProcessing(true);
       try {
-        // [修正] 使用系統相機介面，確保能裁切
+        // 呼叫系統相機
         const result = await ImagePicker.launchCameraAsync({
-          // 使用舊版相容寫法，忽略 TS 錯誤
-          mediaTypes: ImagePicker.MediaTypeOptions.Images, 
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true, // 啟用裁切
           quality: 0.8,
           base64: true,
         });
 
         if (!result.canceled) {
-          console.log("Picture taken, redirecting...");
           router.push({
             pathname: "/food-recognition",
-            params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
+            params: { 
+              imageUri: result.assets[0].uri, 
+              base64: result.assets[0].base64, 
+              mode: "AI",
+              barcode: barcode // [修正] 將條碼繼續傳遞下去
+            }
           });
-        } else {
-          console.log("Camera cancelled");
         }
       } catch (error) {
-        Alert.alert("Error", "Failed to take picture");
+        Alert.alert("錯誤", "拍照失敗");
         console.error(error);
       } finally {
         setProcessing(false);
@@ -67,7 +56,7 @@ export default function CameraScreen() {
       try {
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true, // 啟用裁切
+          allowsEditing: true,
           quality: 0.8,
           base64: true,
         });
@@ -75,11 +64,16 @@ export default function CameraScreen() {
         if (!result.canceled) {
           router.push({
             pathname: "/food-recognition",
-            params: { imageUri: result.assets[0].uri, base64: result.assets[0].base64, mode: "AI" }
+            params: { 
+              imageUri: result.assets[0].uri, 
+              base64: result.assets[0].base64, 
+              mode: "AI",
+              barcode: barcode // [修正] 將條碼繼續傳遞下去
+            }
           });
         }
       } catch (error) {
-        Alert.alert("Error", "Failed to pick image");
+        Alert.alert("錯誤", "選取圖片失敗");
         console.error(error);
       } finally {
         setProcessing(false);
@@ -89,50 +83,61 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 僅作為背景預覽，實際操作呼叫系統相機 */}
-      <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} />
-      
-      <View style={styles.overlay}>
-        <View style={styles.buttonContainer}>
-          <Pressable style={styles.button} onPress={() => router.back()} disabled={processing}>
-            <Ionicons name="close" size={32} color="white" />
+      {/* 頂部標題區 */}
+      <View style={styles.header}>
+        <Text style={styles.title}>選擇輸入方式</Text>
+        <Text style={styles.subtitle}>
+          {barcode ? `正在為條碼 ${barcode} 建立資料` : "透過 AI 分析影像中的營養成分"}
+        </Text>
+      </View>
+
+      {/* 中間功能按鈕區 */}
+      {processing ? (
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={{marginTop: 20, color:'#ccc'}}>處理中...</Text>
+        </View>
+      ) : (
+        <View style={styles.centerContent}>
+          <Pressable style={styles.largeButton} onPress={takePicture}>
+            <View style={[styles.iconCircle, {backgroundColor: '#E3F2FD'}]}>
+              <Ionicons name="camera" size={48} color="#2196F3" />
+            </View>
+            <Text style={styles.btnTitle}>開啟相機</Text>
+            <Text style={styles.btnDesc}>拍照並裁切營養標示</Text>
           </Pressable>
-          
-          <Pressable style={styles.captureBtn} onPress={takePicture} disabled={processing}>
-            {processing ? <ActivityIndicator color="black" /> : <View style={styles.innerCircle} />}
-          </Pressable>
-          
-          <Pressable style={styles.button} onPress={pickImage} disabled={processing}>
-            <Ionicons name="images" size={32} color="white" />
+
+          <View style={styles.divider} />
+
+          <Pressable style={styles.largeButton} onPress={pickImage}>
+            <View style={[styles.iconCircle, {backgroundColor: '#FFF3E0'}]}>
+              <Ionicons name="images" size={48} color="#FF9800" />
+            </View>
+            <Text style={styles.btnTitle}>讀取相簿</Text>
+            <Text style={styles.btnDesc}>從現有照片中選取</Text>
           </Pressable>
         </View>
-        <Text style={{color:'white', textAlign:'center', marginBottom: 20}}>使用系統相機以支援裁切編輯</Text>
-      </View>
+      )}
+
+      {/* 底部關閉按鈕 */}
+      <Pressable style={styles.closeBtn} onPress={() => router.back()} disabled={processing}>
+        <Ionicons name="close-circle-outline" size={48} color="#666" />
+        <Text style={{color:'#666'}}>取消</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black' },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    paddingBottom: 30,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20
-  },
-  button: { 
-    alignItems: 'center', 
-    padding: 10 
-  },
-  captureBtn: {
-    width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.8)',
-    justifyContent: 'center', alignItems: 'center'
-  },
-  innerCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white', borderWidth: 2, borderColor: '#ddd' },
+  container: { flex: 1, backgroundColor: '#121212', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 60 },
+  header: { alignItems: 'center', marginTop: 20 },
+  title: { color: 'white', fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
+  subtitle: { color: '#aaa', fontSize: 14 },
+  centerContent: { width: '100%', alignItems: 'center', gap: 30 },
+  largeButton: { alignItems: 'center', width: 200 },
+  iconCircle: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  btnTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  btnDesc: { color: '#888', fontSize: 14 },
+  divider: { height: 1, width: '40%', backgroundColor: '#333' },
+  closeBtn: { alignItems: 'center', opacity: 0.8 }
 });

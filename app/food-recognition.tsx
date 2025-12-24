@@ -25,7 +25,7 @@ export default function FoodRecognitionScreen() {
   const [quantity, setQuantity] = useState("1");
   const [servingWeight, setServingWeight] = useState("100"); 
   
-  // 這些 State 專門儲存「每 100g 基準值」
+  // Base Nutrients (per 100g)
   const [baseCal, setBaseCal] = useState("0");
   const [basePro, setBasePro] = useState("0");
   const [baseCarb, setBaseCarb] = useState("0");
@@ -43,7 +43,6 @@ export default function FoodRecognitionScreen() {
   const [aiAnalysis, setAiAnalysis] = useState<{composition?: string, suggestion?: string} | null>(null);
   const [originalLog, setOriginalLog] = useState<any>(null);
   
-  // [新增] 顯示用的 Barcode
   const [displayBarcode, setDisplayBarcode] = useState<string | null>(null);
 
   const backgroundColor = useThemeColor({}, "background");
@@ -51,7 +50,6 @@ export default function FoodRecognitionScreen() {
   const tintColor = useThemeColor({}, "tint");
   const textSecondary = useThemeColor({}, "textSecondary");
 
-  // Helper: 統一載入資料到 State，並加上空值檢查防止 crash
   const loadProductData = (p: any) => {
     setBaseCal(p.calories_100g?.toString() || "0");
     setBasePro(p.protein_100g?.toString() || "0");
@@ -75,27 +73,20 @@ export default function FoodRecognitionScreen() {
       console.log(`[FoodRecognition] Mode: ${mode}, Barcode: ${barcode}, LogID: ${logId}`);
       if (barcode) setDisplayBarcode(barcode as string);
 
-      // 1. 編輯模式
       if (mode === "EDIT" && logId) {
         const log = await getFoodLogById(Number(logId));
         if (log && isMounted) {
           setOriginalLog(log);
           setFoodName(log.foodName);
-          if (log.barcode) setDisplayBarcode(log.barcode);
-
-          // [關鍵邏輯] 編輯時，優先去撈 Product DB 的 100g 基準值
-          // 這樣才能讓使用者看到的是「產品資料」而不是「上次攝取的總量」
           if (log.barcode) {
+             setDisplayBarcode(log.barcode);
              const p = await getProductByBarcode(log.barcode);
              if (p) {
                loadProductData(p);
              } else {
-               // 若 Product DB 沒資料 (異常狀況)，只好用 Log 總值暫代 (不精確但防呆)
-               // 因為 Log 存的是總量，這裡只是不得已的 fallback
                setBaseCal(log.totalCalories?.toString() || "0");
              }
           } else {
-             // 無條碼紀錄 (如手動輸入)，無法還原 100g 基準，暫時顯示總量
              setBaseCal(log.totalCalories?.toString() || "0");
              setBasePro(log.totalProteinG?.toString() || "0");
              setBaseCarb(log.totalCarbsG?.toString() || "0");
@@ -108,7 +99,6 @@ export default function FoodRecognitionScreen() {
 
       if (mode === "MANUAL") return;
 
-      // 2. 外部資料庫傳入 (Open Food Facts)
       if (mode === "EXTERNAL_DB" && initialData) {
         try {
           const data = JSON.parse(initialData as string);
@@ -120,7 +110,6 @@ export default function FoodRecognitionScreen() {
         return;
       }
 
-      // 3. 掃碼本地查詢
       if (mode === "BARCODE" && barcode) {
         const p = await getProductByBarcode(barcode as string);
         if (p && isMounted) {
@@ -130,7 +119,6 @@ export default function FoodRecognitionScreen() {
         return;
       }
 
-      // 4. AI 辨識
       if (imageUri || base64 || mode === "AI") {
         setLoading(true);
         try {
@@ -146,8 +134,9 @@ export default function FoodRecognitionScreen() {
             const result = await analyzeFoodImage(imageBase64, lang, profile);
             if (isMounted) {
               if (result) {
-                setFoodName(`${result.foodName} ${result.composition ? `(${result.composition})` : ''}`);
-                loadProductData(result); // 使用 AI 回傳的 100g 估算值
+                // [修正] AI 名稱不再自動帶入 composition
+                setFoodName(result.foodName); 
+                loadProductData(result);
                 setAiAnalysis({ composition: result.composition, suggestion: result.suggestion });
               } else {
                 Alert.alert("辨識失敗", "AI 無法識別，請手動輸入");
@@ -174,7 +163,6 @@ export default function FoodRecognitionScreen() {
     const totalWeight = qty * unitWt;
     const ratio = totalWeight / 100;
     
-    // 準備產品基準資料 (每 100g) - 這會存入 Product DB
     const productData = {
       foodName,
       calories_100g: parseFloat(baseCal) || 0,
@@ -191,7 +179,6 @@ export default function FoodRecognitionScreen() {
       iron_100g: parseFloat(baseIron) || 0,
     };
 
-    // 準備飲食紀錄資料 (總攝取量) - 這會存入 Log DB
     const logData = {
       foodName,
       totalCalories: Math.round(productData.calories_100g * ratio),
@@ -203,21 +190,19 @@ export default function FoodRecognitionScreen() {
       barcode: displayBarcode || undefined, 
     };
 
-    // [關鍵修正] 確保 Product DB 永遠被更新或建立 (包含手動輸入但有 barcode 的情況)
+    // [關鍵] 只要有 displayBarcode (包含掃碼轉 AI 的情況)，都必須更新 Product DB
     if (displayBarcode) {
-      console.log(`[Save] Updating Product DB for ${displayBarcode}`);
+      console.log(`[Save] Saving/Updating Product DB for ${displayBarcode}`);
       await saveProductLocal(displayBarcode, productData);
     }
 
     if (mode === "EDIT" && originalLog) {
-      // 編輯模式：檢查是否需要同步更新 Product DB
       if (originalLog.barcode) {
          const oldP = await getProductByBarcode(originalLog.barcode);
-         // 簡單比較，若基準值有變動則提示
-         if (oldP && oldP.calories_100g !== productData.calories_100g) {
+         if (oldP && JSON.stringify(oldP) !== JSON.stringify(productData)) {
             Alert.alert(
-              "基準值變更", 
-              "您修改了每 100g 的營養數值，是否同步更新產品資料庫？(影響未來掃碼結果)",
+              "營養成分變更", 
+              "您修改了基準營養數值，是否要同步更新資料庫？(這將影響所有使用此條碼的紀錄)",
               [
                 { 
                   text: "是，同步更新", 
@@ -241,7 +226,6 @@ export default function FoodRecognitionScreen() {
       }
       await updateFoodLogLocal({ ...originalLog, ...logData });
     } else {
-      // 新增模式
       await saveFoodLogLocal(logData);
     }
     router.dismissTo("/"); 
