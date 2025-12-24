@@ -23,17 +23,17 @@ export default function BarcodeScannerScreen() {
   }
 
   const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
+    if (scanned) return;
     setScanned(true);
     
     // 1. 檢查本地資料庫
     const localProduct = await getProductByBarcode(data);
     if (localProduct) {
-      // 確保將條碼傳遞過去
       router.push({ pathname: "/food-recognition", params: { mode: "BARCODE", barcode: data } });
       return;
     }
 
-    // 2. 查詢 OpenFoodFacts
+    // 2. 查詢 Open Food Facts
     try {
       const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${data}.json`);
       const json = await response.json();
@@ -47,26 +47,28 @@ export default function BarcodeScannerScreen() {
           carbs_100g: p.nutriments?.carbohydrates_100g || 0,
           fat_100g: p.nutriments?.fat_100g || 0,
           sodium_100g: (p.nutriments?.salt_100g || 0) * 400,
+          sugar_100g: p.nutriments?.sugars_100g || 0,
+          saturated_fat_100g: p.nutriments?.["saturated-fat_100g"] || 0,
         };
         
         router.push({ 
           pathname: "/food-recognition", 
           params: { 
             mode: "EXTERNAL_DB", 
-            barcode: data, // 確保傳遞 barcode
+            barcode: data, 
             initialData: JSON.stringify(externalData) 
           } 
         });
         return;
       }
     } catch (e) {
-      console.log("External DB Error", e);
+      console.log("OFF Error", e);
     }
 
-    // 3. 查無資料
+    // 3. 查無資料，引導手動/AI
     Alert.alert(
       t('scan_failed', lang),
-      `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, // 顯示條碼
+      `${t('scan_failed_msg', lang)}\n(條碼: ${data})`, 
       [
         { text: t('input_manual', lang), onPress: () => router.push({ pathname: "/food-recognition", params: { mode: "MANUAL", barcode: data } }) },
         { text: t('scan_ai_label', lang), onPress: () => router.push({ pathname: "/camera" }) },

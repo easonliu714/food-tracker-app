@@ -12,7 +12,7 @@ const KEYS = {
 };
 
 // --- 設定 ---
-export const saveSettings = async (settings: { apiKey?: string; model?: string; language?: string }) => {
+export const saveSettings = async (settings: any) => {
   const current = await getSettings();
   const newSettings = { ...current, ...settings };
   await AsyncStorage.setItem(KEYS.SETTINGS, JSON.stringify(newSettings));
@@ -21,7 +21,12 @@ export const saveSettings = async (settings: { apiKey?: string; model?: string; 
 
 export const getSettings = async () => {
   const data = await AsyncStorage.getItem(KEYS.SETTINGS);
-  return data ? JSON.parse(data) : { apiKey: "", model: "gemini-2.5-flash", language: "zh-TW" };
+  // [修改] 移除 FatSecret 欄位
+  return data ? JSON.parse(data) : { 
+    apiKey: "", 
+    model: "gemini-flash-latest", 
+    language: "zh-TW"
+  };
 };
 
 // --- 使用者 ---
@@ -77,10 +82,11 @@ export const getProfileLocal = async () => {
   return data ? JSON.parse(data) : null;
 };
 
-// --- 產品資料庫 ---
+// --- 產品資料庫 (包含詳細營養素) ---
 export const saveProductLocal = async (barcode: string, productData: any) => {
   const data = await AsyncStorage.getItem(KEYS.PRODUCTS);
   const products = data ? JSON.parse(data) : {};
+  // 這裡儲存的是每 100g 的基準值
   products[barcode] = productData;
   await AsyncStorage.setItem(KEYS.PRODUCTS, JSON.stringify(products));
 };
@@ -91,10 +97,15 @@ export const getProductByBarcode = async (barcode: string) => {
   return products[barcode] || null;
 };
 
-// --- 飲食紀錄 ---
+// --- 飲食紀錄 (包含詳細營養素) ---
 export const getFoodLogsLocal = async () => {
   const data = await AsyncStorage.getItem(KEYS.FOOD_LOGS);
   return data ? JSON.parse(data) : [];
+};
+
+export const getFoodLogById = async (id: number) => {
+  const logs = await getFoodLogsLocal();
+  return logs.find((l: any) => l.id === id);
 };
 
 export const saveFoodLogLocal = async (log: any) => {
@@ -147,12 +158,11 @@ export const deleteActivityLogLocal = async (id: number) => {
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
 };
 
-// [新增] 刪除特定類型的所有運動紀錄 (用於刪除自訂項目)
 export const deleteActivityLogsByType = async (type: string) => {
   const existingLogs = await getActivityLogsLocal();
   const updatedLogs = existingLogs.filter((log: any) => log.activityType !== type);
   await AsyncStorage.setItem(KEYS.ACTIVITY_LOGS, JSON.stringify(updatedLogs));
-  return existingLogs.length - updatedLogs.length; // 回傳刪除筆數
+  return existingLogs.length - updatedLogs.length;
 };
 
 function toLocalISOString(date: Date) {
@@ -182,7 +192,6 @@ export const getDailySummaryLocal = async (date: Date = new Date()) => {
   };
 };
 
-// --- 常用項目 ---
 export const getFrequentFoodItems = async () => {
   const logs = await getFoodLogsLocal();
   const frequency: Record<string, number> = {};
@@ -199,30 +208,24 @@ export const getFrequentActivityTypes = async () => {
   const logs = await getActivityLogsLocal();
   const frequency: Record<string, number> = {};
   const DEFAULT_TYPES = ['走路', '跑步', '爬梯', '打掃', '瑜珈', '一般運動'];
-  
   logs.forEach((log: any) => {
     if (log.activityType) frequency[log.activityType] = (frequency[log.activityType] || 0) + 1;
   });
-  
   const sorted = Object.keys(frequency).sort((a, b) => frequency[b] - frequency[a]);
   return Array.from(new Set([...sorted, ...DEFAULT_TYPES]));
 };
 
-// --- 歷史聚合查詢 ---
 export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_week'|'year') => {
   const foodLogs = await getFoodLogsLocal();
   const activityLogs = await getActivityLogsLocal();
   const weightHistory = await getWeightHistory();
-  
   const aggregated: Record<string, any> = {}; 
   const now = new Date();
-
   let days = 7;
   let keyFunc = (d: Date) => toLocalISOString(d);
 
-  if (period === 'month_day') {
-    days = 30;
-  } else if (period === 'month_week') {
+  if (period === 'month_day') { days = 30; } 
+  else if (period === 'month_week') {
     days = 90;
     keyFunc = (d: Date) => {
       const month = d.getMonth() + 1;
@@ -239,10 +242,8 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
     logs.forEach((log: any) => {
       const d = new Date(log.loggedAt || log.date);
       if ((now.getTime() - d.getTime()) > days * 86400000) return;
-      
       const k = keyFunc(d);
       if (!aggregated[k]) aggregated[k] = { k, calIn: 0, calOut: 0, pro: 0, carb: 0, fat: 0, sod: 0, weights: [] };
-      
       if (type === 'food') {
         aggregated[k].calIn += (log.totalCalories || 0);
         aggregated[k].pro += (log.totalProteinG || 0);
@@ -265,11 +266,9 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
     const wCount = item.weights.length;
     const avgW = wCount > 0 ? item.weights.reduce((s:number, x:any)=>s+x.w, 0)/wCount : 0;
     const avgF = wCount > 0 ? item.weights.reduce((s:number, x:any)=>s+x.f, 0)/wCount : 0;
-    
     let divisor = 1;
     if (period === 'month_week') divisor = 7;
     if (period === 'year') divisor = 30;
-
     return {
       label: item.k,
       caloriesIn: Math.round(item.calIn / divisor),
@@ -282,7 +281,6 @@ export const getAggregatedHistory = async (period: 'week'|'month_day'|'month_wee
       bodyFat: avgF
     };
   });
-
   result.sort((a: any, b: any) => a.label.localeCompare(b.label));
   return result.slice(- (period === 'year' ? 12 : period === 'month_week' ? 12 : 7));
 };

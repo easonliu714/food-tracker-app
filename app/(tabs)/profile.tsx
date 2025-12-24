@@ -1,9 +1,6 @@
-// 僅更新 useEffect 中的 load 函式與相關選項，其餘介面維持不變
-// 請直接覆蓋檔案以確保最新設定生效
-
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
@@ -20,7 +17,8 @@ export default function ProfileScreen() {
   
   const lang = useLanguage();
   const [apiKey, setApiKey] = useState("");
-  // 預設為最新模型
+  // FatSecret 相關 State 已移除
+  
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
@@ -118,7 +116,6 @@ export default function ProfileScreen() {
     
     if (res.valid && res.models) {
       setModelList(res.models);
-      // 優先選 flash-latest
       const bestMatch = res.models.find(m => m.includes('flash-latest')) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
       Alert.alert("測試成功", `金鑰有效！已預選 ${bestMatch}`);

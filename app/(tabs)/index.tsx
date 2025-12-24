@@ -1,3 +1,6 @@
+// 僅修改 handleEditFood 與 renderLeftActions 相關部分，其餘不變
+// 請直接覆蓋檔案
+
 import { useRouter, useFocusEffect } from "expo-router";
 import { useState, useCallback, useEffect } from "react";
 import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
@@ -52,12 +55,6 @@ export default function HomeScreen() {
   const [dist, setDist] = useState("0");
   const [floors, setFloors] = useState("0");
   const [estCal, setEstCal] = useState(0);
-
-  // 食物編輯 Modal (調整份數)
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editingLog, setEditingLog] = useState<any>(null);
-  const [editName, setEditName] = useState("");
-  const [portionMultiplier, setPortionMultiplier] = useState("1.0"); // 預設倍率
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -176,34 +173,12 @@ export default function HomeScreen() {
     );
   };
 
-  // 飲食編輯邏輯：載入並重設倍率
+  // [修改] 右滑編輯跳轉至詳細頁面
   const handleEditFood = (log: any) => { 
-    setEditingLog(log); 
-    setEditName(log.foodName); 
-    setPortionMultiplier("1.0"); // 預設為 1.0 倍 (不變)
-    setEditModalVisible(true); 
-  };
-
-  const handleSaveEditFood = async () => { 
-    if (editingLog) { 
-      const multiplier = parseFloat(portionMultiplier) || 1;
-      
-      // 按比例更新所有營養素
-      const newLog = { 
-        ...editingLog, 
-        foodName: editName, 
-        totalCalories: Math.round(editingLog.totalCalories * multiplier),
-        totalProteinG: Math.round((editingLog.totalProteinG || 0) * multiplier),
-        totalCarbsG: Math.round((editingLog.totalCarbsG || 0) * multiplier),
-        totalFatG: Math.round((editingLog.totalFatG || 0) * multiplier),
-        totalSodiumMg: Math.round((editingLog.totalSodiumMg || 0) * multiplier),
-      };
-      
-      await updateFoodLogLocal(newLog); 
-      setEditModalVisible(false); 
-      setEditingLog(null); 
-      loadData(); 
-    } 
+    router.push({
+      pathname: "/food-recognition",
+      params: { mode: "EDIT", logId: log.id }
+    });
   };
 
   const handleQuickAdd = async (item: any) => { Alert.alert(t('quick_record', lang), `再吃一次「${item.foodName}」？`, [{ text: "取消", style: "cancel" }, { text: "確定", onPress: async () => { await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() }); loadData(); } }]); };
@@ -287,7 +262,6 @@ export default function HomeScreen() {
         </ScrollView>
 
         <Modal visible={modalVisible} transparent animationType="slide">
-          {/* Workout Modal Content (Same as before) */}
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
@@ -329,42 +303,6 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
-        </Modal>
-
-        {/* Edit Food Modal (Portion Adjustment) */}
-        <Modal visible={editModalVisible} transparent animationType="slide">
-           <View style={styles.modalOverlay}>
-             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-               <ThemedText type="title">{t('edit', lang)}</ThemedText>
-               
-               <TextInput style={[styles.input, {color:'#000', backgroundColor:'white', marginTop:10}]} value={editName} onChangeText={setEditName}/>
-               
-               <View style={{marginTop: 15, padding: 10, backgroundColor: '#F0F0F0', borderRadius: 8}}>
-                 <NumberInput label={t('adjust_portion', lang)} value={portionMultiplier} onChange={setPortionMultiplier} step={0.5} />
-                 
-                 {editingLog && (
-                   <View style={{flexDirection:'row', justifyContent:'space-between', marginTop: 10}}>
-                     <View>
-                        <ThemedText style={{fontSize:12, color:textSecondary}}>{t('original_val', lang)}</ThemedText>
-                        <ThemedText>{editingLog.totalCalories} kcal</ThemedText>
-                     </View>
-                     <Ionicons name="arrow-forward" size={20} color={tintColor} style={{alignSelf:'center'}}/>
-                     <View>
-                        <ThemedText style={{fontSize:12, color:textSecondary}}>{t('new_val', lang)}</ThemedText>
-                        <ThemedText style={{fontWeight:'bold', color:tintColor}}>
-                          {Math.round(editingLog.totalCalories * (parseFloat(portionMultiplier)||1))} kcal
-                        </ThemedText>
-                     </View>
-                   </View>
-                 )}
-               </View>
-
-               <View style={{flexDirection:'row', gap:10, marginTop: 20}}>
-                 <Pressable onPress={()=>setEditModalVisible(false)} style={[styles.modalBtn, {borderWidth:1}]}><ThemedText>取消</ThemedText></Pressable>
-                 <Pressable onPress={handleSaveEditFood} style={[styles.modalBtn, {backgroundColor:tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
-               </View>
-             </View>
-           </View>
         </Modal>
       </View>
     </GestureHandlerRootView>
