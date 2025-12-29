@@ -27,6 +27,7 @@ const GOAL_OPTIONS = [
   { id: 'maintain', label: '維持', desc: '維持目前體重與體態' },
   { id: 'gain_weight', label: '增重', desc: '熱量盈餘，專注增肌' },
   { id: 'recomp', label: '體態重組', desc: '增肌同時減脂(適合新手)' },
+{ id: 'blood_sugar', label: '控制血糖', desc: '穩定血糖波動，低 GI 飲食' }, // [新增]
 ];
 
 export default function ProfileScreen() {

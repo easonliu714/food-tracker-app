@@ -8,7 +8,6 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -54,6 +53,7 @@ export default function HomeScreen() {
   const [intake, setIntake] = useState({ calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 });
   const [burnedCalories, setBurnedCalories] = useState(0);
   const [dailyLogs, setDailyLogs] = useState<Record<string, any[]>>({});
+  const [dailyActivities, setDailyActivities] = useState<any[]>([]);
 
   useFocusEffect(
     useCallback(() => { loadData(); }, [currentDate])
@@ -77,13 +77,11 @@ export default function HomeScreen() {
         });
         setTargetWeight(p.targetWeightKg || 0);
         setTargetBodyFat(p.targetBodyFat || 0);
-        
-        // 預設讀取 Profile，稍後 Metrics 覆蓋
         setWeight(p.currentWeightKg ? String(p.currentWeightKg) : "");
         setBodyFat(p.currentBodyFat ? String(p.currentBodyFat) : "");
       }
 
-      // 2. Metrics (Override Weight)
+      // 2. Metrics
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         setWeight(String(metricsRes[0].weightKg || ""));
@@ -108,21 +106,22 @@ export default function HomeScreen() {
       setIntake(newIntake);
       setDailyLogs(groupedLogs);
 
-      // 4. Activity
+      // 4. Activity Logs
       const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
+      setDailyActivities(activityRes);
 
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
   const handleSaveMetrics = async () => {
-      // 簡單儲存體重邏輯 (略)
-      Alert.alert("已儲存", "體態紀錄更新");
+      // 儲存邏輯 (簡化)
+      Alert.alert("已儲存", "體態紀錄已更新");
   };
 
   const deleteLog = (id: number) => {
-      Alert.alert("刪除", "確定刪除？", [
+      Alert.alert("刪除紀錄", "確定刪除？", [
           { text: "取消", style: "cancel" },
           { text: "刪除", style: "destructive", onPress: async () => {
               await db.delete(foodLogs).where(eq(foodLogs.id, id));
@@ -131,11 +130,16 @@ export default function HomeScreen() {
       ]);
   };
 
-  const editLog = (id: number) => {
-      router.push({ pathname: "/food-editor", params: { logId: id } });
+  const deleteActivity = (id: number) => {
+      Alert.alert("刪除紀錄", "確定刪除？", [
+          { text: "取消", style: "cancel" },
+          { text: "刪除", style: "destructive", onPress: async () => {
+              await db.delete(activityLogs).where(eq(activityLogs.id, id));
+              loadData();
+          }}
+      ]);
   };
 
-  // --- Components ---
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <TouchableOpacity onPress={() => setCurrentDate(addDays(currentDate, -1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
@@ -169,9 +173,6 @@ export default function HomeScreen() {
 
   const renderEnergySection = () => {
     const intakePct = targets.calories > 0 ? Math.min(intake.calories / targets.calories, 1) : 0;
-    const net = intake.calories - burnedCalories;
-    const netPct = targets.calories > 0 ? Math.round((net / targets.calories) * 100) : 0;
-    
     return (
       <View style={styles.sectionContainer}>
         <View style={{flexDirection:'row', marginBottom:20}}>
@@ -186,10 +187,6 @@ export default function HomeScreen() {
             <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
                 <ThemedText style={{fontSize:12, color:'#888'}}>攝取/目標: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
                 <ThemedText style={{fontSize:12, color:'#FF9500'}}>消耗: -{Math.round(burnedCalories)}</ThemedText>
-                <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}>
-                    <ThemedText style={{fontSize:12}}>靜攝取%</ThemedText>
-                    <ThemedText type="title">{netPct}%</ThemedText>
-                </View>
             </View>
         </View>
         <View style={{flexDirection:'row', justifyContent:'space-between'}}>
@@ -214,32 +211,31 @@ export default function HomeScreen() {
       );
   };
 
-  const renderSwipeableLog = (log: any) => {
-      const renderRight = () => (
-          <TouchableOpacity style={styles.deleteAction} onPress={() => deleteLog(log.id)}>
-              <Ionicons name="trash" size={24} color="white" />
-          </TouchableOpacity>
-      );
-      const renderLeft = () => (
-          <TouchableOpacity style={styles.editAction} onPress={() => editLog(log.id)}>
-              <Ionicons name="create" size={24} color="white" />
-          </TouchableOpacity>
-      );
+  const renderSwipeableLog = (log: any) => (
+      <Swipeable renderRightActions={()=>(
+          <TouchableOpacity style={styles.deleteAction} onPress={() => deleteLog(log.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>
+      )} renderLeftActions={()=>(
+          <TouchableOpacity style={styles.editAction} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>
+      )}>
+          <View style={[styles.logItem, {backgroundColor: theme.background}]}>
+              <View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':'份'}</ThemedText></View>
+              <ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText>
+          </View>
+      </Swipeable>
+  );
 
-      return (
-          <Swipeable renderRightActions={renderRight} renderLeftActions={renderLeft}>
-              <View style={[styles.logItem, {backgroundColor: theme.background}]}>
-                  <View>
-                      <ThemedText>{log.foodName}</ThemedText>
-                      <ThemedText style={{fontSize: 12, color: theme.icon}}>
-                          {log.servingAmount} {log.servingType==='weight'?'g':'份'} ({Math.round(log.totalWeightG)}g)
-                      </ThemedText>
-                  </View>
-                  <ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText>
-              </View>
-          </Swipeable>
-      );
-  };
+  const renderSwipeableActivity = (act: any) => (
+      <Swipeable renderRightActions={()=>(
+          <TouchableOpacity style={styles.deleteAction} onPress={() => deleteActivity(act.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>
+      )} renderLeftActions={()=>(
+          <TouchableOpacity style={styles.editAction} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>
+      )}>
+          <View style={[styles.logItem, {backgroundColor: theme.background}]}>
+              <View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View>
+              <ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText>
+          </View>
+      </Swipeable>
+  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -264,22 +260,20 @@ export default function HomeScreen() {
                         <View key={mealType} style={styles.mealGroup}>
                             <View style={styles.mealHeader}>
                                 <ThemedText type="defaultSemiBold">{MEAL_LABELS[mealType]}</ThemedText>
-                                <ThemedText style={{fontSize:12, color:theme.icon}}>
-                                    {Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal
-                                </ThemedText>
+                                <ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal</ThemedText>
                             </View>
-                            {logs.length === 0 ? (
-                                <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>尚無紀錄</ThemedText></View>
-                            ) : (
-                                logs.map((log) => (
-                                    <View key={log.id} style={{borderBottomWidth:1, borderColor:'#f0f0f0'}}>
-                                        {renderSwipeableLog(log)}
-                                    </View>
-                                ))
-                            )}
+                            {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>尚無紀錄</ThemedText></View> : logs.map(log => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
                         </View>
                     );
                 })}
+            </View>
+            {/* 運動紀錄 */}
+            <View style={[styles.mealGroup, {marginTop: 20}]}>
+                <View style={styles.mealHeader}>
+                    <ThemedText type="defaultSemiBold">運動</ThemedText>
+                    <ThemedText style={{fontSize:12, color:'#FF9500'}}>總消耗 -{Math.round(burnedCalories)} kcal</ThemedText>
+                </View>
+                {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>尚無運動紀錄</ThemedText></View> : dailyActivities.map(act => <View key={act.id} style={styles.separator}>{renderSwipeableActivity(act)}</View>)}
             </View>
         </View>
       </ScrollView>
@@ -301,7 +295,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 40 },
   headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   dateDisplay: { alignItems: "center" },
-  card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4, backgroundColor:'white' }, // 暫時寫死 white 避免透明
+  card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4, backgroundColor:'white' },
   metricInput: { borderBottomWidth: 1, width: 60, fontSize: 18, fontWeight: "600", textAlign: "center", marginRight: 4, paddingVertical: 2 },
   sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
   barBg: { height: 12, backgroundColor: "#E5E5EA", borderRadius: 6, overflow: "hidden" },
@@ -318,4 +312,5 @@ const styles = StyleSheet.create({
   logItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
   deleteAction: { backgroundColor: '#FF3B30', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
   editAction: { backgroundColor: '#34C759', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
+  separator: { borderBottomWidth: 1, borderColor: '#f0f0f0' }
 });

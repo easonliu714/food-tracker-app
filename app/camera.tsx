@@ -1,102 +1,120 @@
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { useState, useRef } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { useState } from "react";
+import { StyleSheet, View, TouchableOpacity, Alert, ActivityIndicator, Image } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import { ThemedText } from "@/components/themed-text";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function CameraScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [isCapturing, setIsCapturing] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
+  const colorScheme = useColorScheme() ?? "light";
+  const theme = Colors[colorScheme];
+  const [isLoading, setIsLoading] = useState(false);
 
-  if (!permission) return <View />;
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center', marginBottom: 20, color: '#fff' }}>
-          需要相機權限以拍攝食物
-        </Text>
-        <TouchableOpacity onPress={requestPermission} style={styles.permissionBtn}>
-          <Text style={{ color: '#000' }}>授予權限</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // 處理影像選擇與裁切
+  const handleImageSelection = async (mode: 'camera' | 'gallery') => {
+    setIsLoading(true);
+    try {
+      let result;
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true, // 開啟系統圖框編輯
+        aspect: [4, 3],      // 預設比例，用戶可調整
+        quality: 0.8,
+        base64: true,        // 為了 AI 分析準備
+      };
 
-  const takePicture = async () => {
-    if (cameraRef.current && !isCapturing) {
-      setIsCapturing(true);
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.7,
-          base64: true, // 若 AI 需要 Base64
-        });
-        
-        // 修改點：直接導向 food-editor，並帶入圖片路徑
-        // 注意：這裡我們假設 food-editor 會處理 imageUri 參數來進行 AI 分析
+      if (mode === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("權限不足", "需要相機權限才能拍攝食物");
+          setIsLoading(false);
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("權限不足", "需要相簿權限才能選取照片");
+          setIsLoading(false);
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync(options);
+      }
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // 取得圖片後，導向編輯頁面，並標記需要進行 AI 分析
         router.push({
           pathname: "/food-editor",
-          params: { imageUri: photo?.uri } 
+          params: { 
+            imageUri: result.assets[0].uri,
+            imageBase64: result.assets[0].base64, // 傳遞 base64 給 AI
+            analyze: "true" // 標記進入後自動分析
+          } 
         });
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsCapturing(false);
       }
-    }
-  };
-
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled) {
-       router.push({
-          pathname: "/food-editor",
-          params: { imageUri: result.assets[0].uri } 
-       });
+    } catch (e) {
+      console.error(e);
+      Alert.alert("錯誤", "無法處理影像");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <CameraView style={styles.camera} ref={cameraRef} facing="back">
-        <View style={styles.overlay}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-                <Ionicons name="close" size={30} color="white" />
-            </TouchableOpacity>
-            
-            <View style={styles.controls}>
-                <TouchableOpacity onPress={pickImage} style={styles.galleryBtn}>
-                    <Ionicons name="images" size={28} color="white" />
-                </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <Ionicons name="close" size={30} color={theme.text} />
+        </TouchableOpacity>
+        <ThemedText type="subtitle">新增飲食紀錄</ThemedText>
+        <View style={{ width: 30 }} />
+      </View>
 
-                <TouchableOpacity onPress={takePicture} style={styles.captureBtn}>
-                    {isCapturing ? <ActivityIndicator color="black"/> : <View style={styles.captureInner} />}
-                </TouchableOpacity>
-
-                <View style={{width: 50}} /> 
-            </View>
+      <View style={styles.content}>
+        <View style={styles.illustration}>
+           <Ionicons name="fast-food-outline" size={100} color={theme.icon} />
+           <ThemedText style={{marginTop: 20, textAlign:'center', color: theme.icon}}>
+             拍攝食物或從相簿選取{'\n'}AI 將自動分析營養成分
+           </ThemedText>
         </View>
-      </CameraView>
+
+        {isLoading ? (
+          <ActivityIndicator size="large" color={theme.tint} style={{marginTop: 50}} />
+        ) : (
+          <View style={styles.actionContainer}>
+            <TouchableOpacity 
+              style={[styles.btn, { backgroundColor: theme.tint }]} 
+              onPress={() => handleImageSelection('camera')}
+            >
+              <Ionicons name="camera" size={24} color="#FFF" style={{marginRight: 10}}/>
+              <ThemedText style={styles.btnText}>開啟相機</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.btn, { backgroundColor: theme.cardBackground, borderWidth: 1, borderColor: theme.icon }]} 
+              onPress={() => handleImageSelection('gallery')}
+            >
+              <Ionicons name="images" size={24} color={theme.text} style={{marginRight: 10}}/>
+              <ThemedText style={[styles.btnText, {color: theme.text}]}>讀取相簿</ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'black' },
-  camera: { flex: 1 },
-  permissionBtn: { backgroundColor: 'white', padding: 15, borderRadius: 10 },
-  overlay: { flex: 1, justifyContent: 'space-between', padding: 20 },
-  closeBtn: { alignSelf: 'flex-start', padding: 10 },
-  controls: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 30 },
-  galleryBtn: { padding: 10 },
-  captureBtn: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center' },
-  captureInner: { width: 70, height: 70, borderRadius: 35, borderWidth: 2, borderColor: 'black', backgroundColor: 'white' },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
+  closeBtn: { padding: 5 },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 30 },
+  illustration: { alignItems: 'center', marginBottom: 60 },
+  actionContainer: { gap: 20 },
+  btn: { flexDirection: 'row', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', elevation: 2 },
+  btnText: { fontSize: 18, fontWeight: '600', color: '#FFF' }
 });

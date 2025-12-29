@@ -6,10 +6,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { getDailySummaryLocal, getProfileLocal, saveAIAdvice, getAIAdvice } from "@/lib/storage";
+// [修改] 移除舊的資料讀取函式，僅保留 AI 建議的快取存取
+import { saveAIAdvice, getAIAdvice } from "@/lib/storage";
 import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
+
+// [新增] 資料庫相關引用
+import { db } from "@/lib/db";
+import { userProfiles, foodLogs, activityLogs } from "@/drizzle/schema";
+import { eq } from "drizzle-orm";
+import { format } from "date-fns";
 
 export default function RecipesScreen() {
   const insets = useSafeAreaInsets();
@@ -21,36 +28,56 @@ export default function RecipesScreen() {
   const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
   const [loading, setLoading] = useState(false);
   const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
+  
+  // 資料狀態
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
 
-  // 初始載入儲存的建議
+  // 1. 初始載入儲存的 AI 建議 (快取)
   useEffect(() => {
-     async function init() {
-       try {
-         const advice = await getAIAdvice();
-         if (advice) {
-           setAdviceData({
-             RECIPE: advice.RECIPE || null,
-             WORKOUT: advice.WORKOUT || null
-           });
-         }
-       } catch (e) {
-         console.error("Failed to load saved advice", e);
-       }
-     }
-     init();
+      async function init() {
+        try {
+          const advice = await getAIAdvice();
+          if (advice) {
+            setAdviceData({
+              RECIPE: advice.RECIPE || null,
+              WORKOUT: advice.WORKOUT || null
+            });
+          }
+        } catch (e) {
+          console.error("Failed to load saved advice", e);
+        }
+      }
+      init();
   }, []);
 
-  // 每次進入頁面更新剩餘熱量與個人檔案
+  // 2. 每次進入頁面：從 SQLite 讀取最新數據並計算剩餘熱量
   useFocusEffect(useCallback(() => {
     async function syncData() {
-       const p = await getProfileLocal();
-       const s = await getDailySummaryLocal();
-       const target = p?.dailyCalorieTarget || 2000;
-       const net = (s.totalCaloriesIn || 0) - (s.totalCaloriesOut || 0);
-       setProfile(p);
-       setRemaining(target - net);
+        try {
+            const today = format(new Date(), 'yyyy-MM-dd');
+            
+            // A. 讀取個人檔案
+            const pRes = await db.select().from(userProfiles).limit(1);
+            const p = pRes.length > 0 ? pRes[0] : null;
+            const target = p?.dailyCalorieTarget || 2000;
+
+            // B. 計算今日攝取
+            const fRes = await db.select().from(foodLogs).where(eq(foodLogs.date, today));
+            const consumed = fRes.reduce((sum, i) => sum + (i.totalCalories || 0), 0);
+
+            // C. 計算今日運動消耗
+            const aRes = await db.select().from(activityLogs).where(eq(activityLogs.date, today));
+            const burned = aRes.reduce((sum, i) => sum + (i.caloriesBurned || 0), 0);
+
+            // 更新狀態
+            setProfile(p);
+            // 剩餘熱量 = 目標 - 攝取 + 運動消耗
+            setRemaining(Math.round(target - consumed + burned));
+            
+        } catch (e) {
+            console.error("Sync Data Error:", e);
+        }
     }
     syncData();
   }, []));
@@ -58,39 +85,44 @@ export default function RecipesScreen() {
   const currentResult = adviceData[activeTab];
 
   const handleGenerate = async () => {
+    if (!profile) {
+        Alert.alert("資料不足", "請先至設定頁面完善個人資料");
+        return;
+    }
+
     setLoading(true);
     
     // 延遲執行以避免 UI 卡頓
     setTimeout(async () => {
-       try {
-         let res;
-         if (activeTab === 'RECIPE') {
+        try {
+          let res;
+          if (activeTab === 'RECIPE') {
             // [修正] 傳遞完整 profile 以便 AI 讀取年齡與訓練目標
             res = await suggestRecipe(remaining, 'STORE', lang, profile);
-         } else {
+          } else {
             res = await suggestWorkout(profile, remaining, lang);
-         }
-         
-         if (res) {
-           const newAdvice = { ...adviceData, [activeTab]: res };
-           setAdviceData(newAdvice);
-           await saveAIAdvice(activeTab, res);
-           
-           Alert.alert(
-             t('ai_coach', lang), 
-             (activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)) + 
-             "\n(已根據您的訓練目標與剩餘熱量更新建議)"
-           );
+          }
+          
+          if (res) {
+            const newAdvice = { ...adviceData, [activeTab]: res };
+            setAdviceData(newAdvice);
+            await saveAIAdvice(activeTab, res);
+            
+            Alert.alert(
+              t('ai_coach', lang), 
+              (activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)) + 
+              "\n(已根據您的訓練目標與剩餘熱量更新建議)"
+            );
 
-         } else {
-           Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
-         }
-       } catch (e) {
-         Alert.alert("錯誤", "發生未知錯誤");
-         console.error(e);
-       } finally {
-         setLoading(false);
-       }
+          } else {
+            Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
+          }
+        } catch (e) {
+          Alert.alert("錯誤", "發生未知錯誤");
+          console.error(e);
+        } finally {
+          setLoading(false);
+        }
     }, 100);
   };
 
