@@ -1,11 +1,20 @@
-import { I18n } from 'i18n-js';
-import { getLocales } from 'expo-localization';
-import { getSettings } from './storage';
+import { useState, useEffect } from 'react';
+import { getSettings, saveSettings } from './storage';
 import { create } from 'zustand';
 
-// 定義翻譯字串
-const translations = {
-  "zh-TW": {
+// 定義支援的語言
+export const LANGUAGES = [
+  { code: 'zh-TW', label: '繁體中文' },
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+  { code: 'fr', label: 'Français' },
+  { code: 'ru', label: 'Русский' },
+];
+
+// 翻譯字典
+export const TRANSLATIONS = {
+  'zh-TW': {
     welcome: "歡迎",
     today_summary: "今日概況",
     calories: "熱量",
@@ -19,15 +28,21 @@ const translations = {
     ai_analysis: "AI 分析",
     analyzing: "分析中...",
     food_name: "食物名稱",
+    food_name_placeholder: "輸入名稱或掃描條碼",
     portion: "份量",
     camera: "相機",
     gallery: "相簿",
     scan_barcode: "掃描條碼",
     manual_input: "手動輸入",
+    
+    // 餐別
     breakfast: "早餐",
     lunch: "午餐",
     dinner: "晚餐",
+    afternoon_tea: "下午茶",
+    late_night: "宵夜",
     snack: "點心",
+    
     exercise: "運動",
     weight: "體重",
     body_fat: "體脂",
@@ -48,9 +63,14 @@ const translations = {
     suggestion: "攝取建議",
     ask_ai: "詢問 AI...",
     send: "發送",
+    
+    // 預設提問
+    ask_recipe: "今天有什麼建議菜單？",
+    ask_workout: "今天有什麼建議的訓練？",
     follow_up_1: "這餐適合運動後吃嗎？",
     follow_up_2: "如何調整更健康？",
     follow_up_3: "推薦的搭配飲料？",
+    
     version_history: "版本履歷",
     logout: "登出",
     language: "語言",
@@ -64,13 +84,41 @@ const translations = {
     generate_plan: "生成計畫",
     watch_video: "觀看影片",
     remaining_budget: "今日剩餘熱量",
+    
+    // 營養素詳細
     sugar: "糖",
     fiber: "膳食纖維",
     saturated_fat: "飽和脂肪",
     trans_fat: "反式脂肪",
-    cholesterol: "膽固醇"
+    cholesterol: "膽固醇",
+    
+    // 掃碼與 Alert
+    local_db: "本地資料庫",
+    loaded: "已載入",
+    downloaded: "已下載資訊",
+    scan_failed: "查無資料",
+    scan_failed_msg: "資料庫與網路皆無此商品，請選擇：",
+    scan_ai_option: "拍照分析營養標示",
+    manual_option: "手動輸入",
+    error: "錯誤",
+    read_failed: "讀取失敗",
+    barcode_scanned: "Barcode: ",
+    
+    // Profile
+    gender: "性別",
+    male: "男",
+    female: "女",
+    height: "身高",
+    birth_year: "出生年份",
+    training_goal: "訓練目標",
+    activity_level: "活動量",
+    save_settings: "儲存設定",
+    ai_settings: "AI 設定",
+    api_key_placeholder: "貼上您的 API Key",
+    test_key: "測試 Key",
+    current_model: "當前模型"
   },
-  "en": {
+  'en': {
     welcome: "Welcome",
     today_summary: "Today's Summary",
     calories: "Calories",
@@ -84,15 +132,20 @@ const translations = {
     ai_analysis: "AI Analysis",
     analyzing: "Analyzing...",
     food_name: "Food Name",
+    food_name_placeholder: "Enter name or scan barcode",
     portion: "Portion",
     camera: "Camera",
     gallery: "Gallery",
     scan_barcode: "Scan Barcode",
     manual_input: "Manual Input",
+    
     breakfast: "Breakfast",
     lunch: "Lunch",
     dinner: "Dinner",
+    afternoon_tea: "Afternoon Tea",
+    late_night: "Late Night",
     snack: "Snack",
+    
     exercise: "Exercise",
     weight: "Weight",
     body_fat: "Body Fat",
@@ -113,9 +166,13 @@ const translations = {
     suggestion: "Suggestion",
     ask_ai: "Ask AI...",
     send: "Send",
+    
+    ask_recipe: "Suggest a meal plan for today?",
+    ask_workout: "Suggest a workout for today?",
     follow_up_1: "Good for post-workout?",
     follow_up_2: "How to make it healthier?",
     follow_up_3: "Best drink pairing?",
+    
     version_history: "Version History",
     logout: "Log Out",
     language: "Language",
@@ -129,16 +186,40 @@ const translations = {
     generate_plan: "Generate Plan",
     watch_video: "Watch Video",
     remaining_budget: "Remaining Calories",
+    
     sugar: "Sugar",
     fiber: "Fiber",
     saturated_fat: "Saturated Fat",
     trans_fat: "Trans Fat",
-    cholesterol: "Cholesterol"
-  },
-  // ... 其他語言 (日/韓/法/俄) 可在此擴充，為節省篇幅暫略，邏輯同上
+    cholesterol: "Cholesterol",
+    
+    local_db: "Local DB",
+    loaded: "Loaded",
+    downloaded: "Downloaded",
+    scan_failed: "Not Found",
+    scan_failed_msg: "Item not found. Please choose:",
+    scan_ai_option: "Scan Nutrition Label (AI)",
+    manual_option: "Manual Input",
+    error: "Error",
+    read_failed: "Read Failed",
+    barcode_scanned: "Barcode: ",
+    
+    gender: "Gender",
+    male: "Male",
+    female: "Female",
+    height: "Height",
+    birth_year: "Birth Year",
+    training_goal: "Goal",
+    activity_level: "Activity Level",
+    save_settings: "Save Settings",
+    ai_settings: "AI Settings",
+    api_key_placeholder: "Paste API Key",
+    test_key: "Test Key",
+    current_model: "Model"
+  }
 };
 
-// 狀態管理
+// 狀態管理 Store
 interface LanguageState {
   locale: string;
   setLocale: (locale: string) => void;
@@ -149,35 +230,37 @@ export const useLanguageStore = create<LanguageState>((set) => ({
   setLocale: (locale) => set({ locale }),
 }));
 
-// 初始化 i18n
-const i18n = new I18n(translations);
-i18n.enableFallback = true;
+// Listener 機制 (保留相容性)
+const listeners: ((lang: string) => void)[] = [];
+let currentLang = 'zh-TW';
 
-// Hook
+export const t = (key: string, lang: string = 'zh-TW') => {
+  const dict = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS['en'];
+  // @ts-ignore
+  return dict[key] || key;
+};
+
 export const useLanguage = () => {
   const locale = useLanguageStore((state) => state.locale);
+  
+  // 初始化讀取
+  useEffect(() => {
+    getSettings().then(s => { 
+      if(s.language && s.language !== currentLang) {
+        currentLang = s.language;
+        useLanguageStore.getState().setLocale(s.language);
+      }
+    });
+  }, []);
+  
   return locale;
 };
 
-// Helper function
-export const t = (key: keyof typeof translations["zh-TW"], locale: string = 'zh-TW') => {
-  i18n.locale = locale;
-  return i18n.t(key) || key; // Fallback to key if missing
+export const setAppLanguage = (lang: string) => {
+  currentLang = lang;
+  useLanguageStore.getState().setLocale(lang);
+  saveSettings({ language: lang });
 };
-
-// 切換語言 helper
-export const setAppLanguage = (langCode: string) => {
-  useLanguageStore.getState().setLocale(langCode);
-};
-
-export const LANGUAGES = [
-  { code: 'zh-TW', label: '繁體中文' },
-  { code: 'en', label: 'English' },
-  { code: 'ja', label: '日本語' },
-  { code: 'ko', label: '한국어' },
-  { code: 'fr', label: 'Français' },
-  { code: 'ru', label: 'Русский' },
-];
 
 // 版本履歷
 export const VERSION_LOGS = [

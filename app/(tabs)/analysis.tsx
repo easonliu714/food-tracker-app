@@ -18,19 +18,14 @@ export default function AnalysisScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
   const lang = useLanguage();
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<7 | 30>(7); // 7 or 30 days
+  const [period, setPeriod] = useState<7 | 30>(7);
   
-  // Charts Data
-  const [calData, setCalData] = useState<any[]>([]); // 堆疊圖 (攝取/消耗)
+  const [calData, setCalData] = useState<any[]>([]);
   const [weightData, setWeightData] = useState<any[]>([]);
-  
-  // Summary Data
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
 
   useFocusEffect(
-    useCallback(() => {
-      loadAnalysis(period);
-    }, [period])
+    useCallback(() => { loadAnalysis(period); }, [period])
   );
 
   const loadAnalysis = async (days: number) => {
@@ -41,20 +36,21 @@ export default function AnalysisScreen() {
           const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
           const strStart = format(startDate, 'yyyy-MM-dd');
 
-          // Initialize Map
           const dataMap = new Map();
           dateRange.forEach(d => {
               const k = format(d, 'yyyy-MM-dd');
               dataMap.set(k, { in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, label: format(d, days===7 ? 'MM/dd' : 'dd') });
           });
 
-          // Fetch Logs
           const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
           const weights = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart)).orderBy(desc(dailyMetrics.date));
 
-          // Aggregate
+          // 計算有效天數
+          const activeDays = new Set();
+
           logs.forEach(l => {
+              activeDays.add(l.date);
               if (dataMap.has(l.date)) {
                   const d = dataMap.get(l.date);
                   d.in += l.totalCalories || 0;
@@ -65,35 +61,27 @@ export default function AnalysisScreen() {
               }
           });
           acts.forEach(a => {
+              activeDays.add(a.date);
               if (dataMap.has(a.date)) {
                   dataMap.get(a.date).out += a.caloriesBurned || 0;
               }
           });
 
-          // Prepare Chart Data
           const chartArr = Array.from(dataMap.values());
-          
-          // Stacked Bar Data for Gifted Charts
           const stackData = chartArr.map(d => ({
               label: d.label,
               stacks: [
-                  { value: d.in, color: '#34C759', marginBottom: 2 }, // Intake
-                  { value: d.out, color: '#FF9500' }, // Burned (visualize as positive stack or separate bar, here stacked for compact view)
+                  { value: d.in, color: '#34C759', marginBottom: 2 },
+                  { value: d.out, color: '#FF9500' },
               ],
-              // For separate bars, structure differs. Let's use grouped bars logic or simple intake bar vs burned line.
-              // Here: Simply Intake Bar.
-              value: d.in,
-              frontColor: '#34C759',
-              labelTextStyle: { fontSize: 10, color: '#888' }
+              frontColor: 'transparent',
           }));
           setCalData(stackData);
 
-          // Weight Line Data
           const wData = weights.map(w => ({ value: w.weightKg, label: w.date.slice(5) })).reverse();
           setWeightData(wData.length ? wData : [{value: 0}]);
 
-          // Calc Summary Averages
-          const totalDays = chartArr.length || 1;
+          const totalDays = Math.max(activeDays.size, 1);
           const sum = chartArr.reduce((acc, cur) => ({
               avgIn: acc.avgIn + cur.in, avgOut: acc.avgOut + cur.out,
               avgPro: acc.avgPro + cur.pro, avgFat: acc.avgFat + cur.fat,
@@ -123,7 +111,6 @@ export default function AnalysisScreen() {
               </View>
           </View>
 
-          {/* Summary Table */}
           <View style={styles.card}>
               <ThemedText type="subtitle" style={{marginBottom:12}}>{t('avg_daily', lang)}</ThemedText>
               <View style={styles.grid}>
@@ -136,11 +123,11 @@ export default function AnalysisScreen() {
               </View>
           </View>
 
-          {/* Calorie Chart */}
           <View style={[styles.card, {marginTop: 16}]}>
               <ThemedText type="subtitle" style={{marginBottom:16}}>{t('trend_calories', lang)}</ThemedText>
               <BarChart 
                 data={calData} 
+                stackData={calData} // Use stackData prop for stacked bars
                 barWidth={period===7 ? 20 : 6} 
                 spacing={period===7 ? 20 : 4}
                 noOfSections={3} 
@@ -151,11 +138,9 @@ export default function AnalysisScreen() {
                 height={180}
                 width={SCREEN_WIDTH - 80}
                 isAnimated
-                initialSpacing={10}
               />
           </View>
 
-          {/* Weight Chart */}
           <View style={[styles.card, {marginTop: 16}]}>
               <ThemedText type="subtitle" style={{marginBottom:16}}>{t('trend_body', lang)}</ThemedText>
               <LineChart 
@@ -169,7 +154,6 @@ export default function AnalysisScreen() {
                 width={SCREEN_WIDTH - 80}
                 curved
                 isAnimated
-                initialSpacing={10}
               />
           </View>
        </ScrollView>
