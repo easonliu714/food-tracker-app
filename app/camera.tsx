@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, View, TouchableOpacity, Alert, ActivityIndicator, Image } from "react-native";
+import { StyleSheet, View, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,30 +7,32 @@ import * as ImagePicker from "expo-image-picker";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { t, useLanguage } from "@/lib/i18n"; // 引入 i18n
 
 export default function CameraScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
+  const lang = useLanguage(); // 取得當前語言
   const [isLoading, setIsLoading] = useState(false);
 
-  // 處理影像選擇與裁切
   const handleImageSelection = async (mode: 'camera' | 'gallery') => {
     setIsLoading(true);
     try {
       let result;
+      // [修正] 移除 aspect 選項，允許自由裁切
       const options: ImagePicker.ImagePickerOptions = {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, // 開啟系統圖框編輯
-        aspect: [4, 3],      // 預設比例，用戶可調整
+        allowsEditing: true, // 開啟系統圖框
+        // aspect: undefined, // 預設就是 undefined (自由比例)
         quality: 0.8,
-        base64: true,        // 為了 AI 分析準備
+        base64: true,
       };
 
       if (mode === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert("權限不足", "需要相機權限才能拍攝食物");
+          Alert.alert(t('camera', lang), "需要權限");
           setIsLoading(false);
           return;
         }
@@ -38,7 +40,7 @@ export default function CameraScreen() {
       } else {
         const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert("權限不足", "需要相簿權限才能選取照片");
+          Alert.alert(t('gallery', lang), "需要權限");
           setIsLoading(false);
           return;
         }
@@ -46,19 +48,17 @@ export default function CameraScreen() {
       }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        // 取得圖片後，導向編輯頁面，並標記需要進行 AI 分析
         router.push({
           pathname: "/food-editor",
           params: { 
             imageUri: result.assets[0].uri,
-            imageBase64: result.assets[0].base64, // 傳遞 base64 給 AI
-            analyze: "true" // 標記進入後自動分析
+            imageBase64: result.assets[0].base64,
+            analyze: "true" 
           } 
         });
       }
     } catch (e) {
       console.error(e);
-      Alert.alert("錯誤", "無法處理影像");
     } finally {
       setIsLoading(false);
     }
@@ -70,15 +70,15 @@ export default function CameraScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
           <Ionicons name="close" size={30} color={theme.text} />
         </TouchableOpacity>
-        <ThemedText type="subtitle">新增飲食紀錄</ThemedText>
+        <ThemedText type="subtitle">{t('ai_analysis', lang)}</ThemedText>
         <View style={{ width: 30 }} />
       </View>
 
       <View style={styles.content}>
         <View style={styles.illustration}>
-           <Ionicons name="fast-food-outline" size={100} color={theme.icon} />
+           <Ionicons name="scan-outline" size={100} color={theme.icon} />
            <ThemedText style={{marginTop: 20, textAlign:'center', color: theme.icon}}>
-             拍攝食物或從相簿選取{'\n'}AI 將自動分析營養成分
+             {t('camera', lang)} / {t('gallery', lang)}
            </ThemedText>
         </View>
 
@@ -86,20 +86,14 @@ export default function CameraScreen() {
           <ActivityIndicator size="large" color={theme.tint} style={{marginTop: 50}} />
         ) : (
           <View style={styles.actionContainer}>
-            <TouchableOpacity 
-              style={[styles.btn, { backgroundColor: theme.tint }]} 
-              onPress={() => handleImageSelection('camera')}
-            >
+            <TouchableOpacity style={[styles.btn, { backgroundColor: theme.tint }]} onPress={() => handleImageSelection('camera')}>
               <Ionicons name="camera" size={24} color="#FFF" style={{marginRight: 10}}/>
-              <ThemedText style={styles.btnText}>開啟相機</ThemedText>
+              <ThemedText style={styles.btnText}>{t('camera', lang)}</ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.btn, { backgroundColor: theme.cardBackground, borderWidth: 1, borderColor: theme.icon }]} 
-              onPress={() => handleImageSelection('gallery')}
-            >
+            <TouchableOpacity style={[styles.btn, { backgroundColor: theme.cardBackground, borderWidth: 1, borderColor: theme.icon }]} onPress={() => handleImageSelection('gallery')}>
               <Ionicons name="images" size={24} color={theme.text} style={{marginRight: 10}}/>
-              <ThemedText style={[styles.btnText, {color: theme.text}]}>讀取相簿</ThemedText>
+              <ThemedText style={[styles.btnText, {color: theme.text}]}>{t('gallery', lang)}</ThemedText>
             </TouchableOpacity>
           </View>
         )}

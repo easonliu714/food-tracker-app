@@ -1,289 +1,146 @@
-import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, Linking, Platform } from "react-native";
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { useState, useCallback, useEffect, useRef } from "react";
+import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
-// [修改] 移除舊的資料讀取函式，僅保留 AI 建議的快取存取
-import { saveAIAdvice, getAIAdvice } from "@/lib/storage";
-import { suggestRecipe, suggestWorkout } from "@/lib/gemini";
 import { t, useLanguage } from "@/lib/i18n";
 import { Ionicons } from "@expo/vector-icons";
+import { chatWithAI } from "@/lib/gemini"; // 需使用新版 gemini.ts
 
-// [新增] 資料庫相關引用
+// DB Imports
 import { db } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { format } from "date-fns";
 
-export default function RecipesScreen() {
+export default function AICoachScreen() {
   const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
+  const textColor = useThemeColor({}, "text");
   const lang = useLanguage(); 
 
-  const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE');
+  const [messages, setMessages] = useState<any[]>([]);
+  const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [adviceData, setAdviceData] = useState<any>({ RECIPE: null, WORKOUT: null });
-  
-  // 資料狀態
   const [profile, setProfile] = useState<any>(null);
   const [remaining, setRemaining] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
 
-  // 1. 初始載入儲存的 AI 建議 (快取)
-  useEffect(() => {
-      async function init() {
-        try {
-          const advice = await getAIAdvice();
-          if (advice) {
-            setAdviceData({
-              RECIPE: advice.RECIPE || null,
-              WORKOUT: advice.WORKOUT || null
-            });
-          }
-        } catch (e) {
-          console.error("Failed to load saved advice", e);
-        }
-      }
-      init();
-  }, []);
-
-  // 2. 每次進入頁面：從 SQLite 讀取最新數據並計算剩餘熱量
+  // Sync Data
   useFocusEffect(useCallback(() => {
     async function syncData() {
         try {
             const today = format(new Date(), 'yyyy-MM-dd');
-            
-            // A. 讀取個人檔案
             const pRes = await db.select().from(userProfiles).limit(1);
-            const p = pRes.length > 0 ? pRes[0] : null;
-            const target = p?.dailyCalorieTarget || 2000;
-
-            // B. 計算今日攝取
+            const p = pRes[0] || null;
+            
             const fRes = await db.select().from(foodLogs).where(eq(foodLogs.date, today));
             const consumed = fRes.reduce((sum, i) => sum + (i.totalCalories || 0), 0);
-
-            // C. 計算今日運動消耗
+            
             const aRes = await db.select().from(activityLogs).where(eq(activityLogs.date, today));
             const burned = aRes.reduce((sum, i) => sum + (i.caloriesBurned || 0), 0);
 
-            // 更新狀態
+            const target = p?.dailyCalorieTarget || 2000;
             setProfile(p);
-            // 剩餘熱量 = 目標 - 攝取 + 運動消耗
             setRemaining(Math.round(target - consumed + burned));
-            
-        } catch (e) {
-            console.error("Sync Data Error:", e);
-        }
+        } catch (e) { console.error(e); }
     }
     syncData();
   }, []));
 
-  const currentResult = adviceData[activeTab];
+  const handleSend = async (msg: string) => {
+      if (!msg.trim() || !profile) return;
+      const userText = msg.trim();
+      
+      const newHistory = [...messages, { role: 'user', parts: [{ text: userText }] }];
+      setMessages(newHistory);
+      setInputText("");
+      setLoading(true);
 
-  const handleGenerate = async () => {
-    if (!profile) {
-        Alert.alert("資料不足", "請先至設定頁面完善個人資料");
-        return;
-    }
+      // Scroll to bottom
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
-    setLoading(true);
-    
-    // 延遲執行以避免 UI 卡頓
-    setTimeout(async () => {
-        try {
-          let res;
-          if (activeTab === 'RECIPE') {
-            // [修正] 傳遞完整 profile 以便 AI 讀取年齡與訓練目標
-            res = await suggestRecipe(remaining, 'STORE', lang, profile);
-          } else {
-            res = await suggestWorkout(profile, remaining, lang);
-          }
-          
-          if (res) {
-            const newAdvice = { ...adviceData, [activeTab]: res };
-            setAdviceData(newAdvice);
-            await saveAIAdvice(activeTab, res);
-            
-            Alert.alert(
-              t('ai_coach', lang), 
-              (activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)) + 
-              "\n(已根據您的訓練目標與剩餘熱量更新建議)"
-            );
-
-          } else {
-            Alert.alert("分析失敗", "AI 暫無回應，請檢查網路或 API Key");
-          }
-        } catch (e) {
-          Alert.alert("錯誤", "發生未知錯誤");
-          console.error(e);
-        } finally {
-          setLoading(false);
-        }
-    }, 100);
-  };
-
-  const openVideo = () => { 
-    if (currentResult?.video_url) {
-      Linking.openURL(currentResult.video_url);
-    }
-  };
-
-  const handleExportPDF = async () => {
-    if (!currentResult) return;
-    
-    const contentHtml = activeTab === 'RECIPE' ? 
-      `
-        <div class="section">
-          <h3>🛒 ${t('ingredients', lang)}</h3>
-          <ul>
-            ${currentResult.ingredients?.map((item: string) => `<li>${item}</li>`).join('') || '<li>無資料</li>'}
-          </ul>
-        </div>
-        <div class="section">
-          <h3>📝 ${t('steps', lang)}</h3>
-          <ol>
-            ${currentResult.steps?.map((step: string) => `<li>${step}</li>`).join('') || '<li>無資料</li>'}
-          </ol>
-        </div>
-        <div class="highlight">
-          🔥 <strong>${t('calories', lang)}:</strong> ${currentResult.calories} kcal
-        </div>
-      ` : 
-      `
-        <div class="section">
-          <h3>🏋️ 運動詳情</h3>
-          <p><strong>項目:</strong> ${currentResult.activity}</p>
-          <p><strong>時間:</strong> ${currentResult.duration_minutes} 分鐘</p>
-          <div class="highlight">
-            ⚡ <strong>預估消耗:</strong> ${currentResult.estimated_calories} kcal
-          </div>
-        </div>
-      `;
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 40px; line-height: 1.6; color: #333; }
-            h1 { color: #2196F3; border-bottom: 2px solid #eee; padding-bottom: 15px; }
-            h2 { color: #444; margin-top: 0; }
-            .card { background: #f5f5f5; padding: 20px; border-radius: 12px; margin: 20px 0; border-left: 5px solid #2196F3; }
-            .section { margin-bottom: 20px; }
-            .highlight { font-size: 1.2em; color: #E65100; font-weight: bold; margin-top: 10px; }
-            li { margin-bottom: 8px; }
-            .footer { text-align: center; color: #999; margin-top: 60px; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 20px; }
-          </style>
-        </head>
-        <body>
-          <h1>${activeTab === 'RECIPE' ? t('recipe_suggestion', lang) : t('workout_suggestion', lang)}</h1>
-          
-          <div class="card">
-            <h2>${activeTab === 'RECIPE' ? currentResult.title : currentResult.activity}</h2>
-            <p><strong>💡 ${t('reason', lang)}:</strong></p>
-            <p>${currentResult.reason}</p>
-          </div>
-          
-          <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;" />
-          
-          ${contentHtml}
-          
-          <div class="footer">
-            Generated by Nutrition Tracker AI • ${new Date().toLocaleDateString()}
-          </div>
-        </body>
-      </html>
-    `;
-
-    try {
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      if (Platform.OS === "ios") {
-        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-      } else {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('export_pdf', lang) });
-      }
-    } catch (e) {
-      Alert.alert("匯出失敗", "請檢查裝置是否支援列印或分享功能");
-    }
+      // Call AI
+      const response = await chatWithAI(newHistory, userText, { ...profile, remaining }, lang);
+      
+      setMessages([...newHistory, { role: 'model', parts: [{ text: response }] }]);
+      setLoading(false);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
   return (
-    <View style={[styles.container, { backgroundColor }]}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.container, { backgroundColor }]}>
        <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
           <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
-          {currentResult && (
-            <Pressable onPress={handleExportPDF} style={{padding: 8}}>
-               <Ionicons name="share-outline" size={24} color={tintColor} />
-            </Pressable>
+       </View>
+       
+       <View style={[styles.summaryCard, {backgroundColor: cardBackground}]}>
+           <ThemedText style={{fontSize: 12, color: '#888'}}>{t('remaining_budget', lang)}</ThemedText>
+           <ThemedText style={{fontSize: 24, fontWeight: 'bold', color: remaining < 0 ? 'red' : tintColor}}>{remaining} kcal</ThemedText>
+       </View>
+
+       <ScrollView 
+          ref={scrollViewRef}
+          style={{flex: 1, paddingHorizontal: 16}}
+          contentContainerStyle={{paddingBottom: 20}}
+       >
+          {messages.length === 0 && (
+              <View style={{marginTop: 40, alignItems: 'center'}}>
+                  <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
+                  <ThemedText style={{color:'#888', marginTop:10}}>
+                      Hi! I am your AI Coach. Ask me anything about diet or workout.
+                  </ThemedText>
+              </View>
           )}
-       </View>
-       
-       <View style={{flexDirection: 'row', padding: 16, gap: 10}}>
-          <Pressable onPress={() => setActiveTab('RECIPE')} style={[styles.tab, activeTab === 'RECIPE' && {backgroundColor: tintColor, borderColor: tintColor}]}>
-             <ThemedText style={{color: activeTab==='RECIPE'?'white':'#666', fontWeight:'bold'}}>{t('recipe_suggestion', lang)}</ThemedText>
-          </Pressable>
-          <Pressable onPress={() => setActiveTab('WORKOUT')} style={[styles.tab, activeTab === 'WORKOUT' && {backgroundColor: tintColor, borderColor: tintColor}]}>
-             <ThemedText style={{color: activeTab==='WORKOUT'?'white':'#666', fontWeight:'bold'}}>{t('workout_suggestion', lang)}</ThemedText>
-          </Pressable>
-       </View>
-       
-       <ScrollView style={{paddingHorizontal: 16}}>
-          <View style={[styles.card, {backgroundColor: cardBackground}]}>
-             <ThemedText style={{textAlign: 'center', color: '#666'}}>{t('remaining_budget', lang)}</ThemedText>
-             <ThemedText style={{textAlign: 'center', fontSize: 32, fontWeight: 'bold', color: remaining < 0 ? 'red' : tintColor}}>{remaining} kcal</ThemedText>
-             {remaining < 0 && (
-               <ThemedText style={{textAlign:'center', color:'red', fontSize:12, marginTop:4}}>
-                 ⚠️ 已超標，AI 將建議高強度運動或低卡飲食
-               </ThemedText>
-             )}
-          </View>
 
-          <Pressable onPress={handleGenerate} style={[styles.btn, {backgroundColor: tintColor}]} disabled={loading}>
-             {loading ? <ActivityIndicator color="white"/> : <ThemedText style={{color: 'white', fontWeight: 'bold'}}>{t('generate_plan', lang)}</ThemedText>}
-          </Pressable>
+          {messages.map((m, i) => (
+              <View key={i} style={[
+                  styles.msgBubble, 
+                  m.role === 'user' ? { alignSelf: 'flex-end', backgroundColor: tintColor } : { alignSelf: 'flex-start', backgroundColor: '#E5E5EA' }
+              ]}>
+                  <ThemedText style={{color: m.role==='user'?'#FFF':'#000'}}>{m.parts[0].text}</ThemedText>
+              </View>
+          ))}
+          
+          {loading && <ActivityIndicator style={{marginTop:10}} />}
 
-          {currentResult && (
-             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 20, marginBottom: 40}]}>
-                <ThemedText type="title">{activeTab==='RECIPE' ? currentResult.title : currentResult.activity}</ThemedText>
-                
-                {activeTab === 'WORKOUT' && currentResult.video_url && (
-                  <Pressable onPress={openVideo} style={{marginVertical: 10}}>
-                    <ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText>
-                  </Pressable>
-                )}
-
-                <ThemedText style={{marginTop: 8}}>
-                   {activeTab==='RECIPE' ? `🔥 ${t('calories', lang)}: ${currentResult.calories} kcal` : `⏱️ 時間: ${currentResult.duration_minutes} min (-${currentResult.estimated_calories} kcal)`}
-                </ThemedText>
-                
-                <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>💡 {t('reason', lang)}：</ThemedText>
-                <ThemedText style={{lineHeight: 20}}>{currentResult.reason}</ThemedText>
-                
-                {activeTab === 'RECIPE' && (
-                  <>
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>🛒 {t('ingredients', lang)}：</ThemedText>
-                    {currentResult.ingredients?.map((item: string, i: number) => <ThemedText key={i}>• {item}</ThemedText>)}
-                    
-                    <ThemedText style={{marginTop: 16, fontWeight: 'bold'}}>📝 {t('steps', lang)}：</ThemedText>
-                    {currentResult.steps?.map((step: string, i: number) => <ThemedText key={i} style={{marginTop: 4}}>{i+1}. {step}</ThemedText>)}
-                  </>
-                )}
-             </View>
+          {/* Quick Suggestions */}
+          {!loading && (
+              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 8, marginTop: 20}}>
+                  {[t('follow_up_1', lang), t('follow_up_2', lang), t('follow_up_3', lang)].map((q, i) => (
+                      <Pressable key={i} onPress={() => handleSend(q)} style={[styles.chip, {borderColor: tintColor}]}>
+                          <ThemedText style={{fontSize: 12, color: tintColor}}>{q}</ThemedText>
+                      </Pressable>
+                  ))}
+              </View>
           )}
        </ScrollView>
-    </View>
+
+       <View style={[styles.inputArea, {backgroundColor: cardBackground, paddingBottom: Math.max(insets.bottom, 10)}]}>
+           <TextInput 
+              style={[styles.input, {color: textColor, borderColor: '#ddd'}]}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={t('ask_ai', lang)}
+              placeholderTextColor="#999"
+           />
+           <Pressable onPress={() => handleSend(inputText)} style={{padding: 10}}>
+               <Ionicons name="send" size={24} color={tintColor} />
+           </Pressable>
+       </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  tab: { flex: 1, padding: 12, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: '#ddd' },
-  card: { padding: 20, borderRadius: 16 },
-  btn: { padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10 }
+  header: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  summaryCard: { margin: 16, padding: 16, borderRadius: 12, alignItems: 'center' },
+  msgBubble: { padding: 12, borderRadius: 16, marginBottom: 8, maxWidth: '80%' },
+  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, backgroundColor: 'transparent' },
+  inputArea: { flexDirection: 'row', padding: 10, borderTopWidth: 1, borderTopColor: '#eee', alignItems: 'center' },
+  input: { flex: 1, height: 40, borderWidth: 1, borderRadius: 20, paddingHorizontal: 15 }
 });

@@ -1,29 +1,89 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
 
-export async function validateApiKey(apiKey: string) {
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const testModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); 
-    try {
-      await testModel.generateContent("Hi");
-    } catch (e: any) {
-      if (e.message?.includes("API key not valid") || e.message?.includes("key expired") || e.status === 400) {
-         return { valid: false, error: "API Key 無效或已過期" };
-      }
-    }
-    const availableModels = ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
-    return { valid: true, models: availableModels };
-  } catch (error: any) {
-    return { valid: false, error: error.message || "連線失敗" };
-  }
-}
-
 async function getModel() {
   const { apiKey, model } = await getSettings();
   if (!apiKey) throw new Error("API Key not found");
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({ model: model || "gemini-flash-latest" });
+}
+
+export async function validateApiKey(apiKey: string) {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const testModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    await testModel.generateContent("Hi");
+    return { valid: true, models: ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"] };
+  } catch (error: any) {
+    return { valid: false, error: error.message || "Invalid Key" };
+  }
+}
+
+// 圖像分析
+export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
+  try {
+    const model = await getModel();
+    const age = 30; // 簡化
+    const goal = profile?.goal || "Maintain";
+
+    const prompt = `
+      You are a professional nutritionist. Analyze this food image.
+      Output ONLY valid JSON.
+      Language: ${lang}.
+      User Profile: Goal=${goal}.
+
+      Required JSON Structure:
+      {
+        "foodName": "Short Name",
+        "calories_100g": 0, "protein_100g": 0, "fat_100g": 0, "carbs_100g": 0, "sodium_100g": 0,
+        "sugar_100g": 0, "fiber_100g": 0, "saturated_fat_100g": 0, "trans_fat_100g": 0, "cholesterol_100g": 0,
+        "zinc_100g": 0, "magnesium_100g": 0, "iron_100g": 0,
+        "composition": "Ingredients list...",
+        "suggestion": "Advice based on user goal..."
+      }
+    `;
+
+    const result = await model.generateContent([
+      prompt,
+      { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
+    ]);
+    
+    const text = result.response.text().replace(/```json|```/g, '').trim();
+    return JSON.parse(text);
+  } catch (e) {
+    console.error("Analyze Error:", e);
+    return null;
+  }
+}
+
+// 聊天對話
+export async function chatWithAI(history: any[], newMessage: string, profile: any, lang: string) {
+    try {
+        const model = await getModel();
+        
+        // 轉換 history 格式為 SDK 要求 (若需要，這裡假設傳入已是標準格式或自行轉換)
+        // SDK 格式: { role: 'user'|'model', parts: [{ text: '...' }] }
+        // 這裡我們直接傳入 history 給 startChat (需確保格式正確)
+        // 過濾掉非 SDK 欄位 (如 id)
+        const chatHistory = history.map(h => ({
+            role: h.role,
+            parts: h.parts
+        }));
+
+        const chat = model.startChat({
+            history: chatHistory,
+            generationConfig: { maxOutputTokens: 500 },
+        });
+
+        // 注入 System Context (透過第一則訊息或每次 Prompt 附加)
+        const context = `(Context: You are an AI Nutrition Coach. Language: ${lang}. User Remaining Calories: ${profile?.remaining}. Goal: ${profile?.goal}.)`;
+        
+        const result = await chat.sendMessage(context + "\n" + newMessage);
+        return result.response.text();
+    } catch (e) {
+        console.error("Chat Error:", e);
+        return "AI is busy, please try again.";
+    }
 }
 
 // --- AI 功能 ---
@@ -94,61 +154,6 @@ export async function suggestWorkout(profile: any, remainingCalories: number, la
       Only return JSON.
     `;
     const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error(e);
-    return null;
-  }
-}
-
-export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
-  try {
-    const model = await getModel();
-    const age = profile?.birthYear ? new Date().getFullYear() - parseInt(profile.birthYear) : 30;
-    const goal = profile?.trainingGoal || "維持身形";
-
-    // [修正] 優化 Prompt：指定語言、單位、欄位
-    const prompt = `
-      Analyze this food image. 
-      **IMPORTANT: Output all text in language code: ${lang}.**
-      User Profile: Age ${age}, Goal: ${goal}.
-
-      Provide detailed nutrition facts **PER 100g**.
-      Estimate values if not visible.
-      
-      Required Fields (per 100g):
-      - foodName: Concise Name ONLY (e.g. "Chicken Salad"). Do NOT include ingredients here.
-      - Basic: Calories, Protein, Carbs, Fat, Sodium
-      - Detailed: Sugar, Saturated Fat, Trans Fat, Cholesterol
-      - Minerals: Zinc, Magnesium, Iron
-      - Composition: Detailed ingredients list (in ${lang}).
-      - Suggestion: Advice considering the user's goal (in ${lang}).
-
-      Output JSON format:
-      {
-        "foodName": "Concise Food Name",
-        "calories_100g": 150,
-        "protein_100g": 10,
-        "carbs_100g": 20,
-        "fat_100g": 5,
-        "sodium_100g": 500,
-        "sugar_100g": 5,
-        "saturated_fat_100g": 1,
-        "trans_fat_100g": 0,
-        "cholesterol_100g": 30,
-        "zinc_100g": 0.5,
-        "magnesium_100g": 10,
-        "iron_100g": 1.2,
-        "composition": "Ingredients description",
-        "suggestion": "Dietary advice"
-      }
-      Only return JSON.
-    `;
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: base64Image, mimeType: "image/jpeg" } }
-    ]);
     const text = result.response.text().replace(/```json|```/g, '').trim();
     return JSON.parse(text);
   } catch (e) {
