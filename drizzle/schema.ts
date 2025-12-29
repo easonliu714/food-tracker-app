@@ -1,183 +1,138 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+// ==================== User Settings & Profile ====================
+export const userProfiles = sqliteTable("user_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  gender: text("gender"), // male, female, other
+  heightCm: real("height_cm"),
+  currentWeightKg: real("current_weight_kg"),
+  currentBodyFat: real("current_body_fat"),
+  targetWeightKg: real("target_weight_kg"),
+  targetBodyFat: real("target_body_fat"),
+  activityLevel: text("activity_level"),
+  goal: text("goal"), // lose_weight, maintain, gain_weight
+  
+  // 營養目標
+  dailyCalorieTarget: integer("daily_calorie_target"),
+  proteinPercentage: integer("protein_percentage").default(30),
+  carbsPercentage: integer("carbs_percentage").default(40),
+  fatPercentage: integer("fat_percentage").default(30),
+  sodiumTargetMg: integer("sodium_target_mg").default(2300),
+
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-
-// ==================== User Profiles ====================
-export const userProfiles = mysqlTable("user_profiles", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  gender: mysqlEnum("gender", ["male", "female", "other"]),
-  birthDate: timestamp("birthDate"),
-  heightCm: int("heightCm"), // Height in cm
-  currentWeightKg: int("currentWeightKg"), // Weight in kg * 10 (e.g., 70.5kg = 705)
-  targetWeightKg: int("targetWeightKg"),
-  activityLevel: mysqlEnum("activityLevel", [
-    "sedentary",
-    "lightly_active",
-    "moderately_active",
-    "very_active",
-    "extra_active",
-  ]).default("sedentary"),
-  goal: mysqlEnum("goal", ["lose_weight", "maintain", "gain_weight"]).default("maintain"),
-  dailyCalorieTarget: int("dailyCalorieTarget"),
-  proteinPercentage: int("proteinPercentage").default(30),
-  carbsPercentage: int("carbsPercentage").default(40),
-  fatPercentage: int("fatPercentage").default(30),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+// ==================== Daily Body Metrics (每日身體數值) ====================
+export const dailyMetrics = sqliteTable("daily_metrics", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // Format: YYYY-MM-DD
+  weightKg: real("weight_kg"),
+  bodyFatPercentage: real("body_fat_percentage"),
+  note: text("note"),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-// ==================== Food Items ====================
-export const foodItems = mysqlTable("food_items", {
-  id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  brand: varchar("brand", { length: 255 }),
-  barcode: varchar("barcode", { length: 128 }).unique(),
-  servingSizeG: int("servingSizeG"), // Serving size in grams
-  servingSizeDescription: varchar("servingSizeDescription", { length: 255 }),
-  caloriesPerServing: int("caloriesPerServing"),
-  proteinG: int("proteinG"), // * 10 (e.g., 5.5g = 55)
-  carbsG: int("carbsG"), // * 10
-  fatG: int("fatG"), // * 10
-  fiberG: int("fiberG"), // * 10
-  sugarG: int("sugarG"), // * 10
-  sodiumMg: int("sodiumMg"),
-  cholesterolMg: int("cholesterolMg"),
-  vitaminAMcg: int("vitaminAMcg"),
-  vitaminCMg: int("vitaminCMg"),
-  calciumMg: int("calciumMg"),
-  ironMg: int("ironMg"),
-  imageUrl: text("imageUrl"),
-  source: mysqlEnum("source", ["user", "barcode", "ai", "database"]).default("database"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+// ==================== Food Items (Product DB) ====================
+export const foodItems = sqliteTable("food_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  brand: text("brand"),
+  barcode: text("barcode"),
+  
+  baseAmount: real("base_amount").default(100), 
+  baseUnit: text("base_unit").default("g"),
+
+  calories: real("calories").notNull(),
+  proteinG: real("protein_g").default(0),
+  carbsG: real("carbs_g").default(0),
+  fatG: real("fat_g").default(0),
+  sodiumMg: real("sodium_mg").default(0),
+  sugarG: real("sugar_g").default(0),
+  fiberG: real("fiber_g").default(0),
+  
+  isUserCreated: integer("is_user_created", { mode: "boolean" }).default(true),
+  source: text("source").default("manual"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-// ==================== Food Logs ====================
-export const foodLogs = mysqlTable("food_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  foodItemId: int("foodItemId"),
-  mealType: mysqlEnum("mealType", ["breakfast", "lunch", "dinner", "snack"]).notNull(),
-  foodName: varchar("foodName", { length: 255 }).notNull(),
-  servings: int("servings").default(10), // * 10 (e.g., 1.5 servings = 15)
-  totalCalories: int("totalCalories").notNull(),
-  totalProteinG: int("totalProteinG"), // * 10
-  totalCarbsG: int("totalCarbsG"), // * 10
-  totalFatG: int("totalFatG"), // * 10
-  imageUrl: text("imageUrl"),
-  notes: text("notes"),
-  loggedAt: timestamp("loggedAt").defaultNow().notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+// ==================== Food Logs (飲食紀錄) ====================
+export const foodLogs = sqliteTable("food_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD
+  mealTimeCategory: text("meal_time_category").notNull(), // breakfast, lunch, afternoon_tea, dinner, late_night
+  loggedAt: integer("logged_at", { mode: "timestamp" }).notNull(),
+  
+  foodItemId: integer("food_item_id").references(() => foodItems.id),
+  foodName: text("food_name").notNull(),
+  
+  servingType: text("serving_type").default("weight"),
+  servingAmount: real("serving_amount"),
+  unitWeightG: real("unit_weight_g"),
+  
+  totalWeightG: real("total_weight_g"), 
+  totalCalories: real("total_calories"),
+  totalProteinG: real("total_protein_g"),
+  totalCarbsG: real("total_carbs_g"),
+  totalFatG: real("total_fat_g"),
+  totalSodiumMg: real("total_sodium_mg"),
+  
+  imageUrl: text("image_url"),
+  aiAnalysisLog: text("ai_analysis_log"),
 });
 
-// ==================== Recipes ====================
-export const recipes = mysqlTable("recipes", {
-  id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
+// ==================== Recipes (食譜 - 從原本結構遷移) ====================
+export const recipes = sqliteTable("recipes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
   description: text("description"),
-  imageUrl: text("imageUrl"),
-  prepTimeMinutes: int("prepTimeMinutes"),
-  cookTimeMinutes: int("cookTimeMinutes"),
-  servings: int("servings").default(1),
-  totalCalories: int("totalCalories"),
-  totalProteinG: int("totalProteinG"), // * 10
-  totalCarbsG: int("totalCarbsG"), // * 10
-  totalFatG: int("totalFatG"), // * 10
-  mealType: mysqlEnum("mealType", ["breakfast", "lunch", "dinner", "snack"]),
-  dietaryPreference: mysqlEnum("dietaryPreference", [
-    "none",
-    "vegetarian",
-    "vegan",
-    "low_carb",
-    "high_protein",
-    "keto",
-  ]).default("none"),
-  ingredients: text("ingredients"),
+  imageUrl: text("image_url"),
+  prepTimeMinutes: integer("prep_time_minutes"),
+  cookTimeMinutes: integer("cook_time_minutes"),
+  servings: integer("servings").default(1),
+  totalCalories: real("total_calories"),
+  totalProteinG: real("total_protein_g"),
+  totalCarbsG: real("total_carbs_g"),
+  totalFatG: real("total_fat_g"),
+  mealType: text("meal_type"),
+  dietaryPreference: text("dietary_preference"),
+  ingredients: text("ingredients"), // JSON string or text
   instructions: text("instructions"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-// ==================== Favorite Recipes ====================
-export const favoriteRecipes = mysqlTable("favorite_recipes", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  recipeId: int("recipeId").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
+// ==================== Reminder Settings (提醒設定) ====================
+export const reminderSettings = sqliteTable("reminder_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"), // 保留欄位但不強制關聯，單機版通常只有一個用戶
+  breakfastReminderEnabled: integer("breakfast_reminder_enabled", { mode: "boolean" }).default(false),
+  breakfastReminderTime: text("breakfast_reminder_time"),
+  lunchReminderEnabled: integer("lunch_reminder_enabled", { mode: "boolean" }).default(false),
+  lunchReminderTime: text("lunch_reminder_time"),
+  dinnerReminderEnabled: integer("dinner_reminder_enabled", { mode: "boolean" }).default(false),
+  dinnerReminderTime: text("dinner_reminder_time"),
+  waterReminderEnabled: integer("water_reminder_enabled", { mode: "boolean" }).default(false),
+  waterReminderIntervalMinutes: integer("water_reminder_interval_minutes").default(60),
 });
 
-// ==================== Reminder Settings ====================
-export const reminderSettings = mysqlTable("reminder_settings", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  breakfastReminderEnabled: int("breakfastReminderEnabled").default(0), // 0 or 1
-  breakfastReminderTime: varchar("breakfastReminderTime", { length: 5 }),
-  lunchReminderEnabled: int("lunchReminderEnabled").default(0),
-  lunchReminderTime: varchar("lunchReminderTime", { length: 5 }),
-  dinnerReminderEnabled: int("dinnerReminderEnabled").default(0),
-  dinnerReminderTime: varchar("dinnerReminderTime", { length: 5 }),
-  waterReminderEnabled: int("waterReminderEnabled").default(0),
-  waterReminderIntervalMinutes: int("waterReminderIntervalMinutes").default(60),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+// ==================== Activity Logs (運動紀錄) ====================
+export const activityLogs = sqliteTable("activity_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(),
+  loggedAt: integer("logged_at", { mode: "timestamp" }).notNull(),
+  
+  category: text("category"),
+  activityName: text("activity_name").notNull(),
+  
+  intensity: text("intensity"),
+  durationMinutes: integer("duration_minutes"),
+  caloriesBurned: real("calories_burned"),
+  steps: integer("steps"),
+  distanceKm: real("distance_km"),
+  floors: integer("floors"),
+  
+  feeling: text("feeling"),
+  notes: text("notes"),
 });
-
-// ==================== Activity Logs ====================
-export const activityLogs = mysqlTable("activity_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  activityType: varchar("activityType", { length: 100 }).notNull(),
-  durationMinutes: int("durationMinutes"),
-  caloriesBurned: int("caloriesBurned"),
-  steps: int("steps"),
-  distanceKm: int("distanceKm"), // * 100 (e.g., 5.5km = 550)
-  loggedAt: timestamp("loggedAt").defaultNow().notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-// ==================== Type Exports ====================
-export type UserProfile = typeof userProfiles.$inferSelect;
-export type InsertUserProfile = typeof userProfiles.$inferInsert;
-
-export type FoodItem = typeof foodItems.$inferSelect;
-export type InsertFoodItem = typeof foodItems.$inferInsert;
-
-export type FoodLog = typeof foodLogs.$inferSelect;
-export type InsertFoodLog = typeof foodLogs.$inferInsert;
-
-export type Recipe = typeof recipes.$inferSelect;
-export type InsertRecipe = typeof recipes.$inferInsert;
-
-export type FavoriteRecipe = typeof favoriteRecipes.$inferSelect;
-export type InsertFavoriteRecipe = typeof favoriteRecipes.$inferInsert;
-
-export type ReminderSetting = typeof reminderSettings.$inferSelect;
-export type InsertReminderSetting = typeof reminderSettings.$inferInsert;
-
-export type ActivityLog = typeof activityLogs.$inferSelect;
-export type InsertActivityLog = typeof activityLogs.$inferInsert;

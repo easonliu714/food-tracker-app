@@ -1,331 +1,617 @@
-// 僅修改 handleEditFood 與 renderLeftActions 相關部分，其餘不變
-// 請直接覆蓋檔案
-
+import React, { useState, useCallback, useEffect } from "react";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  Dimensions,
+  TextInput,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useState, useCallback, useEffect } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Pressable, Modal, TextInput, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { format, addDays } from "date-fns";
+import { zhTW } from "date-fns/locale";
 import { Ionicons } from "@expo/vector-icons";
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { PieChart } from "react-native-gifted-charts";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { eq, and, desc, sql } from "drizzle-orm";
 
-import { ProgressRing } from "@/components/progress-ring";
 import { ThemedText } from "@/components/themed-text";
-import { useAuth } from "@/hooks/use-auth";
-import { useThemeColor } from "@/hooks/use-theme-color";
-import { 
-  getDailySummaryLocal, getProfileLocal, 
-  deleteFoodLogLocal, saveActivityLogLocal, 
-  deleteActivityLogLocal, updateFoodLogLocal, 
-  updateActivityLogLocal, saveFoodLogLocal, getFrequentFoodItems, getFrequentActivityTypes,
-  deleteActivityLogsByType
-} from "@/lib/storage";
-import { NumberInput } from "@/components/NumberInput";
-import { t, useLanguage } from "@/lib/i18n";
+import { ThemedView } from "@/components/themed-view";
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
-const METS: Record<string, number> = {
-  '走路': 3.5, '跑步': 8.0, '爬梯': 8.0, '打掃': 3.0, '瑜珈': 2.5,
-  '慢走': 2.0, '快走': 5.0, '慢跑': 6.0, '快跑': 10.0, '一般運動': 4.0,
-  '健身': 5.0, '游泳': 6.0, '單車': 7.5
+// Database
+import { db } from "@/lib/db";
+import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
+// 定義餐別順序與標籤
+type MealCategory = "breakfast" | "lunch" | "afternoon_tea" | "dinner" | "late_night";
+const MEAL_ORDER: MealCategory[] = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
+const MEAL_LABELS: Record<string, string> = {
+  breakfast: "早餐",
+  lunch: "午餐",
+  afternoon_tea: "下午茶",
+  dinner: "晚餐",
+  late_night: "宵夜",
+};
+
+// 預設營養目標 (若用戶未設定)
+const DEFAULT_TARGETS = {
+  calories: 2000,
+  protein: 150,
+  fat: 60,
+  carbs: 200,
+  sodium: 2300,
 };
 
 export default function HomeScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const lang = useLanguage();
+  const colorScheme = useColorScheme() ?? "light";
+  const theme = Colors[colorScheme];
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [summary, setSummary] = useState<any>(null);
-  const [targetCalories, setTargetCalories] = useState(2000);
-  const [profile, setProfile] = useState<any>(null);
-  const [frequentItems, setFrequentItems] = useState<any[]>([]);
-  const [workoutTypes, setWorkoutTypes] = useState<string[]>([]);
-  
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // --- State: 日期與 UI ---
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 運動 Modal
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingWorkout, setEditingWorkout] = useState<any>(null);
-  const [actType, setActType] = useState("");
-  const [customActType, setCustomActType] = useState("");
-  const [isCustomAct, setIsCustomAct] = useState(false);
-  const [duration, setDuration] = useState("0");
-  const [steps, setSteps] = useState("0");
-  const [dist, setDist] = useState("0");
-  const [floors, setFloors] = useState("0");
-  const [estCal, setEstCal] = useState(0);
+  // --- State: 資料庫數據 ---
+  const [weight, setWeight] = useState("");
+  const [bodyFat, setBodyFat] = useState("");
+  
+  // 用戶目標 (來自 Profile)
+  const [targets, setTargets] = useState(DEFAULT_TARGETS);
+  const [targetWeight, setTargetWeight] = useState(0);
+  const [targetBodyFat, setTargetBodyFat] = useState(0);
 
-  const backgroundColor = useThemeColor({}, "background");
-  const cardBackground = useThemeColor({}, "cardBackground");
-  const tintColor = useThemeColor({}, "tint");
-  const textSecondary = useThemeColor({}, "textSecondary");
+  // 今日統計
+  const [intake, setIntake] = useState({
+    calories: 0,
+    protein: 0,
+    fat: 0,
+    carbs: 0,
+    sodium: 0,
+  });
+  const [burnedCalories, setBurnedCalories] = useState(0);
+  
+  // 飲食紀錄列表
+  const [dailyLogs, setDailyLogs] = useState<Record<string, any[]>>({});
 
-  const toLocalISO = (d: Date) => {
-    const offset = d.getTimezoneOffset() * 60000;
-    return new Date(d.getTime() - offset).toISOString().split('T')[0];
-  };
+  // --- Data Loading ---
+  
+  // 使用 useFocusEffect 確保每次回到首頁時重新讀取資料
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [currentDate]) // 當日期改變時也要重新讀取
+  );
 
-  const loadData = useCallback(async () => {
-    const p = await getProfileLocal();
-    setProfile(p);
-    if (p?.dailyCalorieTarget) setTargetCalories(p.dailyCalorieTarget);
-    
-    const sum = await getDailySummaryLocal(selectedDate);
-    setSummary(sum);
-    
-    const f = await getFrequentFoodItems();
-    setFrequentItems(f);
-    
-    const w = await getFrequentActivityTypes();
-    setWorkoutTypes(w);
-    if (!actType && w.length > 0) setActType(w[0]);
-  }, [selectedDate, actType]);
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const dateStr = format(currentDate, "yyyy-MM-dd");
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
-
-  // 運動熱量四維估算
-  useEffect(() => {
-    if (modalVisible) {
-      const type = isCustomAct ? customActType : actType;
-      const weight = profile?.currentWeightKg || 60;
-      
-      const mins = parseFloat(duration) || 0;
-      const d = parseFloat(dist) || 0;
-      const s = parseFloat(steps) || 0;
-      const f = parseFloat(floors) || 0;
-      
-      let baseBurn = 0;
-      const met = METS[type] || 4.0;
-
-      if (mins > 0) {
-        baseBurn = met * weight * (mins / 60);
-      } else if (d > 0) {
-        baseBurn = weight * d * 1.036; 
-      } else if (s > 0) {
-        baseBurn = s * 0.04 * (weight / 60);
+      // 1. 讀取個人檔案 (Profile) - 獲取目標設定
+      const profileRes = await db.select().from(userProfiles).limit(1);
+      if (profileRes.length > 0) {
+        const p = profileRes[0];
+        setTargets({
+            calories: p.dailyCalorieTarget || DEFAULT_TARGETS.calories,
+            // 這裡簡單用百分比反推克數，或是資料庫欄位若有直接儲存克數則改用之
+            // 假設 proteinPercentage 是百分比 (例如 30)，則克數 = (總熱量 * 0.3) / 4
+            protein: Math.round((p.dailyCalorieTarget || 2000) * ((p.proteinPercentage || 30) / 100) / 4),
+            fat: Math.round((p.dailyCalorieTarget || 2000) * ((p.fatPercentage || 30) / 100) / 9),
+            carbs: Math.round((p.dailyCalorieTarget || 2000) * ((p.carbsPercentage || 40) / 100) / 4),
+            sodium: p.sodiumTargetMg || DEFAULT_TARGETS.sodium,
+        });
+        setTargetWeight(p.targetWeightKg || 0);
+        setTargetBodyFat(p.targetBodyFat || 0);
+        
+        // 若當日還沒輸入體重，預設顯示目前檔案中的體重
+        setWeight(p.currentWeightKg ? String(p.currentWeightKg) : "");
+        setBodyFat(p.currentBodyFat ? String(p.currentBodyFat) : "");
       }
-      baseBurn += (f * 0.5);
-      setEstCal(Math.round(baseBurn));
-    }
-  }, [actType, customActType, isCustomAct, duration, dist, steps, floors, modalVisible, profile]);
 
-  const handleSaveWorkout = async () => {
-    const type = isCustomAct ? customActType : actType;
-    if (!type) return Alert.alert("請輸入項目");
+      // 2. 讀取今日體態紀錄 (Daily Metrics) - 覆蓋預設體重
+      const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+      if (metricsRes.length > 0) {
+        setWeight(String(metricsRes[0].weightKg || ""));
+        setBodyFat(String(metricsRes[0].bodyFatPercentage || ""));
+      }
+
+      // 3. 讀取今日飲食紀錄 (Food Logs)
+      const logsRes = await db.select().from(foodLogs).where(eq(foodLogs.date, dateStr));
+      
+      // 計算總攝取
+      const newIntake = { calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 };
+      const groupedLogs: Record<string, any[]> = {};
+      
+      MEAL_ORDER.forEach(m => groupedLogs[m] = []); // 初始化
+
+      logsRes.forEach(log => {
+        newIntake.calories += log.totalCalories || 0;
+        newIntake.protein += log.totalProteinG || 0;
+        newIntake.fat += log.totalFatG || 0;
+        newIntake.carbs += log.totalCarbsG || 0;
+        newIntake.sodium += log.totalSodiumMg || 0;
+
+        // 分類
+        const category = log.mealTimeCategory || "snack";
+        if (!groupedLogs[category]) groupedLogs[category] = [];
+        groupedLogs[category].push(log);
+      });
+
+      setIntake(newIntake);
+      setDailyLogs(groupedLogs);
+
+      // 4. 讀取今日運動紀錄 (Activity Logs)
+      const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
+      const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
+      setBurnedCalories(totalBurned);
+
+    } catch (e) {
+      console.error("Load data error:", e);
+      Alert.alert("讀取資料失敗", "請檢查資料庫連線");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- Actions ---
+
+  const handleDateChange = (days: number) => {
+    setCurrentDate((prev) => addDays(prev, days));
+  };
+
+  const handleSaveMetrics = async () => {
+    const w = parseFloat(weight);
+    const bf = parseFloat(bodyFat);
     
-    let details = [];
-    if (parseFloat(duration) > 0) details.push(`${duration}分`);
-    if (parseFloat(steps) > 0) details.push(`${steps}步`);
-    if (parseFloat(dist) > 0) details.push(`${dist}km`);
-    if (parseFloat(floors) > 0) details.push(`${floors}樓`);
-
-    const newLog = {
-      activityType: type,
-      caloriesBurned: estCal,
-      details: details.join(' / '),
-      loggedAt: selectedDate.toISOString()
-    };
-    if (editingWorkout) {
-      await updateActivityLogLocal({ ...editingWorkout, ...newLog });
-      setEditingWorkout(null);
-    } else {
-      await saveActivityLogLocal(newLog);
+    if (isNaN(w)) {
+        Alert.alert("格式錯誤", "請輸入有效的體重數字");
+        return;
     }
-    setModalVisible(false);
-    loadData();
-  };
 
-  const handleEditWorkout = (log: any) => {
-    setEditingWorkout(log);
-    setActType(log.activityType);
-    setIsCustomAct(false);
-    if (!workoutTypes.includes(log.activityType)) {
-       setIsCustomAct(true);
-       setCustomActType(log.activityType);
-    }
-    const parts = (log.details || "").split(' / ');
-    setDuration(parts.find((s:string)=>s.includes('分'))?.replace('分','') || "0");
-    setSteps(parts.find((s:string)=>s.includes('步'))?.replace('步','') || "0");
-    setDist(parts.find((s:string)=>s.includes('km'))?.replace('km','') || "0");
-    setFloors(parts.find((s:string)=>s.includes('樓'))?.replace('樓','') || "0");
-    setModalVisible(true);
-  };
-
-  const handleDeleteWorkoutType = async () => {
-    if (!actType) return;
-    Alert.alert(
-      "刪除項目", 
-      `確定要刪除「${actType}」嗎？\n注意：這將會一併刪除所有屬於此項目的歷史紀錄！`,
-      [
-        { text: "取消", style: "cancel" },
-        { 
-          text: "確定刪除", 
-          style: "destructive",
-          onPress: async () => {
-            const count = await deleteActivityLogsByType(actType);
-            Alert.alert("已刪除", `共刪除 ${count} 筆紀錄`);
-            setModalVisible(false);
-            loadData();
-          }
+    try {
+        const dateStr = format(currentDate, "yyyy-MM-dd");
+        
+        // 1. 檢查今日是否已有紀錄
+        const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+        
+        if (existing.length > 0) {
+            // Update
+            await db.update(dailyMetrics).set({
+                weightKg: w,
+                bodyFatPercentage: isNaN(bf) ? null : bf,
+            }).where(eq(dailyMetrics.id, existing[0].id));
+        } else {
+            // Insert
+            await db.insert(dailyMetrics).values({
+                date: dateStr,
+                weightKg: w,
+                bodyFatPercentage: isNaN(bf) ? null : bf,
+            });
         }
-      ]
+
+        // 2. 同步更新 UserProfile 的 "當前體重" (如果是紀錄今天或未來的數據)
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        if (dateStr >= todayStr) {
+            // 這裡假設系統只有一個用戶，若多用戶需加 where id
+            // 先取得 profile id (通常是 1)
+            const profiles = await db.select().from(userProfiles).limit(1);
+            if (profiles.length > 0) {
+                 await db.update(userProfiles).set({
+                     currentWeightKg: w,
+                     currentBodyFat: isNaN(bf) ? null : bf,
+                     updatedAt: new Date()
+                 }).where(eq(userProfiles.id, profiles[0].id));
+            }
+        }
+
+        Alert.alert("成功", "體態紀錄已更新");
+        loadData(); // 重新讀取確認
+
+    } catch (e) {
+        console.error(e);
+        Alert.alert("儲存失敗");
+    }
+  };
+
+  const navigateToRecord = (type: "camera" | "scan" | "manual" | "activity") => {
+    switch (type) {
+      case "camera":
+        // 實際開發可傳遞 mode 參數
+        router.push("/camera"); 
+        break;
+      case "scan":
+        router.push("/barcode-scanner");
+        break;
+      case "manual":
+        router.push("/food-editor"); 
+        break;
+      case "activity":
+        router.push("/activity-editor");
+        break;
+    }
+  };
+
+  // --- Render Helpers ---
+
+  const renderMacroRing = (label: string, value: number, target: number, color: string, unit = "g") => {
+    // 避免除以 0
+    const safeTarget = target > 0 ? target : 1; 
+    const percentage = Math.min((value / safeTarget) * 100, 100);
+    const data = [
+      { value: percentage, color: color },
+      { value: 100 - percentage, color: "#E5E5EA" }, // 剩餘灰色
+    ];
+
+    return (
+      <View style={styles.macroItem}>
+        <PieChart
+          data={data}
+          donut
+          radius={32}
+          innerRadius={24}
+          centerLabelComponent={() => (
+             <ThemedText style={{fontSize: 10, fontWeight: 'bold'}}>{Math.round(percentage)}%</ThemedText>
+          )}
+        />
+        <ThemedText style={styles.macroLabel}>{label}</ThemedText>
+        <ThemedText style={styles.macroTarget}>{Math.round(value)}/{target}{unit}</ThemedText>
+      </View>
     );
   };
 
-  // [修改] 右滑編輯跳轉至詳細頁面
-  const handleEditFood = (log: any) => { 
-    router.push({
-      pathname: "/food-recognition",
-      params: { mode: "EDIT", logId: log.id }
-    });
+  // --- Component Renders ---
+
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
+      <TouchableOpacity onPress={() => handleDateChange(-1)}>
+        <Ionicons name="chevron-back" size={24} color={theme.text} />
+      </TouchableOpacity>
+      
+      <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateDisplay}>
+        <ThemedText type="subtitle">
+          {format(currentDate, "yyyy-MM-dd", { locale: zhTW })}
+        </ThemedText>
+        <ThemedText style={{ color: theme.icon, fontSize: 14, marginTop: 2 }}>
+          {format(currentDate, "EEEE", { locale: zhTW })}
+        </ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => handleDateChange(1)}>
+        <Ionicons name="chevron-forward" size={24} color={theme.text} />
+      </TouchableOpacity>
+
+      {/* DateTimePicker 修正版邏輯 */}
+      {showDatePicker && (
+        <DateTimePicker
+          testID="dateTimePicker"
+          value={currentDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          onChange={(event, date) => {
+             // Android 需要在這裡關閉，iOS 則可能需要另外的確認按鈕，這裡採用通用簡單模式
+             if (Platform.OS === 'android') setShowDatePicker(false); 
+             if (date) setCurrentDate(date);
+          }}
+        />
+      )}
+      {/* iOS 專用的關閉按鈕 (如果 display 是 inline/spinner) */}
+      {Platform.OS === 'ios' && showDatePicker && (
+          <TouchableOpacity 
+            style={styles.iosDatePickerCloseBtn}
+            onPress={() => setShowDatePicker(false)}
+          >
+            <ThemedText style={{color: '#FFF'}}>完成</ThemedText>
+          </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const renderBodyMetricsCard = () => (
+    <ThemedView style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <ThemedText type="defaultSemiBold">身體數值</ThemedText>
+        <TouchableOpacity onPress={handleSaveMetrics}>
+          <ThemedText style={{ color: theme.tint, fontSize: 14 }}>+ 紀錄/更新</ThemedText>
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.metricsRow}>
+        <View style={styles.metricInputGroup}>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={[styles.metricInput, { color: theme.text, borderColor: theme.icon }]}
+              placeholder="0.0"
+              placeholderTextColor={theme.icon}
+              keyboardType="numeric"
+              value={weight}
+              onChangeText={setWeight}
+            />
+            <ThemedText style={styles.unitText}>kg</ThemedText>
+          </View>
+          <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+            <TextInput
+              style={[styles.metricInput, { color: theme.text, borderColor: theme.icon }]}
+              placeholder="0.0"
+              placeholderTextColor={theme.icon}
+              keyboardType="numeric"
+              value={bodyFat}
+              onChangeText={setBodyFat}
+            />
+            <ThemedText style={styles.unitText}>%</ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.metricTargetGroup}>
+          <View style={styles.targetItem}>
+            <ThemedText style={styles.targetLabel}>目標體重</ThemedText>
+            <ThemedText type="defaultSemiBold">{targetWeight > 0 ? targetWeight : '--'} kg</ThemedText>
+          </View>
+          <View style={styles.targetItem}>
+            <ThemedText style={styles.targetLabel}>目標體脂</ThemedText>
+            <ThemedText type="defaultSemiBold">{targetBodyFat > 0 ? targetBodyFat : '--'} %</ThemedText>
+          </View>
+        </View>
+      </View>
+    </ThemedView>
+  );
+
+  const renderEnergySection = () => {
+    const netCalories = intake.calories - burnedCalories;
+    // 靜攝取百分比 = (攝取 - 消耗) / 目標
+    const netPercentage = targets.calories > 0 ? Math.round((netCalories / targets.calories) * 100) : 0;
+    const intakePercentage = targets.calories > 0 ? Math.min(intake.calories / targets.calories, 1) : 0;
+    
+    return (
+      <View style={styles.sectionContainer}>
+        {/* 上半部：能量條 */}
+        <View style={styles.energyRow}>
+          <View style={styles.energyBarContainer}>
+            <View style={styles.energyBarLabelRow}>
+              <ThemedText style={{fontSize: 12, color: '#34C759'}}>攝取</ThemedText>
+              <ThemedText style={{fontSize: 12, color: '#FF9500'}}>消耗</ThemedText>
+            </View>
+            <View style={styles.barBackground}>
+              <View style={[styles.barFill, { width: `${intakePercentage * 100}%`, backgroundColor: '#34C759' }]} />
+            </View>
+            <View style={[styles.barBackground, { marginTop: 8 }]}>
+              {/* 消耗條以目標熱量的 50% 為視覺基準，避免太長或太短 */}
+              <View style={[styles.barFill, { width: `${Math.min(burnedCalories / (targets.calories * 0.5), 1) * 100}%`, backgroundColor: '#FF9500' }]} />
+            </View>
+          </View>
+
+          <View style={styles.energyInfoContainer}>
+            <View style={styles.energyTextRow}>
+              <ThemedText style={styles.energyLabel}>攝取/目標</ThemedText>
+              <ThemedText type="defaultSemiBold">{Math.round(intake.calories)} / {targets.calories}</ThemedText>
+            </View>
+            <View style={styles.energyTextRow}>
+              <ThemedText style={styles.energyLabel}>消耗熱量</ThemedText>
+              <ThemedText type="defaultSemiBold" style={{color: '#FF9500'}}>-{Math.round(burnedCalories)}</ThemedText>
+            </View>
+            <View style={styles.netEnergyRow}>
+              <ThemedText style={styles.energyLabel}>靜攝取 %</ThemedText>
+              <ThemedText type="title" style={{color: netPercentage > 100 ? 'red' : theme.text}}>
+                {netPercentage}%
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        {/* 下半部：圓餅圖 */}
+        <View style={styles.macroContainer}>
+          {renderMacroRing("蛋白質", intake.protein, targets.protein, "#FF3B30")}
+          {renderMacroRing("脂肪", intake.fat, targets.fat, "#FFcc00")}
+          {renderMacroRing("碳水", intake.carbs, targets.carbs, "#5856D6")}
+          {renderMacroRing("鈉", intake.sodium, targets.sodium, "#AF52DE", "mg")}
+        </View>
+      </View>
+    );
   };
 
-  const handleQuickAdd = async (item: any) => { Alert.alert(t('quick_record', lang), `再吃一次「${item.foodName}」？`, [{ text: "取消", style: "cancel" }, { text: "確定", onPress: async () => { await saveFoodLogLocal({ ...item, id: undefined, loggedAt: selectedDate.toISOString() }); loadData(); } }]); };
-  
-  const renderRightActions = (id: number, type: 'food'|'activity') => ( <Pressable onPress={async () => { if(type==='food') await deleteFoodLogLocal(id); else await deleteActivityLogLocal(id); loadData(); }} style={styles.deleteBtn}><Ionicons name="trash" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>{t('delete', lang)}</ThemedText></Pressable> );
-  const renderLeftActions = (item: any, type: 'food'|'activity') => ( <Pressable onPress={() => type === 'food' ? handleEditFood(item) : handleEditWorkout(item)} style={styles.editBtn}><Ionicons name="create" size={24} color="white" /><ThemedText style={{color:'white', fontSize:12}}>{t('edit', lang)}</ThemedText></Pressable> );
+  const renderRecordSection = () => (
+    <View style={styles.recordSection}>
+      <View style={styles.quickActionRow}>
+        <ActionButton icon="camera" label="拍照" onPress={() => navigateToRecord('camera')} color="#34C759" />
+        <ActionButton icon="barcode" label="掃描" onPress={() => navigateToRecord('scan')} color="#007AFF" />
+        <ActionButton icon="create" label="手輸" onPress={() => navigateToRecord('manual')} color="#5856D6" />
+        <ActionButton icon="fitness" label="運動" onPress={() => navigateToRecord('activity')} color="#FF9500" />
+      </View>
 
-  const openWorkoutModal = () => {
-    setEditingWorkout(null);
-    setDuration("0");
-    setSteps("0");
-    setDist("0");
-    setFloors("0");
-    setModalVisible(true);
-  };
+      <View style={styles.logsContainer}>
+        {MEAL_ORDER.map((mealType) => {
+            const logs = dailyLogs[mealType] || [];
+            return (
+              <View key={mealType} style={styles.mealGroup}>
+                <View style={styles.mealHeader}>
+                  <ThemedText type="defaultSemiBold">{MEAL_LABELS[mealType]}</ThemedText>
+                  {/* 可在此加入該餐總熱量顯示 */}
+                  <ThemedText style={{fontSize:12, color: theme.icon}}>
+                    {Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal
+                  </ThemedText>
+                </View>
+                
+                {logs.length === 0 ? (
+                    <View style={styles.emptyLogPlaceholder}>
+                        <ThemedText style={{color: theme.icon, fontSize: 13}}>尚無紀錄</ThemedText>
+                    </View>
+                ) : (
+                    logs.map((log, idx) => (
+                        <View key={idx} style={styles.logItem}>
+                            <View>
+                                <ThemedText>{log.foodName}</ThemedText>
+                                <ThemedText style={{fontSize: 12, color: theme.icon}}>
+                                    {log.servingAmount} {log.servingType === 'weight' ? 'g' : '份'}
+                                </ThemedText>
+                            </View>
+                            <ThemedText>{log.totalCalories} kcal</ThemedText>
+                        </View>
+                    ))
+                )}
+              </View>
+            );
+        })}
+      </View>
+    </View>
+  );
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={[styles.container, { backgroundColor }]}>
-        <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} />}>
-          <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-             <ThemedText type="title">{t('today_overview', lang)}</ThemedText>
-          </View>
-
-          <View style={[styles.dateNav, {backgroundColor: cardBackground}]}>
-             <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() - 86400000))} style={styles.dateBtn}><Ionicons name="chevron-back" size={24} color={tintColor}/></Pressable>
-             <Pressable onPress={() => setShowDatePicker(true)}><ThemedText type="subtitle">{toLocalISO(selectedDate)}</ThemedText></Pressable>
-             <Pressable onPress={() => setSelectedDate(new Date(selectedDate.getTime() + 86400000))} style={styles.dateBtn}><Ionicons name="chevron-forward" size={24} color={tintColor}/></Pressable>
-          </View>
-          {showDatePicker && <DateTimePicker value={selectedDate} mode="date" display="default" onChange={(e, d) => { setShowDatePicker(false); if(d) setSelectedDate(d); }} />}
-
-          <View style={[styles.progressSection, { backgroundColor: cardBackground, marginTop: 10 }]}>
-            <ProgressRing progress={targetCalories>0?(summary?.totalCaloriesIn - summary?.totalCaloriesOut)/targetCalories:0} current={summary?.totalCaloriesIn - summary?.totalCaloriesOut} target={targetCalories} size={200} />
-            <View style={{flexDirection:'row', gap:20, marginTop:10}}>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('intake', lang)} {summary?.totalCaloriesIn}</ThemedText>
-               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('burned', lang)} {summary?.totalCaloriesOut}</ThemedText>
-            </View>
-          </View>
-
-          {frequentItems.length > 0 && (
-            <View style={{marginBottom: 16}}>
-              <ThemedText type="subtitle" style={{marginLeft: 16, marginBottom: 8}}>{t('quick_record', lang)}</ThemedText>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{paddingLeft: 16}}>
-                {frequentItems.map((item, index) => (
-                  <Pressable key={index} onPress={() => handleQuickAdd(item)} style={[styles.quickChip, {backgroundColor: cardBackground, marginRight: 10}]}>
-                    <ThemedText>{item.foodName}</ThemedText>
-                    <ThemedText style={{fontSize: 10, color: textSecondary}}>{item.totalCalories} kcal</ThemedText>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.quickActions}>
-            <Pressable onPress={() => router.push("/camera")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="camera" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('photo', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/barcode-scanner")} style={[styles.btn, {backgroundColor: tintColor, flex:1}]}><Ionicons name="barcode" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('scan', lang)}</ThemedText></Pressable>
-            <Pressable onPress={() => router.push("/food-recognition?mode=MANUAL")} style={[styles.btn, {backgroundColor: '#FF9800', flex:1}]}><Ionicons name="create" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('manual_input', lang)}</ThemedText></Pressable>
-            <Pressable onPress={openWorkoutModal} style={[styles.btn, {backgroundColor: '#4CAF50', flex:1}]}><Ionicons name="fitness" size={24} color="white"/><ThemedText style={styles.btnTxt}>{t('workout', lang)}</ThemedText></Pressable>
-          </View>
-
-          <View style={[styles.listSection, { backgroundColor: cardBackground }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('intake', lang)}</ThemedText>
-            {summary?.foodLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
-              summary?.foodLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'food')} renderLeftActions={() => renderLeftActions(log, 'food')}>
-                <View style={[styles.listItem, {backgroundColor: cardBackground}]}><ThemedText>{log.foodName}</ThemedText><ThemedText style={{color: tintColor, fontWeight: 'bold'}}>{log.totalCalories}</ThemedText></View>
-              </Swipeable>
-            ))}
-          </View>
-          
-          <View style={[styles.listSection, { backgroundColor: cardBackground, marginTop: 16 }]}>
-            <ThemedText type="subtitle" style={{marginBottom: 10}}>{t('workout', lang)}</ThemedText>
-            {summary?.activityLogs?.length === 0 ? <ThemedText style={{textAlign:'center', color: textSecondary, padding:20}}>{t('no_record', lang)}</ThemedText> :
-              summary?.activityLogs?.map((log: any) => (
-              <Swipeable key={log.id} renderRightActions={() => renderRightActions(log.id, 'activity')} renderLeftActions={() => renderLeftActions(log, 'activity')}>
-                <View style={[styles.listItem, {backgroundColor: cardBackground}]}><ThemedText>{log.activityType}</ThemedText><ThemedText style={{color: '#FF9800', fontWeight: 'bold'}}>-{log.caloriesBurned}</ThemedText></View>
-              </Swipeable>
-            ))}
-          </View>
-          <View style={{height: 100}}/>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      {isLoading ? (
+        <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
+            <ActivityIndicator size="large" color={theme.tint} />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+            {renderHeader()}
+            {renderBodyMetricsCard()}
+            {renderEnergySection()}
+            {renderRecordSection()}
         </ScrollView>
-
-        <Modal visible={modalVisible} transparent animationType="slide">
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: cardBackground }]}>
-              <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                 <ThemedText type="title">{editingWorkout ? t('edit', lang) : "新增"}</ThemedText>
-                 <View style={{flexDirection:'row', gap:15}}>
-                   {!isCustomAct && actType && (
-                     <Pressable onPress={handleDeleteWorkoutType}>
-                        <Ionicons name="trash-outline" size={24} color="red" />
-                     </Pressable>
-                   )}
-                   <Pressable onPress={() => setIsCustomAct(!isCustomAct)}><ThemedText style={{color: tintColor}}>{isCustomAct ? "選單" : "手動"}</ThemedText></Pressable>
-                 </View>
-              </View>
-              {isCustomAct ? (
-                 <TextInput style={[styles.input, {color: '#000', backgroundColor: 'white', marginTop:10}]} placeholder="輸入名稱" value={customActType} onChangeText={setCustomActType} />
-              ) : (
-                 <ScrollView horizontal style={{marginVertical: 10, maxHeight: 50}}>
-                   {workoutTypes.map(t => (
-                     <Pressable key={t} onPress={() => setActType(t)} style={[styles.typeChip, actType === t && {backgroundColor: tintColor}]}>
-                       <ThemedText style={{color: actType === t ? 'white' : '#666'}}>{t}</ThemedText>
-                     </Pressable>
-                   ))}
-                 </ScrollView>
-              )}
-              <View style={{flexDirection: 'row', gap: 10}}>
-                <View style={{flex:1}}><NumberInput label="時間 (分)" value={duration} onChange={setDuration} step={10} /></View>
-                <View style={{flex:1}}><NumberInput label="距離 (km)" value={dist} onChange={setDist} step={0.5} /></View>
-              </View>
-              <View style={{flexDirection: 'row', gap: 10}}>
-                 <View style={{flex:1}}><NumberInput label="步數" value={steps} onChange={setSteps} step={100} /></View>
-                 <View style={{flex:1}}><NumberInput label="樓層" value={floors} onChange={setFloors} step={1} /></View>
-              </View>
-              <View style={{backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, marginVertical: 10}}>
-                <ThemedText style={{textAlign: 'center', color: '#E65100', fontWeight: 'bold'}}>預估: {estCal} kcal</ThemedText>
-              </View>
-              <View style={{flexDirection: 'row', gap: 10}}>
-                <Pressable onPress={() => setModalVisible(false)} style={[styles.modalBtn, {borderWidth: 1}]}><ThemedText>取消</ThemedText></Pressable>
-                <Pressable onPress={handleSaveWorkout} style={[styles.modalBtn, {backgroundColor: tintColor}]}><ThemedText style={{color:'white'}}>儲存</ThemedText></Pressable>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      </View>
-    </GestureHandlerRootView>
+      )}
+    </SafeAreaView>
   );
 }
 
+// 子元件：圓形操作按鈕
+const ActionButton = ({ icon, label, onPress, color }: { icon: any, label: string, onPress: () => void, color: string }) => (
+  <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+    <View style={[styles.iconCircle, { backgroundColor: color }]}>
+      <Ionicons name={icon} size={24} color="#FFF" />
+    </View>
+    <ThemedText style={styles.actionLabel}>{label}</ThemedText>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 20 },
-  dateNav: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, marginHorizontal: 20, borderRadius: 12 },
-  dateBtn: { padding: 10, marginHorizontal: 20 },
-  progressSection: { alignItems: 'center', padding: 20, margin: 16, borderRadius: 20 },
-  quickActions: { flexDirection: "row", padding: 16, gap: 8 },
-  btn: { padding: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  btnTxt: { color: 'white', fontWeight: 'bold', fontSize: 12, marginTop: 4 },
-  listSection: { marginHorizontal: 16, padding: 16, borderRadius: 16 },
-  listItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10 },
-  deleteBtn: { backgroundColor: 'red', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', borderTopRightRadius: 16, borderBottomRightRadius: 16 },
-  editBtn: { backgroundColor: '#2196F3', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%', borderTopLeftRadius: 16, borderBottomLeftRadius: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { padding: 20, borderRadius: 16 },
-  typeChip: { padding: 8, borderRadius: 16, borderWidth: 1, borderColor: '#ddd', marginRight: 8 },
-  modalBtn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 16 },
-  quickChip: { padding: 10, borderRadius: 10, alignItems: 'center', minWidth: 80 }
+  scrollContent: { paddingBottom: 40 },
+  headerContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dateDisplay: { alignItems: "center" },
+  iosDatePickerCloseBtn: {
+    position: 'absolute',
+    bottom: -40,
+    right: 20,
+    backgroundColor: '#007AFF',
+    padding: 8,
+    borderRadius: 8,
+    zIndex: 99,
+  },
+  card: {
+    marginHorizontal: 16,
+    marginVertical: 8,
+    padding: 16,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  metricsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  metricInputGroup: { flex: 1, marginRight: 16 },
+  inputWrapper: { flexDirection: "row", alignItems: "center" },
+  metricInput: {
+    borderBottomWidth: 1,
+    width: 60,
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+    marginRight: 4,
+    paddingVertical: 2,
+  },
+  unitText: { fontSize: 14, color: "#8E8E93" },
+  metricTargetGroup: { flex: 1, justifyContent: "space-around", alignItems: "flex-end" },
+  targetItem: { alignItems: "flex-end" },
+  targetLabel: { fontSize: 12, color: "#8E8E93" },
+  
+  sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
+  energyRow: { flexDirection: "row", marginBottom: 20 },
+  energyBarContainer: { flex: 1, justifyContent: "center" },
+  energyBarLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  barBackground: {
+    height: 12,
+    backgroundColor: "#E5E5EA",
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  barFill: { height: "100%", borderRadius: 6 },
+  energyInfoContainer: { flex: 0.8, paddingLeft: 16, justifyContent: "center" },
+  energyTextRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  energyLabel: { fontSize: 12, color: "#8E8E93" },
+  netEnergyRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, alignItems: 'center' },
+  
+  macroContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16 },
+  macroItem: { alignItems: "center", width: SCREEN_WIDTH / 4.5 },
+  macroLabel: { fontSize: 12, marginTop: 8, fontWeight: '600' },
+  macroTarget: { fontSize: 10, color: "#8E8E93", marginTop: 2 },
+  
+  recordSection: { marginTop: 24, paddingHorizontal: 16 },
+  quickActionRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
+  actionButton: { alignItems: "center" },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  actionLabel: { fontSize: 12, fontWeight: "500" },
+  
+  logsContainer: { marginTop: 8 },
+  mealGroup: { marginBottom: 20 },
+  mealHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E5EA",
+    marginBottom: 8,
+  },
+  emptyLogPlaceholder: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: '#C7C7CC',
+    borderRadius: 8,
+  },
+  logItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0'
+  }
 });

@@ -69,6 +69,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-localization",
+    "expo-sqlite", // <--- 請新增這一行
     [
       "expo-notifications",
       {
