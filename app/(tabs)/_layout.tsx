@@ -1,70 +1,61 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from "expo-router";
+import React from "react";
+import { Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-import { HapticTab } from '@/components/haptic-tab';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { useLanguage, t } from '@/lib/i18n'; // [關鍵] 引入 useLanguage
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
-  const activeTintColor = useThemeColor({}, 'tint');
-  const backgroundColor = useThemeColor({}, 'background');
-  const lang = useLanguage(); // [關鍵] 監聽語言變更
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? "light"];
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: activeTintColor,
+        tabBarActiveTintColor: theme.tint,
         headerShown: false,
-        tabBarButton: HapticTab,
         tabBarStyle: Platform.select({
           ios: {
-            position: 'absolute',
-            backgroundColor: backgroundColor,
-            borderTopWidth: 0,
-            elevation: 0,
+            position: "absolute",
           },
-          default: {
-            backgroundColor: backgroundColor,
-            borderTopWidth: 0,
-            elevation: 0,
-          },
+          default: {},
         }),
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: t('tab_home', lang), // [動態翻譯]
+          title: "首頁",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={28} name={focused ? "home" : "home-outline"} color={color} />
+            <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="analysis"
         options={{
-          title: t('tab_analysis', lang), // [動態翻譯]
+          title: "分析",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={28} name={focused ? "bar-chart" : "bar-chart-outline"} color={color} />
+            <Ionicons name={focused ? "pie-chart" : "pie-chart-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="recipes"
         options={{
-          title: t('tab_ai_coach', lang), // [動態翻譯]
+          title: "食譜",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={28} name={focused ? "sparkles" : "sparkles-outline"} color={color} />
+            <Ionicons name={focused ? "restaurant" : "restaurant-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: t('tab_settings', lang), // [動態翻譯]
+          title: "設定",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons size={28} name={focused ? "settings" : "settings-outline"} color={color} />
+            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
           ),
         }}
       />

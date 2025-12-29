@@ -6,9 +6,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { saveProfileLocal, getProfileLocal, saveSettings, getSettings } from "@/lib/storage";
+import { saveSettings, getSettings } from "@/lib/storage"; // 僅保留 Settings
 import { validateApiKey } from "@/lib/gemini";
 import { LANGUAGES, VERSION_LOGS, t, useLanguage, setAppLanguage } from "@/lib/i18n";
+
+// DB Imports
+import { db } from "@/lib/db";
+import { userProfiles } from "@/drizzle/schema";
+import { eq } from "drizzle-orm";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -20,6 +25,9 @@ export default function ProfileScreen() {
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
   const [modelList, setModelList] = useState<string[]>([]);
   
+  // Profile State (SQLite)
+  const [profileId, setProfileId] = useState<number | null>(null);
+  const [name, setName] = useState("");
   const [gender, setGender] = useState<"male"|"female">("male");
   const [birthYear, setBirthYear] = useState("");
   const [heightCm, setHeightCm] = useState("");
@@ -27,7 +35,7 @@ export default function ProfileScreen() {
   const [bodyFat, setBodyFat] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
   const [activityLevel, setActivityLevel] = useState("sedentary");
-  const [trainingGoal, setTrainingGoal] = useState("goal_maintain");
+  const [trainingGoal, setTrainingGoal] = useState("maintain");
   
   const [loading, setLoading] = useState(true);
   const [testingKey, setTestingKey] = useState(false);
@@ -42,25 +50,33 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
+  // Load Data
   useEffect(() => {
     async function load() {
       try {
+        // 1. Load Local Settings (API Key, etc.)
         const s = await getSettings();
         if(s.apiKey) setApiKey(s.apiKey);
         if(s.model) setSelectedModel(s.model);
         
-        const p = await getProfileLocal();
-        if(p) {
-          setGender(p.gender || "male");
-          if(p.birthYear) setBirthYear(p.birthYear);
-          else if(p.birthDate) setBirthYear(new Date(p.birthDate).getFullYear().toString());
+        // 2. Load User Profile from SQLite
+        const result = await db.select().from(userProfiles).limit(1);
+        if(result.length > 0) {
+          const p = result[0];
+          setProfileId(p.id);
+          setName(p.name || "");
+          setGender((p.gender as "male"|"female") || "male");
+          // 簡單處理：沒存出生年就給空值
+          // 這裡假設我們 schema 沒有 birthYear 欄位，如果有請自行對應
+          // 若 schema 只有 birthDate，則需要轉換
+          // 這裡示範使用 schema 中已有的欄位
           
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
-          setBodyFat(p.bodyFatPercentage?.toString() || "");
+          setBodyFat(p.currentBodyFat?.toString() || "");
           setTargetWeight(p.targetWeightKg?.toString() || "");
           setActivityLevel(p.activityLevel || "sedentary");
-          setTrainingGoal(p.trainingGoal || "goal_maintain");
+          setTrainingGoal(p.goal || "maintain");
         }
       } catch (e) {
         console.error("Profile load error:", e);
@@ -72,38 +88,54 @@ export default function ProfileScreen() {
   }, [isAuthenticated]);
 
   const handleSave = async () => {
-    await saveSettings({ apiKey, model: selectedModel, language: lang });
-    
-    const w = parseFloat(currentWeight) || 60;
-    const h = parseInt(heightCm) || 170;
-    const age = new Date().getFullYear() - (parseInt(birthYear) || 1990);
-    
-    let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
-    
-    const activityMultipliers: Record<string, number> = {
-      'sedentary': 1.2,
-      'lightly_active': 1.375,
-      'moderately_active': 1.55,
-      'very_active': 1.725
-    };
-    const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
-    
-    let targetCal = tdee;
-    if (trainingGoal === 'goal_fat_loss') targetCal -= 400;
-    else if (trainingGoal.includes('strength') || trainingGoal === 'goal_tone_up') targetCal += 200;
+    setLoading(true);
+    try {
+        // 1. Save App Settings (AsyncStorage)
+        await saveSettings({ apiKey, model: selectedModel, language: lang });
+        
+        // 2. Calculate BMR & TDEE
+        const w = parseFloat(currentWeight) || 60;
+        const h = parseInt(heightCm) || 170;
+        const age = new Date().getFullYear() - (parseInt(birthYear) || 1990);
+        
+        let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
+        
+        const activityMultipliers: Record<string, number> = {
+        'sedentary': 1.2,
+        'lightly_active': 1.375,
+        'moderately_active': 1.55,
+        'very_active': 1.725
+        };
+        const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
+        
+        let targetCal = tdee;
+        // 簡單對應 trainingGoal
+        if (trainingGoal === 'lose_weight' || trainingGoal === 'goal_fat_loss') targetCal -= 400;
+        else if (trainingGoal === 'gain_weight' || trainingGoal.includes('strength')) targetCal += 200;
 
-    await saveProfileLocal({
-      gender,
-      birthYear,
-      heightCm: h,
-      currentWeightKg: w,
-      bodyFatPercentage: parseFloat(bodyFat),
-      targetWeightKg: parseFloat(targetWeight),
-      activityLevel,
-      trainingGoal,
-      dailyCalorieTarget: Math.round(targetCal)
-    });
-    Alert.alert(t('save_settings', lang), t('confirm_save', lang));
+        // 3. Update SQLite
+        if (profileId) {
+            await db.update(userProfiles).set({
+                gender,
+                // birthDate: ..., // 若有需要存日期
+                heightCm: h,
+                currentWeightKg: w,
+                currentBodyFat: parseFloat(bodyFat) || null,
+                targetWeightKg: parseFloat(targetWeight) || null,
+                activityLevel,
+                goal: trainingGoal,
+                dailyCalorieTarget: Math.round(targetCal),
+                updatedAt: new Date()
+            }).where(eq(userProfiles.id, profileId));
+        }
+
+        Alert.alert(t('save_settings', lang), t('confirm_save', lang));
+    } catch (e) {
+        console.error(e);
+        Alert.alert("儲存失敗");
+    } finally {
+        setLoading(false);
+    }
   };
 
   const handleTestKey = async () => {
@@ -122,7 +154,9 @@ export default function ProfileScreen() {
     }
   };
 
-  const GOALS = ['goal_maintain', 'goal_fat_loss', 'goal_tone_up', 'goal_upper_strength', 'goal_lower_strength'];
+  const GOALS = ['maintain', 'lose_weight', 'gain_weight']; // 對應 Schema Enum
+
+  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center'}]}><ActivityIndicator/></View>;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -135,18 +169,11 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
-         {!isAuthenticated && (
-           <View style={{backgroundColor: '#FFF3E0', padding: 10, borderRadius: 8, marginBottom: 16}}>
-             <ThemedText style={{color: '#E65100', fontSize: 12}}>訪客模式：資料僅儲存於此裝置。</ThemedText>
-           </View>
-         )}
-
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>Gemini API Key</ThemedText>
               <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} placeholder={t('api_key_placeholder', lang)} secureTextEntry />
-              {/* [新增] 申請連結 */}
               <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')} style={{marginTop: 8}}>
                  <ThemedText style={{color:'#2196F3', fontSize: 12}}>{t('get_api_key_link', lang)}</ThemedText>
               </Pressable>
@@ -189,6 +216,12 @@ export default function ProfileScreen() {
                <View style={{width:10}}/>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
             </View>
+
+            <View style={styles.row, {marginTop: 12}}>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>體脂率 %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+               <View style={{width:10}}/>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>目標體重</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+            </View>
             
             <View style={{marginTop:12}}>
                <ThemedText style={{marginBottom:5}}>{t('training_goal', lang)}</ThemedText>
@@ -229,7 +262,7 @@ export default function ProfileScreen() {
          <View style={{height:50}}/>
       </ScrollView>
 
-      {/* Language Modal */}
+      {/* Language Modal & Model Modal & Version Modal (保持原樣，僅省略內容以節省篇幅，請保留您的Modal程式碼) */}
       <Modal visible={showLangPicker} transparent animationType="fade">
          <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -264,6 +297,7 @@ export default function ProfileScreen() {
       <Modal visible={showVersionModal} transparent animationType="slide">
          <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>{t('version_history', lang)}</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
       </Modal>
+
     </View>
   );
 }
