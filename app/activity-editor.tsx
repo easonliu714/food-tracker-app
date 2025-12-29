@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Platform,
   Modal,
   FlatList,
 } from "react-native";
@@ -17,59 +16,66 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db"; 
 import { activityLogs, userProfiles } from "@/drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-// --- 運動數據庫 (類別 > 項目 > 預設 METs) ---
-// METs (代謝當量) 用於估算熱量： 卡路里 = METs * 體重(kg) * 時間(小時)
-type ActivityItem = { id: string; name: string; mets: number };
+// --- 詳細運動數據庫 ---
+type ActivityItem = { id: string; name: string; mets: number; icon: string };
 type ActivityCategory = { id: string; name: string; items: ActivityItem[] };
 
 const ACTIVITY_DATA: ActivityCategory[] = [
   {
     id: "cardio",
-    name: "有氧運動",
+    name: "有氧與耐力",
     items: [
-      { id: "run_slow", name: "慢跑", mets: 6.0 },
-      { id: "run_fast", name: "快跑", mets: 10.0 },
-      { id: "walk", name: "散步", mets: 3.0 },
-      { id: "cycling", name: "騎腳踏車", mets: 7.5 },
-      { id: "swim", name: "游泳", mets: 8.0 },
-      { id: "hiit", name: "HIIT", mets: 11.0 },
+      { id: "walk", name: "散步", mets: 3.0, icon: "walk" },
+      { id: "run_slow", name: "慢跑", mets: 6.0, icon: "footsteps" },
+      { id: "run_fast", name: "快跑", mets: 10.0, icon: "timer" },
+      { id: "cycling", name: "騎腳踏車", mets: 7.5, icon: "bicycle" },
+      { id: "swim", name: "游泳", mets: 8.0, icon: "water" },
+      { id: "hike", name: "登山健行", mets: 7.0, icon: "trail-sign" },
+      { id: "jump_rope", name: "跳繩", mets: 11.0, icon: "fitness" },
     ],
   },
   {
-    id: "strength",
-    name: "重量訓練",
+    id: "gym",
+    name: "健身房",
     items: [
-      { id: "weight_training", name: "一般重訓", mets: 5.0 },
-      { id: "powerlifting", name: "力量舉重", mets: 6.0 },
-      { id: "bodyweight", name: "徒手訓練", mets: 4.0 },
-      { id: "crossfit", name: "CrossFit", mets: 8.0 },
+      { id: "weight_training", name: "重量訓練 (一般)", mets: 5.0, icon: "barbell" },
+      { id: "powerlifting", name: "健力/大重量", mets: 6.0, icon: "hammer" },
+      { id: "yoga", name: "瑜珈", mets: 2.5, icon: "body" },
+      { id: "pilates", name: "皮拉提斯", mets: 3.0, icon: "accessibility" },
+      { id: "hiit", name: "HIIT 間歇", mets: 8.0, icon: "flash" },
+      { id: "elliptical", name: "橢圓機", mets: 5.0, icon: "repeat" },
     ],
   },
   {
     id: "sport",
-    name: "球類運動",
+    name: "球類與競技",
     items: [
-      { id: "basketball", name: "籃球", mets: 8.0 },
-      { id: "badminton", name: "羽球", mets: 5.5 },
-      { id: "tennis", name: "網球", mets: 7.3 },
-      { id: "soccer", name: "足球", mets: 9.0 },
+      { id: "basketball", name: "籃球", mets: 8.0, icon: "basketball" },
+      { id: "badminton", name: "羽球", mets: 5.5, icon: "tennisball" }, // 無羽球icon暫用tennisball
+      { id: "tennis", name: "網球", mets: 7.3, icon: "tennisball" },
+      { id: "soccer", name: "足球", mets: 9.0, icon: "football" },
+      { id: "baseball", name: "棒球/壘球", mets: 5.0, icon: "baseball" },
     ],
   },
   {
-    id: "custom",
-    name: "自訂",
-    items: [], // 邏輯特殊處理
-  }
+    id: "life",
+    name: "日常生活",
+    items: [
+      { id: "housework", name: "做家事", mets: 3.0, icon: "home" },
+      { id: "gardening", name: "園藝", mets: 4.0, icon: "leaf" },
+      { id: "moving", name: "搬運重物", mets: 6.0, icon: "cube" },
+    ],
+  },
+  { id: "custom", name: "自訂", items: [] }
 ];
 
-// 強度係數調整
 const INTENSITY_MULTIPLIER = {
   low: { label: "低強度", value: 0.8, color: "#34C759" },
   medium: { label: "中強度", value: 1.0, color: "#FF9500" },
@@ -83,74 +89,84 @@ export default function ActivityEditorScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
 
-  // --- State: 日期與時間 ---
+  // State
   const [recordDate, setRecordDate] = useState(new Date());
   const [recordTime, setRecordTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  // --- State: 運動選擇 ---
   const [category, setCategory] = useState<ActivityCategory | null>(null);
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [showSelector, setShowSelector] = useState(false);
   const [customActivityName, setCustomActivityName] = useState("");
 
-  // --- State: 強度與數值 ---
   const [intensity, setIntensity] = useState<keyof typeof INTENSITY_MULTIPLIER>("medium");
-  const [duration, setDuration] = useState("30"); // 分鐘
-  const [distance, setDistance] = useState(""); // 公里
+  
+  // 數值輸入：改為預設空字串
+  const [duration, setDuration] = useState(""); 
+  const [distance, setDistance] = useState("");
   const [steps, setSteps] = useState("");
   const [floors, setFloors] = useState("");
-  const [caloriesOverride, setCaloriesOverride] = useState(""); // 用戶手動修改的熱量
 
-  // --- State: 詳細與感受 ---
   const [details, setDetails] = useState("");
   const [feeling, setFeeling] = useState("🙂");
+  const [userWeight, setUserWeight] = useState(70);
 
-  // --- User Profile (用於體重計算) ---
-  const [userWeight, setUserWeight] = useState(70); // 預設 70kg
-
-  // --- Init ---
   useEffect(() => {
+    async function loadUserProfile() {
+      try {
+        const profile = await db.select().from(userProfiles).orderBy(desc(userProfiles.updatedAt)).limit(1);
+        if (profile.length > 0 && profile[0].currentWeightKg) {
+          setUserWeight(profile[0].currentWeightKg);
+        }
+      } catch (e) { console.log(e); }
+    }
     loadUserProfile();
   }, []);
 
-  const loadUserProfile = async () => {
-    try {
-      const profile = await db.select().from(userProfiles).orderBy(desc(userProfiles.updatedAt)).limit(1);
-      if (profile.length > 0 && profile[0].currentWeightKg) {
-        setUserWeight(profile[0].currentWeightKg);
-      }
-    } catch (e) {
-      console.log("無法讀取體重，使用預設值");
-    }
-  };
-
-  // --- Logic: 自動計算熱量 ---
+  // --- 改良版熱量估算邏輯 ---
   const calculatedCalories = useMemo(() => {
-    // 如果用戶有手動輸入熱量，優先使用
-    if (caloriesOverride) return parseInt(caloriesOverride);
+    // 1. 如果有時間 (標準 METs 公式)
+    // Formula: METs * 強度 * 體重(kg) * 時間(hr)
+    const timeMins = parseFloat(duration);
+    if (!isNaN(timeMins) && timeMins > 0) {
+        const baseMets = activity ? activity.mets : 4.0;
+        const multiplier = INTENSITY_MULTIPLIER[intensity].value;
+        return Math.round(baseMets * multiplier * userWeight * (timeMins / 60));
+    }
 
-    // 公式: METs * 強度係數 * 體重(kg) * 時間(hr)
-    // 如果是自訂運動，預設 METs 為 4.0
-    const baseMets = activity ? activity.mets : 4.0; 
-    const multiplier = INTENSITY_MULTIPLIER[intensity].value;
-    const hours = (parseFloat(duration) || 0) / 60;
-    
-    if (hours <= 0) return 0;
+    // 2. 如果沒時間，但有其他數據 (估算)
+    let estCalories = 0;
 
-    return Math.round(baseMets * multiplier * userWeight * hours);
-  }, [activity, intensity, duration, userWeight, caloriesOverride]);
+    // 距離 (例如跑步/走路 1km 約消耗 1kcal * kg * 0.9)
+    const distKm = parseFloat(distance);
+    if (!isNaN(distKm) && distKm > 0) {
+        estCalories += distKm * userWeight * 0.9;
+    }
 
-  // --- Action: 儲存 ---
+    // 步數 (粗估 1步 0.04 kcal)
+    const stepCount = parseInt(steps);
+    if (!isNaN(stepCount) && stepCount > 0) {
+        // 如果同時有距離，取最大值避免重複計算，或者這裡僅作為備用
+        const stepCal = stepCount * 0.04;
+        if (stepCal > estCalories) estCalories = stepCal;
+    }
+
+    return Math.round(estCalories);
+
+  }, [activity, intensity, duration, distance, steps, userWeight]);
+
   const handleSave = async () => {
-    if ((!activity && !customActivityName) || !duration) {
-      Alert.alert("資料不完整", "請選擇運動項目並輸入時間");
+    // 驗證邏輯修正：只要 名稱OK 且 (四個數值任一有值) 即可
+    const hasValue = duration || distance || steps || floors;
+    const hasName = (category?.id === 'custom' && customActivityName) || activity;
+
+    if (!hasName || !hasValue) {
+      Alert.alert("資料不完整", "請選擇運動項目，並至少輸入一項數據(時間/距離/步數/樓層)");
       return;
     }
 
     try {
-      // 組合日期
       const logDate = new Date(recordDate);
       logDate.setHours(recordTime.getHours());
       logDate.setMinutes(recordTime.getMinutes());
@@ -164,10 +180,10 @@ export default function ActivityEditorScreen() {
         activityName: finalName,
         intensity: intensity,
         durationMinutes: parseInt(duration) || 0,
-        caloriesBurned: calculatedCalories,
         distanceKm: parseFloat(distance) || null,
         steps: parseInt(steps) || null,
         floors: parseInt(floors) || null,
+        caloriesBurned: calculatedCalories,
         feeling: feeling,
         notes: details,
       });
@@ -179,8 +195,7 @@ export default function ActivityEditorScreen() {
     }
   };
 
-  // --- UI Components ---
-  
+  // Render Helpers
   const renderSelectorModal = () => (
     <Modal visible={showSelector} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
@@ -193,7 +208,6 @@ export default function ActivityEditorScreen() {
           </View>
           
           <View style={{flexDirection: 'row', flex: 1}}>
-            {/* 左側：大類別 */}
             <View style={[styles.categoryList, { borderColor: theme.icon }]}>
               {ACTIVITY_DATA.map(cat => (
                 <TouchableOpacity 
@@ -208,7 +222,6 @@ export default function ActivityEditorScreen() {
               ))}
             </View>
 
-            {/* 右側：細項 */}
             <FlatList
               data={category?.items || []}
               keyExtractor={item => item.id}
@@ -230,12 +243,12 @@ export default function ActivityEditorScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity 
                   style={styles.activityItem}
-                  onPress={() => {
-                    setActivity(item);
-                    setShowSelector(false);
-                  }}
+                  onPress={() => { setActivity(item); setShowSelector(false); }}
                 >
-                  <ThemedText>{item.name}</ThemedText>
+                  <View style={{flexDirection:'row', alignItems:'center'}}>
+                      <Ionicons name={item.icon as any} size={20} color={theme.text} style={{marginRight: 10}}/>
+                      <ThemedText>{item.name}</ThemedText>
+                  </View>
                   <Ionicons name="chevron-forward" size={16} color={theme.icon} />
                 </TouchableOpacity>
               )}
@@ -248,7 +261,6 @@ export default function ActivityEditorScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 頂部 Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={28} color={theme.text} />
@@ -260,8 +272,6 @@ export default function ActivityEditorScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-        {/* 日期時間 */}
         <View style={styles.dateTimeRow}>
             <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateBtn}>
                 <Ionicons name="calendar-outline" size={20} color={theme.text} />
@@ -272,29 +282,27 @@ export default function ActivityEditorScreen() {
                 <ThemedText style={{marginLeft: 8}}>{format(recordTime, "HH:mm")}</ThemedText>
             </TouchableOpacity>
         </View>
-        
-        {/* Hidden Pickers */}
         {showDatePicker && <DateTimePicker value={recordDate} mode="date" onChange={(e,d) => {setShowDatePicker(false); if(d) setRecordDate(d)}} />}
         {showTimePicker && <DateTimePicker value={recordTime} mode="time" onChange={(e,d) => {setShowTimePicker(false); if(d) setRecordTime(d)}} />}
 
-        {/* 運動項目選擇 */}
         <ThemedView style={styles.card}>
           <TouchableOpacity style={styles.selectorBtn} onPress={() => setShowSelector(true)}>
              <View>
                 <ThemedText style={styles.labelSmall}>運動項目</ThemedText>
-                <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
-                    {category?.id === 'custom' ? "自訂運動" : (activity?.name || "點擊選擇運動")}
-                </ThemedText>
+                <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
+                    {activity?.icon && <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>}
+                    <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
+                        {category?.id === 'custom' ? "自訂運動" : (activity?.name || "點擊選擇運動")}
+                    </ThemedText>
+                </View>
              </View>
              <Ionicons name="chevron-down" size={20} color={theme.icon} />
           </TouchableOpacity>
-
-          {/* 如果是自訂，顯示輸入框 */}
           {category?.id === 'custom' && (
              <TextInput
                 style={[styles.input, { marginTop: 12, color: theme.text, borderColor: theme.icon }]}
                 placeholder="輸入運動名稱"
-                placeholderTextColor={theme.icon}
+                placeholderTextColor="#D1D1D6"
                 value={customActivityName}
                 onChangeText={setCustomActivityName}
              />
@@ -303,7 +311,6 @@ export default function ActivityEditorScreen() {
 
         {renderSelectorModal()}
 
-        {/* 強度選擇 */}
         <ThemedView style={styles.card}>
             <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>運動強度</ThemedText>
             <View style={styles.intensityContainer}>
@@ -313,25 +320,18 @@ export default function ActivityEditorScreen() {
                     return (
                         <TouchableOpacity
                             key={key}
-                            style={[
-                                styles.intensityBtn, 
-                                { borderColor: item.color, backgroundColor: isSelected ? item.color : 'transparent' }
-                            ]}
+                            style={[styles.intensityBtn, { borderColor: item.color, backgroundColor: isSelected ? item.color : 'transparent' }]}
                             onPress={() => setIntensity(key)}
                         >
-                            <ThemedText style={{color: isSelected ? '#FFF' : item.color, fontWeight: '600'}}>
-                                {item.label}
-                            </ThemedText>
+                            <ThemedText style={{color: isSelected ? '#FFF' : item.color, fontWeight: '600'}}>{item.label}</ThemedText>
                         </TouchableOpacity>
                     );
                 })}
             </View>
         </ThemedView>
 
-        {/* 數值輸入 */}
         <ThemedView style={styles.card}>
              <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>詳細數據</ThemedText>
-             
              <View style={styles.inputRow}>
                  <View style={styles.inputItem}>
                      <ThemedText style={styles.labelSmall}>時間 (分鐘)</ThemedText>
@@ -340,7 +340,8 @@ export default function ActivityEditorScreen() {
                         value={duration} 
                         onChangeText={setDuration}
                         keyboardType="numeric"
-                        placeholder="30"
+                        placeholder="0"
+                        placeholderTextColor="#D1D1D6"
                      />
                  </View>
                  <View style={styles.inputItem}>
@@ -350,6 +351,8 @@ export default function ActivityEditorScreen() {
                         value={distance} 
                         onChangeText={setDistance}
                         keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor="#D1D1D6"
                      />
                  </View>
              </View>
@@ -362,6 +365,8 @@ export default function ActivityEditorScreen() {
                         value={steps} 
                         onChangeText={setSteps}
                         keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor="#D1D1D6"
                      />
                  </View>
                  <View style={styles.inputItem}>
@@ -371,15 +376,18 @@ export default function ActivityEditorScreen() {
                         value={floors} 
                         onChangeText={setFloors}
                         keyboardType="numeric"
+                        placeholder="0"
+                        placeholderTextColor="#D1D1D6"
                      />
                  </View>
              </View>
 
-             {/* 熱量估算結果 */}
              <View style={styles.caloriesBox}>
                  <View>
                      <ThemedText>預估消耗熱量</ThemedText>
-                     <ThemedText style={{fontSize: 12, color: theme.icon}}>基於 {userWeight}kg 體重</ThemedText>
+                     <ThemedText style={{fontSize: 12, color: theme.icon}}>
+                         {duration ? "基於 時間 與 METs" : "基於 距離/步數 粗估"}
+                     </ThemedText>
                  </View>
                  <View style={{alignItems: 'flex-end'}}>
                      <ThemedText type="title" style={{color: '#FF9500'}}>{calculatedCalories} kcal</ThemedText>
@@ -387,10 +395,8 @@ export default function ActivityEditorScreen() {
              </View>
         </ThemedView>
 
-        {/* 詳細與感受 */}
         <ThemedView style={styles.card}>
             <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>運動感受 & 筆記</ThemedText>
-            
             <View style={styles.feelingContainer}>
                 {FEELING_EMOJIS.map(emoji => (
                     <TouchableOpacity 
@@ -402,17 +408,15 @@ export default function ActivityEditorScreen() {
                     </TouchableOpacity>
                 ))}
             </View>
-
             <TextInput
                 style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: 12, color: theme.text, borderColor: theme.icon }]}
                 placeholder="輸入運動筆記..."
-                placeholderTextColor={theme.icon}
+                placeholderTextColor="#D1D1D6"
                 multiline
                 value={details}
                 onChangeText={setDetails}
             />
         </ThemedView>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -421,134 +425,28 @@ export default function ActivityEditorScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5EA',
   },
   scrollContent: { padding: 16 },
-  dateTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  dateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-    flex: 0.48,
-    justifyContent: 'center',
-  },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    backgroundColor: 'rgba(142, 142, 147, 0.05)',
-  },
-  selectorBtn: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  labelSmall: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    height: '70%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
-  categoryList: {
-    width: '35%',
-    borderRightWidth: 1,
-  },
-  catItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-  },
-  activityItem: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  confirmBtn: {
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  // Intensity
-  intensityContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  intensityBtn: {
-    flex: 0.3,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  // Inputs
-  inputRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  inputItem: {
-    width: '48%',
-  },
-  caloriesBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 149, 0, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  // Feeling
-  feelingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  emojiBtn: {
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
+  dateTimeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, backgroundColor: 'rgba(142, 142, 147, 0.1)', flex: 0.48, justifyContent: 'center' },
+  card: { padding: 16, borderRadius: 12, marginBottom: 16, backgroundColor: 'rgba(142, 142, 147, 0.05)' },
+  selectorBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  labelSmall: { fontSize: 12, color: '#8E8E93', marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { height: '70%', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
+  categoryList: { width: '35%', borderRightWidth: 1 },
+  catItem: { paddingVertical: 16, paddingHorizontal: 12 },
+  activityItem: { paddingVertical: 16, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#eee', alignItems: 'center' },
+  confirmBtn: { padding: 12, borderRadius: 8, alignItems: 'center' },
+  intensityContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  intensityBtn: { flex: 0.3, paddingVertical: 10, borderWidth: 1, borderRadius: 8, alignItems: 'center' },
+  inputRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  inputItem: { width: '48%' },
+  caloriesBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(255, 149, 0, 0.1)', padding: 12, borderRadius: 8, marginTop: 8 },
+  feelingContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  emojiBtn: { padding: 8, borderRadius: 8, borderWidth: 1, borderColor: 'transparent' },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -6,16 +6,16 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Platform,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter, useLocalSearchParams, Stack } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
-import { zhTW } from "date-fns/locale";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { db } from "@/lib/db"; // 請確認 lib/db.ts 已建立
+import { db } from "@/lib/db";
 import { foodItems, foodLogs } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -30,113 +30,190 @@ const MEAL_PERIODS = [
   { id: "lunch", label: "午餐", start: 10, end: 14 },
   { id: "afternoon_tea", label: "下午茶", start: 14, end: 16 },
   { id: "dinner", label: "晚餐", start: 16, end: 20 },
-  { id: "late_night", label: "宵夜", start: 20, end: 29 }, // 20:00 - 05:00 (跨日處理)
+  { id: "late_night", label: "宵夜", start: 20, end: 29 }, 
 ];
 
-// 預設 100g 基準值
 const DEFAULT_NUTRIENTS = {
   calories: 0,
   protein: 0,
-  fat: 0,
-  carbs: 0,
-  sodium: 0,
+  fat: 0, saturatedFat: 0, transFat: 0,
+  carbs: 0, sugar: 0, fiber: 0,
+  sodium: 0, cholesterol: 0, magnesium: 0, zinc: 0, iron: 0
 };
 
 export default function FoodEditorScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams(); // 接收 barcode, imageUri, aiData 等參數
+  const params = useLocalSearchParams();
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
 
-  // --- State: 時間與日期 ---
+  // --- State ---
+  const [logId, setLogId] = useState<number | null>(null); // 編輯模式用
+  
   const [recordDate, setRecordDate] = useState(new Date());
   const [recordTime, setRecordTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-
-  // --- State: 餐別 ---
+  
   const [selectedMeal, setSelectedMeal] = useState("breakfast");
+  const [mealManuallyChanged, setMealManuallyChanged] = useState(false); // 追蹤用戶是否手動修改過餐別
 
-  // --- State: 食物基本資料 ---
   const [foodName, setFoodName] = useState("");
   const [barcode, setBarcode] = useState<string | null>(null);
-  const [dbFoodId, setDbFoodId] = useState<number | null>(null); // 如果是資料庫既有食物
+  const [dbFoodId, setDbFoodId] = useState<number | null>(null); // 關聯的 Product DB ID
   
-  // --- State: 份量輸入 ---
-  // inputMode: 'serving' (份數+單份重) | 'weight' (總克數)
   const [inputMode, setInputMode] = useState<"serving" | "weight">("serving");
   const [servings, setServings] = useState("1");
-  const [unitWeight, setUnitWeight] = useState("100"); // 單份重量 (g)
-  const [totalWeight, setTotalWeight] = useState("100"); // 總重量 (g)
+  const [unitWeight, setUnitWeight] = useState("100");
+  const [totalWeight, setTotalWeight] = useState("100");
 
-  // --- State: 100g 基準營養素 (Product DB) ---
+  // 100g 基準營養素
   const [baseNutrients, setBaseNutrients] = useState(DEFAULT_NUTRIENTS);
+  // 紀錄載入時的初始基準值 (用於比對變更)
+  const [initialBaseNutrients, setInitialBaseNutrients] = useState<typeof DEFAULT_NUTRIENTS | null>(null);
   
-  // --- State: AI 分析 ---
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // --- Effect: 初始化 ---
+  // --- Effect: 初始化 (處理參數或載入紀錄) ---
   useEffect(() => {
-    // 1. 自動設定餐別
-    const currentHour = new Date().getHours();
+    async function init() {
+      // A. 編輯既有紀錄
+      if (params.logId) {
+        setIsLoading(true);
+        const id = parseInt(params.logId as string);
+        setLogId(id);
+        const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
+        if (logRes.length > 0) {
+          const log = logRes[0];
+          setRecordDate(log.loggedAt);
+          setRecordTime(log.loggedAt);
+          setSelectedMeal(log.mealTimeCategory);
+          setMealManuallyChanged(true); // 編輯時視為手動鎖定
+          setFoodName(log.foodName);
+          setInputMode(log.servingType as any || 'weight');
+          setServings(log.servingAmount?.toString() || "1");
+          setUnitWeight(log.unitWeightG?.toString() || "100");
+          setTotalWeight(log.totalWeightG?.toString() || "100");
+          setDbFoodId(log.foodItemId);
+
+          // 載入關聯的 Product DB 基準值
+          if (log.foodItemId) {
+            const itemRes = await db.select().from(foodItems).where(eq(foodItems.id, log.foodItemId));
+            if (itemRes.length > 0) {
+              const item = itemRes[0];
+              const nutrients = {
+                calories: item.calories,
+                protein: item.proteinG || 0,
+                fat: item.fatG || 0, saturatedFat: item.saturatedFatG || 0, transFat: item.transFatG || 0,
+                carbs: item.carbsG || 0, sugar: item.sugarG || 0, fiber: item.fiberG || 0,
+                sodium: item.sodiumMg || 0, cholesterol: item.cholesterolMg || 0, magnesium: item.magnesiumMg || 0, zinc: item.zincMg || 0, iron: item.ironMg || 0
+              };
+              setBaseNutrients(nutrients);
+              setInitialBaseNutrients(nutrients); // 保存初始狀態
+            }
+          }
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // B. 新增紀錄 (Barocde / Image / Default)
+      // 自動設定時間為現在
+      updateCategoryByTime(new Date());
+
+      if (params.barcode) {
+        const code = params.barcode as string;
+        setBarcode(code);
+        await loadFoodByBarcode(code);
+      } else if (params.imageUri) {
+         // 模擬 AI 讀圖
+         setIsAnalyzing(true);
+         setTimeout(() => {
+             setFoodName("AI 識別食物");
+             setIsAnalyzing(false);
+             Alert.alert("AI 分析", "已識別圖片，請確認數值");
+         }, 1000);
+      }
+    }
+    init();
+  }, [params]);
+
+  // --- Logic: 時間連動餐別 ---
+  const updateCategoryByTime = (date: Date) => {
+    // 如果用戶已經手動選過餐別，就不自動跳轉
+    // 但在新增模式下，初始載入時 mealManuallyChanged 為 false
+    if (mealManuallyChanged && !params.logId) return; 
+
+    const currentHour = date.getHours();
     const foundMeal = MEAL_PERIODS.find(p => {
         const end = p.end > 24 ? p.end - 24 : p.end;
-        if (p.start > p.end) { // 跨日 (e.g. 20 - 5)
-            return currentHour >= p.start || currentHour < end;
-        }
+        if (p.start > p.end) return currentHour >= p.start || currentHour < end;
         return currentHour >= p.start && currentHour < p.end;
     });
     if (foundMeal) setSelectedMeal(foundMeal.id);
+  };
 
-    // 2. 處理傳入參數 (Barcode 或 AI資料)
-    if (params.barcode) {
-      setBarcode(params.barcode as string);
-      loadFoodByBarcode(params.barcode as string);
-    }
-    
-    if (params.foodName) {
-        setFoodName(params.foodName as string);
-    }
-    
-    // 模擬：如果是從相機過來，假設 params.aiData 存在
-    if (params.aiResults) {
-        // 這裡解析傳入的 AI JSON 字串
-        try {
-            const data = JSON.parse(params.aiResults as string);
-            setFoodName(data.name);
-            setBaseNutrients(data.nutrients);
-            setAiSuggestion(data.description);
-        } catch(e) { console.error("AI parse error", e); }
-    }
-
-  }, [params]);
-
-  // --- Logic: 讀取資料庫 ---
-  const loadFoodByBarcode = async (code: string) => {
-    // 模擬 DB 查詢
-    try {
-        const result = await db.select().from(foodItems).where(eq(foodItems.barcode, code)).limit(1);
-        if (result.length > 0) {
-            const item = result[0];
-            setDbFoodId(item.id);
-            setFoodName(item.name);
-            setBaseNutrients({
-                calories: item.calories,
-                protein: item.proteinG || 0,
-                fat: item.fatG || 0,
-                carbs: item.carbsG || 0,
-                sodium: item.sodiumMg || 0,
-            });
-            Alert.alert("已讀取資料庫", `找到商品：${item.name}`);
-        }
-    } catch (e) {
-        console.error(e);
+  const handleTimeChange = (date: Date) => {
+    setRecordTime(date);
+    if (!logId) { // 僅在新增模式下，修改時間會連動餐別 (除非手動鎖定邏輯要更嚴格)
+       updateCategoryByTime(date);
     }
   };
 
-  // --- Logic: 計算總攝取量 ---
-  // 當份數改變，更新總重
+  // --- Logic: 讀取資料庫/API ---
+  const loadFoodByBarcode = async (code: string) => {
+    setIsLoading(true);
+    try {
+        // 1. 優先查 Local DB
+        const localRes = await db.select().from(foodItems).where(eq(foodItems.barcode, code)).limit(1);
+        if (localRes.length > 0) {
+            const item = localRes[0];
+            setDbFoodId(item.id);
+            setFoodName(item.name);
+            const nutrients = {
+                calories: item.calories,
+                protein: item.proteinG || 0,
+                fat: item.fatG || 0, saturatedFat: item.saturatedFatG || 0, transFat: item.transFatG || 0,
+                carbs: item.carbsG || 0, sugar: item.sugarG || 0, fiber: item.fiberG || 0,
+                sodium: item.sodiumMg || 0, cholesterol: item.cholesterolMg || 0, magnesium: item.magnesiumMg || 0, zinc: item.zincMg || 0, iron: item.ironMg || 0
+            };
+            setBaseNutrients(nutrients);
+            setInitialBaseNutrients(nutrients);
+            Alert.alert("本地資料庫", `已載入：${item.name}`);
+        } else {
+            // 2. 查 OpenFoodFacts API
+            const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
+            const data = await response.json();
+            if (data.status === 1) {
+                const p = data.product;
+                const n = p.nutriments;
+                setFoodName(p.product_name || "未知商品");
+                setBaseNutrients({
+                    calories: n["energy-kcal_100g"] || 0,
+                    protein: n.protein_100g || 0,
+                    fat: n.fat_100g || 0, saturatedFat: n["saturated-fat_100g"] || 0, transFat: n["trans-fat_100g"] || 0,
+                    carbs: n.carbohydrates_100g || 0, sugar: n.sugars_100g || 0, fiber: n.fiber_100g || 0,
+                    sodium: (n.salt_100g || 0) * 400, // salt to sodium approx
+                    cholesterol: (n.cholesterol_100g || 0) * 1000, // g to mg usually
+                    magnesium: (n.magnesium_100g || 0) * 1000,
+                    zinc: (n.zinc_100g || 0) * 1000,
+                    iron: (n.iron_100g || 0) * 1000,
+                });
+                Alert.alert("OpenFoodFacts", "已從網路下載產品資訊");
+            } else {
+                Alert.alert("查無資料", "資料庫與網路皆無此商品，請手動輸入");
+            }
+        }
+    } catch (e) {
+        console.error(e);
+        Alert.alert("錯誤", "讀取條碼失敗");
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  // --- Logic: 計算顯示數值 ---
   useEffect(() => {
     if (inputMode === "serving") {
       const s = parseFloat(servings) || 0;
@@ -145,135 +222,139 @@ export default function FoodEditorScreen() {
     }
   }, [servings, unitWeight, inputMode]);
 
-  // 當總重改變(且在總重模式)，反推 (這裡簡單處理，維持單份重=100)
-  useEffect(() => {
-    if (inputMode === "weight") {
-       // 總重改變時，不特別反推份數，除非切換模式
-    }
-  }, [totalWeight, inputMode]);
-
   const calculatedTotal = useMemo(() => {
     const weight = parseFloat(totalWeight) || 0;
     const ratio = weight / 100;
+    const calc = (val: number) => (val * ratio).toFixed(1);
+    const calcMg = (val: number) => Math.round(val * ratio);
+    
     return {
       calories: Math.round(baseNutrients.calories * ratio),
-      protein: (baseNutrients.protein * ratio).toFixed(1),
-      fat: (baseNutrients.fat * ratio).toFixed(1),
-      carbs: (baseNutrients.carbs * ratio).toFixed(1),
-      sodium: Math.round(baseNutrients.sodium * ratio),
+      protein: calc(baseNutrients.protein),
+      fat: calc(baseNutrients.fat),
+      carbs: calc(baseNutrients.carbs),
+      sodium: calcMg(baseNutrients.sodium),
+      // ... others can be calculated similarly for display if needed
     };
   }, [totalWeight, baseNutrients]);
 
-  // --- Logic: AI 分析 (模擬) ---
-  const handleAiAnalyze = () => {
-    if (!foodName) {
-        Alert.alert("請輸入食物名稱");
-        return;
+  // --- Logic: 儲存 (包含防呆) ---
+  const handleSave = async () => {
+    if (!foodName || !totalWeight) return Alert.alert("資料不完整", "請輸入名稱與重量");
+
+    // 檢查基準值是否變更
+    let hasBaseChange = false;
+    if (dbFoodId && initialBaseNutrients) {
+       hasBaseChange = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
     }
-    setIsAnalyzing(true);
-    // 模擬 API 延遲
-    setTimeout(() => {
-        setIsAnalyzing(false);
-        // 模擬回傳數據
-        setBaseNutrients({
-            calories: 150 + Math.floor(Math.random() * 100),
-            protein: 5 + Math.floor(Math.random() * 20),
-            fat: 2 + Math.floor(Math.random() * 10),
-            carbs: 20 + Math.floor(Math.random() * 30),
-            sodium: 100 + Math.floor(Math.random() * 400),
-        });
-        setAiSuggestion(`AI 分析：${foodName} 通常包含這些營養成分。請確認數據是否符合您的實際食物。`);
-    }, 1500);
+
+    if (hasBaseChange) {
+        Alert.alert(
+            "基準數值變更",
+            "您修改了每 100g 的營養成分，這將影響所有關聯此食物的歷史紀錄。請問您要？",
+            [
+                { text: "取消", style: "cancel" },
+                { text: "另存為新食物", onPress: () => saveToDb(true) }, // Force Create New
+                { text: "更新所有紀錄", onPress: () => saveToDb(false) }, // Update Existing
+            ]
+        );
+    } else {
+        saveToDb(false);
+    }
   };
 
-  // --- Logic: 儲存 ---
-  const handleSave = async () => {
-    if (!foodName || !totalWeight) {
-        Alert.alert("資料不完整", "請輸入名稱與重量");
-        return;
-    }
-
-    try {
+  const saveToDb = async (forceCreateNew: boolean) => {
+     try {
         let currentFoodId = dbFoodId;
+        
+        // 1. Product DB 操作
+        const itemData = {
+            name: foodName,
+            barcode: barcode,
+            baseAmount: 100,
+            calories: baseNutrients.calories,
+            proteinG: baseNutrients.protein,
+            fatG: baseNutrients.fat, saturatedFatG: baseNutrients.saturatedFat, transFatG: baseNutrients.transFat,
+            carbsG: baseNutrients.carbs, sugarG: baseNutrients.sugar, fiberG: baseNutrients.fiber,
+            sodiumMg: baseNutrients.sodium, cholesterolMg: baseNutrients.cholesterol, 
+            magnesiumMg: baseNutrients.magnesium, zincMg: baseNutrients.zinc, ironMg: baseNutrients.iron,
+            updatedAt: new Date(),
+        };
 
-        // 1. 如果是新食物或沒有 ID，先建立/更新 Product DB
-        // 邏輯：如果已有 ID，且基準值改變，跳出警告
-        // 為簡化 Demo，這裡假設如果有 ID 就更新，沒有就新增
-        if (currentFoodId) {
-             // 實際上應該檢查數值是否變更並詢問用戶
-             await db.update(foodItems).set({
-                 name: foodName,
-                 baseAmount: 100,
-                 calories: baseNutrients.calories,
-                 proteinG: baseNutrients.protein,
-                 fatG: baseNutrients.fat,
-                 carbsG: baseNutrients.carbs,
-                 sodiumMg: baseNutrients.sodium,
-                 updatedAt: new Date(),
-             }).where(eq(foodItems.id, currentFoodId));
+        if (currentFoodId && !forceCreateNew) {
+            await db.update(foodItems).set(itemData).where(eq(foodItems.id, currentFoodId));
         } else {
-             const res = await db.insert(foodItems).values({
-                 name: foodName,
-                 barcode: barcode,
-                 calories: baseNutrients.calories,
-                 proteinG: baseNutrients.protein,
-                 fatG: baseNutrients.fat,
-                 carbsG: baseNutrients.carbs,
-                 sodiumMg: baseNutrients.sodium,
-                 isUserCreated: true,
-             }).returning({ insertedId: foodItems.id });
-             currentFoodId = res[0].insertedId;
+            const res = await db.insert(foodItems).values({ ...itemData, isUserCreated: true }).returning({ insertedId: foodItems.id });
+            currentFoodId = res[0].insertedId;
         }
 
-        // 2. 寫入 Food Log
-        // 組合日期與時間
+        // 2. Log 操作
         const logDate = new Date(recordDate);
         logDate.setHours(recordTime.getHours());
         logDate.setMinutes(recordTime.getMinutes());
 
-        await db.insert(foodLogs).values({
+        const weight = parseFloat(totalWeight) || 0;
+        const ratio = weight / 100;
+
+        const logData = {
             date: format(logDate, 'yyyy-MM-dd'),
             mealTimeCategory: selectedMeal,
             loggedAt: logDate,
             foodItemId: currentFoodId,
             foodName: foodName,
             servingType: inputMode,
-            servingAmount: inputMode === 'serving' ? parseFloat(servings) : parseFloat(totalWeight),
+            servingAmount: inputMode === 'serving' ? parseFloat(servings) : weight,
             unitWeightG: inputMode === 'serving' ? parseFloat(unitWeight) : 1,
-            totalWeightG: parseFloat(totalWeight),
-            totalCalories: calculatedTotal.calories,
-            totalProteinG: parseFloat(calculatedTotal.protein),
-            totalFatG: parseFloat(calculatedTotal.fat),
-            totalCarbsG: parseFloat(calculatedTotal.carbs),
-            totalSodiumMg: calculatedTotal.sodium,
-        });
+            totalWeightG: weight,
+            
+            // Snapshots
+            totalCalories: baseNutrients.calories * ratio,
+            totalProteinG: baseNutrients.protein * ratio,
+            totalFatG: baseNutrients.fat * ratio,
+            totalCarbsG: baseNutrients.carbs * ratio,
+            totalSodiumMg: baseNutrients.sodium * ratio,
+            
+            totalSaturatedFatG: baseNutrients.saturatedFat * ratio,
+            totalTransFatG: baseNutrients.transFat * ratio,
+            totalSugarG: baseNutrients.sugar * ratio,
+            totalFiberG: baseNutrients.fiber * ratio,
+            totalCholesterolMg: baseNutrients.cholesterol * ratio,
+            totalMagnesiumMg: baseNutrients.magnesium * ratio,
+            totalZincMg: baseNutrients.zinc * ratio,
+            totalIronMg: baseNutrients.iron * ratio,
+        };
 
-        Alert.alert("成功", "飲食紀錄已儲存", [{ text: "OK", onPress: () => router.back() }]);
+        if (logId) {
+            await db.update(foodLogs).set(logData).where(eq(foodLogs.id, logId));
+        } else {
+            await db.insert(foodLogs).values(logData);
+        }
 
-    } catch (e) {
-        console.error(e);
-        Alert.alert("錯誤", "儲存失敗");
-    }
+        Alert.alert("成功", "紀錄已儲存", [{ text: "OK", onPress: () => router.back() }]);
+     } catch (e) {
+         console.error(e);
+         Alert.alert("儲存失敗");
+     }
   };
 
-  // --- Render Components ---
+  // --- Helpers for Input ---
+  const updateNutrient = (key: keyof typeof baseNutrients, val: string) => {
+      setBaseNutrients(prev => ({ ...prev, [key]: parseFloat(val) || 0 }));
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* 頂部導航列 */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color={theme.text} />
-        </TouchableOpacity>
-        <ThemedText type="subtitle">編輯食物</ThemedText>
-        <TouchableOpacity onPress={handleSave}>
-            <Ionicons name="save" size={28} color={theme.tint} />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color={theme.text} /></TouchableOpacity>
+        <ThemedText type="subtitle">{logId ? "編輯紀錄" : "新增食物"}</ThemedText>
+        <TouchableOpacity onPress={handleSave}><Ionicons name="save" size={28} color={theme.tint} /></TouchableOpacity>
       </View>
 
+      {isLoading ? <ActivityIndicator size="large" style={{marginTop: 50}}/> : 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         
-        {/* 日期與時間選擇 */}
+        {/* 日期與時間 */}
         <View style={styles.dateTimeRow}>
             <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateBtn}>
                 <Ionicons name="calendar-outline" size={20} color={theme.text} />
@@ -286,33 +367,23 @@ export default function FoodEditorScreen() {
             </TouchableOpacity>
         </View>
 
-        {/* 隱藏的 Picker */}
-        {showDatePicker && (
-            <DateTimePicker value={recordDate} mode="date" onChange={(e, d) => { setShowDatePicker(false); if(d) setRecordDate(d); }} />
-        )}
-        {showTimePicker && (
-            <DateTimePicker value={recordTime} mode="time" onChange={(e, d) => { setShowTimePicker(false); if(d) setRecordTime(d); }} />
-        )}
+        {showDatePicker && <DateTimePicker value={recordDate} mode="date" onChange={(e, d) => { setShowDatePicker(false); if(d) setRecordDate(d); }} />}
+        {showTimePicker && <DateTimePicker value={recordTime} mode="time" onChange={(e, d) => { setShowTimePicker(false); if(d) handleTimeChange(d); }} />}
 
         {/* 餐別選擇 */}
         <View style={styles.mealSelector}>
             {MEAL_PERIODS.map((meal) => (
                 <TouchableOpacity
                     key={meal.id}
-                    style={[
-                        styles.mealBtn,
-                        selectedMeal === meal.id && { backgroundColor: theme.tint }
-                    ]}
-                    onPress={() => setSelectedMeal(meal.id)}
+                    style={[styles.mealBtn, selectedMeal === meal.id && { backgroundColor: theme.tint }]}
+                    onPress={() => { setSelectedMeal(meal.id); setMealManuallyChanged(true); }}
                 >
-                    <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text, fontSize: 12 }}>
-                        {meal.label}
-                    </ThemedText>
+                    <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text, fontSize: 12 }}>{meal.label}</ThemedText>
                 </TouchableOpacity>
             ))}
         </View>
 
-        {/* 食物名稱 & AI 分析按鈕 */}
+        {/* 食物名稱 */}
         <ThemedView style={styles.card}>
             <ThemedText type="defaultSemiBold" style={{marginBottom: 8}}>食物名稱</ThemedText>
             <View style={{flexDirection: 'row', gap: 8}}>
@@ -320,29 +391,11 @@ export default function FoodEditorScreen() {
                     style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.icon }]}
                     value={foodName}
                     onChangeText={setFoodName}
-                    placeholder="例如：雞胸肉沙拉"
+                    placeholder="輸入名稱或掃描條碼"
                     placeholderTextColor={theme.icon}
                 />
-                <TouchableOpacity 
-                    style={[styles.aiBtn, { backgroundColor: isAnalyzing ? theme.icon : '#AF52DE' }]}
-                    onPress={handleAiAnalyze}
-                    disabled={isAnalyzing}
-                >
-                    {isAnalyzing ? <ActivityIndicator color="#FFF" /> : <Ionicons name="sparkles" size={20} color="#FFF" />}
-                    <ThemedText style={{color: '#FFF', fontSize: 12, marginLeft: 4}}>AI 分析</ThemedText>
-                </TouchableOpacity>
             </View>
             {barcode && <ThemedText style={{fontSize: 12, color: theme.icon, marginTop: 4}}>Barcode: {barcode}</ThemedText>}
-            
-            {/* AI 建議顯示區 */}
-            {aiSuggestion && (
-                <View style={styles.aiSuggestionBox}>
-                    <Ionicons name="information-circle" size={16} color="#AF52DE" />
-                    <ThemedText style={{fontSize: 12, color: theme.text, marginLeft: 6, flex: 1}}>
-                        {aiSuggestion}
-                    </ThemedText>
-                </View>
-            )}
         </ThemedView>
 
         {/* 份量輸入 */}
@@ -350,90 +403,70 @@ export default function FoodEditorScreen() {
             <View style={styles.rowBetween}>
                 <ThemedText type="defaultSemiBold">攝取份量</ThemedText>
                 <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}>
-                    <ThemedText style={{color: theme.tint, fontSize: 14}}>
-                        切換至{inputMode === 'serving' ? '總克數' : '份數'}輸入
-                    </ThemedText>
+                    <ThemedText style={{color: theme.tint, fontSize: 14}}>切換至{inputMode === 'serving' ? '總克數' : '份數'}</ThemedText>
                 </TouchableOpacity>
             </View>
-
             {inputMode === 'serving' ? (
                 <View style={styles.rowInputs}>
-                    <View style={{flex: 1}}>
-                        <ThemedText style={styles.labelSmall}>份數</ThemedText>
-                        <TextInput
-                            style={[styles.input, { color: theme.text, borderColor: theme.icon }]}
-                            value={servings}
-                            onChangeText={setServings}
-                            keyboardType="numeric"
-                        />
-                    </View>
+                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>份數</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={servings} onChangeText={setServings} keyboardType="numeric"/></View>
                     <ThemedText style={{alignSelf: 'flex-end', marginBottom: 12, marginHorizontal: 8}}>X</ThemedText>
-                    <View style={{flex: 1}}>
-                        <ThemedText style={styles.labelSmall}>單份重(g)</ThemedText>
-                        <TextInput
-                            style={[styles.input, { color: theme.text, borderColor: theme.icon }]}
-                            value={unitWeight}
-                            onChangeText={setUnitWeight}
-                            keyboardType="numeric"
-                        />
-                    </View>
+                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>單份重(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={unitWeight} onChangeText={setUnitWeight} keyboardType="numeric"/></View>
                 </View>
             ) : (
-                <View>
-                    <ThemedText style={styles.labelSmall}>總克數(g)</ThemedText>
-                    <TextInput
-                        style={[styles.input, { color: theme.text, borderColor: theme.icon }]}
-                        value={totalWeight}
-                        onChangeText={setTotalWeight}
-                        keyboardType="numeric"
-                    />
-                </View>
+                <View><ThemedText style={styles.labelSmall}>總克數(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={totalWeight} onChangeText={setTotalWeight} keyboardType="numeric"/></View>
             )}
-            
             <View style={styles.totalSummary}>
-                <ThemedText type="defaultSemiBold" style={{color: theme.tint}}>
-                    總計: {totalWeight} g
-                </ThemedText>
-                <ThemedText style={{fontSize: 14}}>
-                    熱量: {calculatedTotal.calories} kcal
-                </ThemedText>
+                <ThemedText type="defaultSemiBold" style={{color: theme.tint}}>總計: {totalWeight} g</ThemedText>
+                <ThemedText style={{fontSize: 14}}>熱量: {calculatedTotal.calories} kcal</ThemedText>
             </View>
         </ThemedView>
 
-        {/* 100g 基準數值 (Product DB) */}
+        {/* 詳細營養素 (每 100g) */}
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 4}}>每 100g 營養素 (基準)</ThemedText>
-            <ThemedText style={{fontSize: 12, color: theme.icon, marginBottom: 12}}>
-                修改此處數值將更新資料庫，並影響所有引用此食物的紀錄。
-            </ThemedText>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>每 100g 基準營養素</ThemedText>
+            
+            <NutrientRow label="熱量 (kcal)" val={baseNutrients.calories} k="calories" update={updateNutrient} theme={theme} isMain/>
+            
+            <View style={styles.divider}/>
+            <NutrientRow label="蛋白質 (g)" val={baseNutrients.protein} k="protein" update={updateNutrient} theme={theme} isMain/>
+            
+            <View style={styles.divider}/>
+            <NutrientRow label="總脂肪 (g)" val={baseNutrients.fat} k="fat" update={updateNutrient} theme={theme} isMain/>
+            <View style={{paddingLeft: 16}}>
+                <NutrientRow label="飽和脂肪 (g)" val={baseNutrients.saturatedFat} k="saturatedFat" update={updateNutrient} theme={theme}/>
+                <NutrientRow label="反式脂肪 (g)" val={baseNutrients.transFat} k="transFat" update={updateNutrient} theme={theme}/>
+                <NutrientRow label="膽固醇 (mg)" val={baseNutrients.cholesterol} k="cholesterol" update={updateNutrient} theme={theme}/>
+            </View>
 
-            <View style={styles.gridInputs}>
-                <NutrientInput label="熱量 (kcal)" value={baseNutrients.calories} 
-                    onChange={(v) => setBaseNutrients({...baseNutrients, calories: parseFloat(v) || 0})} theme={theme} />
-                <NutrientInput label="蛋白質 (g)" value={baseNutrients.protein} 
-                    onChange={(v) => setBaseNutrients({...baseNutrients, protein: parseFloat(v) || 0})} theme={theme} />
-                <NutrientInput label="脂肪 (g)" value={baseNutrients.fat} 
-                    onChange={(v) => setBaseNutrients({...baseNutrients, fat: parseFloat(v) || 0})} theme={theme} />
-                <NutrientInput label="碳水 (g)" value={baseNutrients.carbs} 
-                    onChange={(v) => setBaseNutrients({...baseNutrients, carbs: parseFloat(v) || 0})} theme={theme} />
-                <NutrientInput label="鈉 (mg)" value={baseNutrients.sodium} 
-                    onChange={(v) => setBaseNutrients({...baseNutrients, sodium: parseFloat(v) || 0})} theme={theme} />
+            <View style={styles.divider}/>
+            <NutrientRow label="碳水化合物 (g)" val={baseNutrients.carbs} k="carbs" update={updateNutrient} theme={theme} isMain/>
+            <View style={{paddingLeft: 16}}>
+                <NutrientRow label="糖 (g)" val={baseNutrients.sugar} k="sugar" update={updateNutrient} theme={theme}/>
+                <NutrientRow label="膳食纖維 (g)" val={baseNutrients.fiber} k="fiber" update={updateNutrient} theme={theme}/>
+            </View>
+
+            <View style={styles.divider}/>
+            <NutrientRow label="鈉 (mg)" val={baseNutrients.sodium} k="sodium" update={updateNutrient} theme={theme} isMain/>
+            <View style={{paddingLeft: 16}}>
+                <NutrientRow label="鎂 (mg)" val={baseNutrients.magnesium} k="magnesium" update={updateNutrient} theme={theme}/>
+                <NutrientRow label="鋅 (mg)" val={baseNutrients.zinc} k="zinc" update={updateNutrient} theme={theme}/>
+                <NutrientRow label="鐵 (mg)" val={baseNutrients.iron} k="iron" update={updateNutrient} theme={theme}/>
             </View>
         </ThemedView>
-
       </ScrollView>
+      }
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-// 子元件：營養素輸入框
-const NutrientInput = ({ label, value, onChange, theme }: any) => (
-    <View style={{width: '48%', marginBottom: 12}}>
-        <ThemedText style={{fontSize: 12, color: '#8E8E93', marginBottom: 4}}>{label}</ThemedText>
+const NutrientRow = ({ label, val, k, update, theme, isMain }: any) => (
+    <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
+        <ThemedText style={{fontSize: isMain?14:13, fontWeight: isMain?'600':'400', color: theme.text}}>{label}</ThemedText>
         <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.icon, textAlign: 'center' }]}
-            value={String(value)}
-            onChangeText={onChange}
+            style={[styles.input, {width: 80, paddingVertical: 4, height: 32, textAlign:'center', color:theme.text, borderColor: theme.icon}]}
+            value={val.toString()}
+            onChangeText={(v) => update(k, v)}
             keyboardType="numeric"
         />
     </View>
@@ -441,95 +474,17 @@ const NutrientInput = ({ label, value, onChange, theme }: any) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
   scrollContent: { padding: 16 },
-  dateTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  dateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-    flex: 0.48,
-    justifyContent: 'center',
-  },
-  mealSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  mealBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
-  },
-  card: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    backgroundColor: 'rgba(142, 142, 147, 0.05)', // 淺灰底
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-  },
-  aiBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-  },
-  aiSuggestionBox: {
-    flexDirection: 'row',
-    backgroundColor: '#F3E5F5',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 8,
-    alignItems: 'flex-start',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  rowInputs: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  labelSmall: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  totalSummary: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E5EA',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  gridInputs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
+  dateTimeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, backgroundColor: 'rgba(120,120,120,0.1)', flex: 0.48 },
+  mealSelector: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  mealBtn: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 16, backgroundColor: 'rgba(120,120,120,0.1)' },
+  card: { padding: 16, borderRadius: 12, marginBottom: 16, backgroundColor: 'rgba(120,120,120,0.05)' },
+  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, fontSize: 16, paddingVertical: 8 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+  rowInputs: { flexDirection: 'row', alignItems: 'flex-end' },
+  labelSmall: { fontSize: 12, color: '#888', marginBottom: 4 },
+  totalSummary: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee', flexDirection: 'row', justifyContent: 'space-between' },
+  divider: { height: 1, backgroundColor: '#eee', marginVertical: 8 },
 });

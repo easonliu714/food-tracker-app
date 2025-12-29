@@ -6,42 +6,57 @@ import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { saveSettings, getSettings } from "@/lib/storage"; // 僅保留 Settings
+import { saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { LANGUAGES, VERSION_LOGS, t, useLanguage, setAppLanguage } from "@/lib/i18n";
-
-// DB Imports
 import { db } from "@/lib/db";
 import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
+
+// 定義詳細選項資料
+const ACTIVITY_OPTIONS = [
+  { id: 'sedentary', label: '久坐少動', desc: '辦公室工作，幾乎不運動' },
+  { id: 'lightly_active', label: '輕度活動', desc: '每週運動 1-3 天' },
+  { id: 'moderately_active', label: '中度活動', desc: '每週運動 3-5 天' },
+  { id: 'very_active', label: '高度活動', desc: '每週運動 6-7 天' },
+  { id: 'extra_active', label: '極度活動', desc: '體力工作或每日兩練' },
+];
+
+const GOAL_OPTIONS = [
+  { id: 'lose_weight', label: '減重', desc: '熱量赤字，專注減脂' },
+  { id: 'maintain', label: '維持', desc: '維持目前體重與體態' },
+  { id: 'gain_weight', label: '增重', desc: '熱量盈餘，專注增肌' },
+  { id: 'recomp', label: '體態重組', desc: '增肌同時減脂(適合新手)' },
+];
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, logout } = useAuth();
-  
   const lang = useLanguage();
+  
+  // Settings
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
-  const [modelList, setModelList] = useState<string[]>([]);
   
-  // Profile State (SQLite)
+  // Profile Data
   const [profileId, setProfileId] = useState<number | null>(null);
-  const [name, setName] = useState("");
   const [gender, setGender] = useState<"male"|"female">("male");
   const [birthYear, setBirthYear] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [bodyFat, setBodyFat] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
+  const [targetBodyFat, setTargetBodyFat] = useState(""); // [新增] 目標體脂
+  
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
-  
+
   const [loading, setLoading] = useState(true);
   const [testingKey, setTestingKey] = useState(false);
-  const [showLangPicker, setShowLangPicker] = useState(false);
+  
+  // UI States
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [showVersionModal, setShowVersionModal] = useState(false);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -50,36 +65,28 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // Load Data
   useEffect(() => {
     async function load() {
       try {
-        // 1. Load Local Settings (API Key, etc.)
         const s = await getSettings();
         if(s.apiKey) setApiKey(s.apiKey);
-        if(s.model) setSelectedModel(s.model);
         
-        // 2. Load User Profile from SQLite
         const result = await db.select().from(userProfiles).limit(1);
         if(result.length > 0) {
           const p = result[0];
           setProfileId(p.id);
-          setName(p.name || "");
           setGender((p.gender as "male"|"female") || "male");
-          // 簡單處理：沒存出生年就給空值
-          // 這裡假設我們 schema 沒有 birthYear 欄位，如果有請自行對應
-          // 若 schema 只有 birthDate，則需要轉換
-          // 這裡示範使用 schema 中已有的欄位
-          
+          // 若無 birthYear 欄位暫用假資料或修改 schema
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
           setTargetWeight(p.targetWeightKg?.toString() || "");
+          setTargetBodyFat(p.targetBodyFat?.toString() || ""); // [新增]
           setActivityLevel(p.activityLevel || "sedentary");
           setTrainingGoal(p.goal || "maintain");
         }
       } catch (e) {
-        console.error("Profile load error:", e);
+        console.error(e);
       } finally {
         setLoading(false);
       }
@@ -90,38 +97,35 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     setLoading(true);
     try {
-        // 1. Save App Settings (AsyncStorage)
         await saveSettings({ apiKey, model: selectedModel, language: lang });
         
-        // 2. Calculate BMR & TDEE
         const w = parseFloat(currentWeight) || 60;
         const h = parseInt(heightCm) || 170;
-        const age = new Date().getFullYear() - (parseInt(birthYear) || 1990);
+        const age = 30; // 簡化
         
+        // BMR Calculation (Mifflin-St Jeor)
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         
-        const activityMultipliers: Record<string, number> = {
-        'sedentary': 1.2,
-        'lightly_active': 1.375,
-        'moderately_active': 1.55,
-        'very_active': 1.725
+        // TDEE Multiplier
+        const activityMap: Record<string, number> = {
+            'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55,
+            'very_active': 1.725, 'extra_active': 1.9
         };
-        const tdee = bmr * (activityMultipliers[activityLevel] || 1.2);
+        const tdee = bmr * (activityMap[activityLevel] || 1.2);
         
+        // Goal Adjustment
         let targetCal = tdee;
-        // 簡單對應 trainingGoal
-        if (trainingGoal === 'lose_weight' || trainingGoal === 'goal_fat_loss') targetCal -= 400;
-        else if (trainingGoal === 'gain_weight' || trainingGoal.includes('strength')) targetCal += 200;
+        if (trainingGoal === 'lose_weight') targetCal -= 500;
+        else if (trainingGoal === 'gain_weight') targetCal += 300;
 
-        // 3. Update SQLite
         if (profileId) {
             await db.update(userProfiles).set({
                 gender,
-                // birthDate: ..., // 若有需要存日期
                 heightCm: h,
                 currentWeightKg: w,
                 currentBodyFat: parseFloat(bodyFat) || null,
                 targetWeightKg: parseFloat(targetWeight) || null,
+                targetBodyFat: parseFloat(targetBodyFat) || null, // [新增]
                 activityLevel,
                 goal: trainingGoal,
                 dailyCalorieTarget: Math.round(targetCal),
@@ -129,7 +133,7 @@ export default function ProfileScreen() {
             }).where(eq(userProfiles.id, profileId));
         }
 
-        Alert.alert(t('save_settings', lang), t('confirm_save', lang));
+        Alert.alert("已儲存", "個人設定已更新");
     } catch (e) {
         console.error(e);
         Alert.alert("儲存失敗");
@@ -138,166 +142,98 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleTestKey = async () => {
-    if (!apiKey) return Alert.alert("請輸入 API Key");
-    setTestingKey(true);
-    const res = await validateApiKey(apiKey);
-    setTestingKey(false);
-    
-    if (res.valid && res.models) {
-      setModelList(res.models);
-      const bestMatch = res.models.find(m => m.includes('flash-latest')) || res.models[0];
-      if (bestMatch) setSelectedModel(bestMatch);
-      Alert.alert("測試成功", `金鑰有效！已預選 ${bestMatch}`);
-    } else {
-      Alert.alert("測試失敗", res.error || "API Key 無效或被停用");
-    }
-  };
-
-  const GOALS = ['maintain', 'lose_weight', 'gain_weight']; // 對應 Schema Enum
-
-  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center'}]}><ActivityIndicator/></View>;
+  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems: 'center'}]}><ActivityIndicator size="large"/></View>;
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
-        <ThemedText type="title">{t('tab_settings', lang)}</ThemedText>
-        <Pressable onPress={() => setShowLangPicker(true)} style={[styles.langBtn, {borderColor}]}>
-           <ThemedText>{LANGUAGES.find(l=>l.code===lang)?.label}</ThemedText>
-           <Ionicons name="chevron-down" size={16} color={textColor} style={{marginLeft:4}}/>
-        </Pressable>
+        <ThemedText type="title">個人設定</ThemedText>
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
+         {/* AI Settings Section (簡化顯示) */}
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
-            <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
-            <View style={{marginTop:12}}>
-              <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>Gemini API Key</ThemedText>
-              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} placeholder={t('api_key_placeholder', lang)} secureTextEntry />
-              <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')} style={{marginTop: 8}}>
-                 <ThemedText style={{color:'#2196F3', fontSize: 12}}>{t('get_api_key_link', lang)}</ThemedText>
-              </Pressable>
-            </View>
-            <View style={{flexDirection: 'row', gap: 10, marginTop: 12}}>
-                <Pressable onPress={handleTestKey} disabled={testingKey} style={[styles.testBtn, {backgroundColor: tintColor, opacity: testingKey?0.5:1}]}>
-                  {testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color: 'white', fontWeight: 'bold'}}>{t('test_key', lang)}</ThemedText>}
-                </Pressable>
-            </View>
-            <View style={{marginTop: 12}}>
-                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable onPress={() => modelList.length > 0 && setShowModelPicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
-                   <ThemedText>{selectedModel}</ThemedText>
-                </Pressable>
+            <ThemedText type="subtitle">AI 設定</ThemedText>
+            <View style={{marginTop:8}}>
+              <ThemedText style={{fontSize:12, color:textSecondary}}>Gemini API Key</ThemedText>
+              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry />
             </View>
          </View>
 
+         {/* Basic Info Section */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
             <ThemedText type="subtitle" style={{marginBottom:12}}>基本資料</ThemedText>
             
             <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
                <View style={{flex:1}}>
-                 <ThemedText style={{marginBottom:5}}>{t('gender', lang)}</ThemedText>
+                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>性別</ThemedText>
                  <View style={styles.row}>
                     {["male", "female"].map(g => (
                       <Pressable key={g} onPress={() => setGender(g as any)} style={[styles.option, gender === g && {backgroundColor: tintColor, borderColor: tintColor}]}>
-                         <ThemedText style={{color: gender===g?'white':textColor}}>{t(g, lang)}</ThemedText>
+                         <ThemedText style={{color: gender===g?'white':textColor}}>{g==='male'?'男':'女'}</ThemedText>
                       </Pressable>
                     ))}
                  </View>
                </View>
                <View style={{flex:1}}>
-                  <ThemedText style={{marginBottom:5}}>{t('birth_year', lang)}</ThemedText>
-                  <TextInput style={[styles.input, {color:textColor, borderColor}]} value={birthYear} onChangeText={setBirthYear} keyboardType="numeric" placeholder="YYYY"/>
+                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>身高 (cm)</ThemedText>
+                  <TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/>
                </View>
             </View>
 
-            <View style={styles.row}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
+            <View style={[styles.row, {marginBottom: 12}]}>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>體重 (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>體脂率 %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
             </View>
 
-            <View style={styles.row, {marginTop: 12}}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>體脂率 %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+            <View style={[styles.row, {marginBottom: 12}]}>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>目標體重 (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>目標體重</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>目標體脂 %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
             </View>
             
+            {/* Goal Options */}
             <View style={{marginTop:12}}>
-               <ThemedText style={{marginBottom:5}}>{t('training_goal', lang)}</ThemedText>
-               <View style={{flexDirection:'row', flexWrap:'wrap', gap:8}}>
-                  {GOALS.map(g => (
-                    <Pressable key={g} onPress={()=>setTrainingGoal(g)} style={[styles.chip, trainingGoal===g && {backgroundColor:tintColor, borderColor:tintColor}]}>
-                       <ThemedText style={{color: trainingGoal===g?'white':textColor, fontSize:12}}>{t(g, lang)}</ThemedText>
+               <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>訓練目標</ThemedText>
+               <View style={{gap: 8}}>
+                  {GOAL_OPTIONS.map(g => (
+                    <Pressable key={g.id} onPress={()=>setTrainingGoal(g.id)} style={[styles.listOption, trainingGoal===g.id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                       <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                           <View>
+                               <ThemedText style={{fontWeight:'bold', color: trainingGoal===g.id?tintColor:textColor}}>{g.label}</ThemedText>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{g.desc}</ThemedText>
+                           </View>
+                           {trainingGoal===g.id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                       </View>
                     </Pressable>
                   ))}
                </View>
             </View>
 
-            <View style={{marginTop:12}}>
-               <ThemedText style={{marginBottom:5}}>{t('activity_level', lang)}</ThemedText>
-               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {['sedentary', 'lightly_active', 'moderately_active', 'very_active'].map(a => (
-                    <Pressable key={a} onPress={()=>setActivityLevel(a)} style={[styles.chip, activityLevel===a && {backgroundColor:tintColor, borderColor:tintColor}]}>
-                       <ThemedText style={{color: activityLevel===a?'white':textColor}}>{t(a, lang)}</ThemedText>
+            {/* Activity Options */}
+            <View style={{marginTop:16}}>
+               <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>日常活動量</ThemedText>
+               <View style={{gap: 8}}>
+                  {ACTIVITY_OPTIONS.map(a => (
+                    <Pressable key={a.id} onPress={()=>setActivityLevel(a.id)} style={[styles.listOption, activityLevel===a.id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                       <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                           <View>
+                               <ThemedText style={{fontWeight:'bold', color: activityLevel===a.id?tintColor:textColor}}>{a.label}</ThemedText>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{a.desc}</ThemedText>
+                           </View>
+                           {activityLevel===a.id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                       </View>
                     </Pressable>
                   ))}
-               </ScrollView>
+               </View>
             </View>
          </View>
 
-         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
-            <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
+         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20, marginBottom: 40}]}>
+            <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>儲存設定</ThemedText>
          </Pressable>
-
-         {isAuthenticated && (
-           <Pressable onPress={logout} style={[styles.btn, {borderColor: '#FF3B30', borderWidth:1, marginTop: 12}]}>
-              <ThemedText style={{color: '#FF3B30'}}>{t('logout', lang)}</ThemedText>
-           </Pressable>
-         )}
-
-         <Pressable onPress={() => setShowVersionModal(true)} style={{marginTop: 20, alignItems:'center', padding:10}}>
-            <ThemedText style={{color: textSecondary, textDecorationLine:'underline'}}>{t('version_history', lang)} (v1.0.8)</ThemedText>
-         </Pressable>
-         <View style={{height:50}}/>
       </ScrollView>
-
-      {/* Language Modal & Model Modal & Version Modal (保持原樣，僅省略內容以節省篇幅，請保留您的Modal程式碼) */}
-      <Modal visible={showLangPicker} transparent animationType="fade">
-         <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-               <ThemedText type="subtitle" style={{marginBottom:10}}>選擇語言</ThemedText>
-               {LANGUAGES.map(l => (
-                 <Pressable key={l.code} onPress={()=>{ setAppLanguage(l.code); setShowLangPicker(false); }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
-                    <ThemedText style={{fontWeight: lang===l.code?'bold':'normal', color: lang===l.code?tintColor:textColor}}>{l.label}</ThemedText>
-                 </Pressable>
-               ))}
-               <Pressable onPress={()=>setShowLangPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>{t('cancel', lang)}</ThemedText></Pressable>
-            </View>
-         </View>
-      </Modal>
-
-      {/* Model Modal */}
-      <Modal visible={showModelPicker} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
-            <ThemedText type="subtitle" style={{marginBottom:10}}>選擇模型</ThemedText>
-            <ScrollView style={{maxHeight: 300}}>
-              {modelList.map(m => (
-                <Pressable key={m} onPress={() => {setSelectedModel(m); setShowModelPicker(false);}} style={{padding: 15, borderBottomWidth:1, borderColor:'#eee'}}>
-                  <ThemedText style={{color: selectedModel===m?tintColor:textColor, fontWeight: selectedModel===m?'bold':'normal'}}>{m}</ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <Pressable onPress={() => setShowModelPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText>{t('cancel', lang)}</ThemedText></Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showVersionModal} transparent animationType="slide">
-         <View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor:cardBackground}]}><ThemedText type="subtitle" style={{marginBottom:10}}>{t('version_history', lang)}</ThemedText><ScrollView style={{maxHeight:400}}>{VERSION_LOGS.map((v, i)=>(<View key={i} style={{marginBottom:15}}><ThemedText style={{fontWeight:'bold', marginBottom:2}}>{v.version} ({v.date})</ThemedText><ThemedText style={{fontSize:13, color:textSecondary}}>{v.content}</ThemedText></View>))}</ScrollView><Pressable onPress={()=>setShowVersionModal(false)} style={[styles.btn, {backgroundColor:tintColor, marginTop:10}]}><ThemedText style={{color:'white'}}>關閉</ThemedText></Pressable></View></View>
-      </Modal>
-
     </View>
   );
 }
@@ -305,14 +241,10 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
-  langBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 20 },
   card: { padding: 20, borderRadius: 16 },
   input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: 'white', height: 48 },
   row: { flexDirection: 'row' },
   option: { flex: 1, padding: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', borderRadius: 8, marginHorizontal: 2 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 20, marginRight: 8, marginBottom: 8 },
-  testBtn: { padding: 12, borderRadius: 10, alignItems: 'center', flex: 1 },
+  listOption: { padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 20, borderRadius: 16 }
 });

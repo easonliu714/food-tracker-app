@@ -1,138 +1,102 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from 'react';
-import { StyleSheet, View, Pressable, Alert, Text, ActivityIndicator } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
-import { t, tParams, useLanguage } from '@/lib/i18n';
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { useState, useRef } from "react";
+import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 
 export default function CameraScreen() {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isCapturing, setIsCapturing] = useState(false);
+  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
-  const [processing, setProcessing] = useState(false);
-  const { barcode } = useLocalSearchParams();
-  const lang = useLanguage();
+
+  if (!permission) return <View />;
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', marginBottom: 20, color: '#fff' }}>
+          需要相機權限以拍攝食物
+        </Text>
+        <TouchableOpacity onPress={requestPermission} style={styles.permissionBtn}>
+          <Text style={{ color: '#000' }}>授予權限</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const takePicture = async () => {
-    const camPermission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!camPermission.granted) {
-      Alert.alert(t('permission_required', lang), t('camera_permission_msg', lang));
-      return;
-    }
-
-    if (!processing) {
-      setProcessing(true);
+    if (cameraRef.current && !isCapturing) {
+      setIsCapturing(true);
       try {
-        const result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          quality: 0.8,
-          base64: true,
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.7,
+          base64: true, // 若 AI 需要 Base64
         });
-
-        if (!result.canceled) {
-          router.push({
-            pathname: "/food-recognition",
-            params: { 
-              imageUri: result.assets[0].uri, 
-              base64: result.assets[0].base64, 
-              mode: "AI",
-              barcode: barcode 
-            }
-          });
-        }
-      } catch (error) {
-        Alert.alert(t('error_title', lang), t('capture_failed', lang));
+        
+        // 修改點：直接導向 food-editor，並帶入圖片路徑
+        // 注意：這裡我們假設 food-editor 會處理 imageUri 參數來進行 AI 分析
+        router.push({
+          pathname: "/food-editor",
+          params: { imageUri: photo?.uri } 
+        });
+      } catch (e) {
+        console.error(e);
       } finally {
-        setProcessing(false);
+        setIsCapturing(false);
       }
     }
   };
 
   const pickImage = async () => {
-    if (!processing) {
-      setProcessing(true);
-      try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          quality: 0.8,
-          base64: true,
-        });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      base64: true,
+    });
 
-        if (!result.canceled) {
-          router.push({
-            pathname: "/food-recognition",
-            params: { 
-              imageUri: result.assets[0].uri, 
-              base64: result.assets[0].base64, 
-              mode: "AI",
-              barcode: barcode
-            }
-          });
-        }
-      } catch (error) {
-        Alert.alert(t('error_title', lang), t('pick_failed', lang));
-      } finally {
-        setProcessing(false);
-      }
+    if (!result.canceled) {
+       router.push({
+          pathname: "/food-editor",
+          params: { imageUri: result.assets[0].uri } 
+       });
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('camera_option_title', lang)}</Text>
-        <Text style={styles.subtitle}>
-          {barcode 
-            ? tParams('camera_option_subtitle_barcode', {barcode: barcode as string}, lang) 
-            : t('camera_option_subtitle', lang)}
-        </Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <CameraView style={styles.camera} ref={cameraRef} facing="back">
+        <View style={styles.overlay}>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+                <Ionicons name="close" size={30} color="white" />
+            </TouchableOpacity>
+            
+            <View style={styles.controls}>
+                <TouchableOpacity onPress={pickImage} style={styles.galleryBtn}>
+                    <Ionicons name="images" size={28} color="white" />
+                </TouchableOpacity>
 
-      {processing ? (
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#2196F3" />
-          <Text style={{marginTop: 20, color:'#ccc'}}>{t('processing', lang)}</Text>
-        </View>
-      ) : (
-        <View style={styles.centerContent}>
-          <Pressable style={styles.largeButton} onPress={takePicture}>
-            <View style={[styles.iconCircle, {backgroundColor: '#E3F2FD'}]}>
-              <Ionicons name="camera" size={48} color="#2196F3" />
+                <TouchableOpacity onPress={takePicture} style={styles.captureBtn}>
+                    {isCapturing ? <ActivityIndicator color="black"/> : <View style={styles.captureInner} />}
+                </TouchableOpacity>
+
+                <View style={{width: 50}} /> 
             </View>
-            <Text style={styles.btnTitle}>{t('open_camera', lang)}</Text>
-            <Text style={styles.btnDesc}>{t('open_camera_desc', lang)}</Text>
-          </Pressable>
-
-          <View style={styles.divider} />
-
-          <Pressable style={styles.largeButton} onPress={pickImage}>
-            <View style={[styles.iconCircle, {backgroundColor: '#FFF3E0'}]}>
-              <Ionicons name="images" size={48} color="#FF9800" />
-            </View>
-            <Text style={styles.btnTitle}>{t('open_gallery', lang)}</Text>
-            <Text style={styles.btnDesc}>{t('open_gallery_desc', lang)}</Text>
-          </Pressable>
         </View>
-      )}
-
-      <Pressable style={styles.closeBtn} onPress={() => router.back()} disabled={processing}>
-        <Ionicons name="close-circle-outline" size={48} color="#666" />
-        <Text style={{color:'#666'}}>{t('cancel', lang)}</Text>
-      </Pressable>
-    </View>
+      </CameraView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 60 },
-  header: { alignItems: 'center', marginTop: 20 },
-  title: { color: 'white', fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
-  subtitle: { color: '#aaa', fontSize: 14 },
-  centerContent: { width: '100%', alignItems: 'center', gap: 30 },
-  largeButton: { alignItems: 'center', width: 200 },
-  iconCircle: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  btnTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  btnDesc: { color: '#888', fontSize: 14 },
-  divider: { height: 1, width: '40%', backgroundColor: '#333' },
-  closeBtn: { alignItems: 'center', opacity: 0.8 }
+  container: { flex: 1, backgroundColor: 'black' },
+  camera: { flex: 1 },
+  permissionBtn: { backgroundColor: 'white', padding: 15, borderRadius: 10 },
+  overlay: { flex: 1, justifyContent: 'space-between', padding: 20 },
+  closeBtn: { alignSelf: 'flex-start', padding: 10 },
+  controls: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 30 },
+  galleryBtn: { padding: 10 },
+  captureBtn: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center' },
+  captureInner: { width: 70, height: 70, borderRadius: 35, borderWidth: 2, borderColor: 'black', backgroundColor: 'white' },
 });

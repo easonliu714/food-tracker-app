@@ -45,24 +45,33 @@ export const foodItems = sqliteTable("food_items", {
   baseAmount: real("base_amount").default(100), 
   baseUnit: text("base_unit").default("g"),
 
+  // 基礎營養素
   calories: real("calories").notNull(),
   proteinG: real("protein_g").default(0),
-  carbsG: real("carbs_g").default(0),
   fatG: real("fat_g").default(0),
+  carbsG: real("carbs_g").default(0),
   sodiumMg: real("sodium_mg").default(0),
-  sugarG: real("sugar_g").default(0),
-  fiberG: real("fiber_g").default(0),
+  
+  // 新增詳細營養素
+  saturatedFatG: real("saturated_fat_g").default(0), // 飽和脂肪
+  transFatG: real("trans_fat_g").default(0),         // 反式脂肪
+  sugarG: real("sugar_g").default(0),               // 糖
+  fiberG: real("fiber_g").default(0),               // 纖維
+  cholesterolMg: real("cholesterol_mg").default(0), // 膽固醇 (mg)
+  magnesiumMg: real("magnesium_mg").default(0),     // 鎂 (mg)
+  zincMg: real("zinc_mg").default(0),               // 鋅 (mg)
+  ironMg: real("iron_mg").default(0),               // 鐵 (mg)
   
   isUserCreated: integer("is_user_created", { mode: "boolean" }).default(true),
   source: text("source").default("manual"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-// ==================== Food Logs (飲食紀錄) ====================
+/// ==================== Food Logs (飲食紀錄) ====================
 export const foodLogs = sqliteTable("food_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  date: text("date").notNull(), // YYYY-MM-DD
-  mealTimeCategory: text("meal_time_category").notNull(), // breakfast, lunch, afternoon_tea, dinner, late_night
+  date: text("date").notNull(),
+  mealTimeCategory: text("meal_time_category").notNull(),
   loggedAt: integer("logged_at", { mode: "timestamp" }).notNull(),
   
   foodItemId: integer("food_item_id").references(() => foodItems.id),
@@ -72,12 +81,23 @@ export const foodLogs = sqliteTable("food_logs", {
   servingAmount: real("serving_amount"),
   unitWeightG: real("unit_weight_g"),
   
+  // 實際攝取總量
   totalWeightG: real("total_weight_g"), 
   totalCalories: real("total_calories"),
   totalProteinG: real("total_protein_g"),
-  totalCarbsG: real("total_carbs_g"),
   totalFatG: real("total_fat_g"),
+  totalCarbsG: real("total_carbs_g"),
   totalSodiumMg: real("total_sodium_mg"),
+  
+  // 新增詳細營養素紀錄 (Snapshot)
+  totalSaturatedFatG: real("total_saturated_fat_g").default(0),
+  totalTransFatG: real("total_trans_fat_g").default(0),
+  totalSugarG: real("total_sugar_g").default(0),
+  totalFiberG: real("total_fiber_g").default(0),
+  totalCholesterolMg: real("total_cholesterol_mg").default(0),
+  totalMagnesiumMg: real("total_magnesium_mg").default(0),
+  totalZincMg: real("total_zinc_mg").default(0),
+  totalIronMg: real("total_iron_mg").default(0),
   
   imageUrl: text("image_url"),
   aiAnalysisLog: text("ai_analysis_log"),
