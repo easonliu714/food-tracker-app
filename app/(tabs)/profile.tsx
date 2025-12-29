@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
-import { LANGUAGES, VERSION_LOGS, t, useLanguage, setAppLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n"; // 簡化引用，若有其他需要可加回
 import { db } from "@/lib/db";
 import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -38,16 +38,16 @@ export default function ProfileScreen() {
   // Settings
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
+  const [modelList, setModelList] = useState<string[]>([]);
   
   // Profile Data
   const [profileId, setProfileId] = useState<number | null>(null);
   const [gender, setGender] = useState<"male"|"female">("male");
-  const [birthYear, setBirthYear] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [bodyFat, setBodyFat] = useState("");
   const [targetWeight, setTargetWeight] = useState("");
-  const [targetBodyFat, setTargetBodyFat] = useState(""); // [新增] 目標體脂
+  const [targetBodyFat, setTargetBodyFat] = useState("");
   
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
@@ -70,18 +70,18 @@ export default function ProfileScreen() {
       try {
         const s = await getSettings();
         if(s.apiKey) setApiKey(s.apiKey);
+        if(s.model) setSelectedModel(s.model); // 載入儲存的模型
         
         const result = await db.select().from(userProfiles).limit(1);
         if(result.length > 0) {
           const p = result[0];
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
-          // 若無 birthYear 欄位暫用假資料或修改 schema
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
           setTargetWeight(p.targetWeightKg?.toString() || "");
-          setTargetBodyFat(p.targetBodyFat?.toString() || ""); // [新增]
+          setTargetBodyFat(p.targetBodyFat?.toString() || "");
           setActivityLevel(p.activityLevel || "sedentary");
           setTrainingGoal(p.goal || "maintain");
         }
@@ -94,6 +94,24 @@ export default function ProfileScreen() {
     load();
   }, [isAuthenticated]);
 
+  const handleTestKey = async () => {
+    if (!apiKey) return Alert.alert("請輸入 API Key");
+    setTestingKey(true);
+    // 呼叫 gemini.ts 中的 validateApiKey
+    const res = await validateApiKey(apiKey);
+    setTestingKey(false);
+    
+    if (res.valid && res.models) {
+      setModelList(res.models);
+      // 自動選擇一個最佳模型 (例如 flash)
+      const bestMatch = res.models.find(m => m.includes('flash')) || res.models[0];
+      if (bestMatch) setSelectedModel(bestMatch);
+      Alert.alert("測試成功", `金鑰有效！已載入 ${res.models.length} 個模型。`);
+    } else {
+      Alert.alert("測試失敗", res.error || "API Key 無效或被停用");
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -103,7 +121,7 @@ export default function ProfileScreen() {
         const h = parseInt(heightCm) || 170;
         const age = 30; // 簡化
         
-        // BMR Calculation (Mifflin-St Jeor)
+        // BMR Calculation
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         
         // TDEE Multiplier
@@ -125,7 +143,7 @@ export default function ProfileScreen() {
                 currentWeightKg: w,
                 currentBodyFat: parseFloat(bodyFat) || null,
                 targetWeightKg: parseFloat(targetWeight) || null,
-                targetBodyFat: parseFloat(targetBodyFat) || null, // [新增]
+                targetBodyFat: parseFloat(targetBodyFat) || null,
                 activityLevel,
                 goal: trainingGoal,
                 dailyCalorieTarget: Math.round(targetCal),
@@ -151,12 +169,44 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
-         {/* AI Settings Section (簡化顯示) */}
+         {/* AI Settings Section */}
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle">AI 設定</ThemedText>
-            <View style={{marginTop:8}}>
-              <ThemedText style={{fontSize:12, color:textSecondary}}>Gemini API Key</ThemedText>
-              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry />
+            
+            <View style={{marginTop:12}}>
+              <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>Gemini API Key</ThemedText>
+              <TextInput 
+                style={[styles.input, {color: textColor, borderColor}]} 
+                value={apiKey} 
+                onChangeText={setApiKey} 
+                secureTextEntry 
+                placeholder="貼上您的 API Key"
+                placeholderTextColor="#999"
+              />
+              <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
+                  <ThemedText style={{fontSize:11, color: tintColor, marginTop:6, textDecorationLine:'underline'}}>
+                      前往 Google AI Studio 申請免費 API Key
+                  </ThemedText>
+              </Pressable>
+            </View>
+
+            <Pressable 
+                onPress={handleTestKey} 
+                disabled={testingKey || !apiKey}
+                style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}
+            >
+                {testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white', fontWeight:'600'}}>測試 Key 並載入模型</ThemedText>}
+            </Pressable>
+
+            <View style={{marginTop:12}}>
+                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>選擇模型</ThemedText>
+                <Pressable 
+                    style={[styles.input, {justifyContent:'center', borderColor}]} 
+                    onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert("提示", "請先輸入 API Key 並點擊測試按鈕以載入模型列表")}
+                >
+                    <ThemedText style={{color:textColor}}>{selectedModel}</ThemedText>
+                    <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
+                </Pressable>
             </View>
          </View>
 
@@ -234,6 +284,26 @@ export default function ProfileScreen() {
             <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>儲存設定</ThemedText>
          </Pressable>
       </ScrollView>
+
+      {/* Model Selection Modal */}
+      <Modal visible={showModelPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
+            <ThemedText type="subtitle" style={{marginBottom:10}}>選擇模型</ThemedText>
+            <ScrollView style={{maxHeight: 300}}>
+              {modelList.map(m => (
+                <Pressable key={m} onPress={() => {setSelectedModel(m); setShowModelPicker(false);}} style={{padding: 15, borderBottomWidth:1, borderColor:'#eee'}}>
+                  <ThemedText style={{color: selectedModel===m?tintColor:textColor, fontWeight: selectedModel===m?'bold':'normal'}}>{m}</ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setShowModelPicker(false)} style={{padding:15, alignItems:'center', marginTop:10}}>
+                <ThemedText style={{color: textSecondary}}>取消</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -242,9 +312,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   card: { padding: 20, borderRadius: 16 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: 'white', height: 48 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: 'white', height: 48, flexDirection:'row', alignItems:'center' },
   row: { flexDirection: 'row' },
   option: { flex: 1, padding: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', borderRadius: 8, marginHorizontal: 2 },
   listOption: { padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
+  modalContent: { padding: 20, borderRadius: 16 }
 });
