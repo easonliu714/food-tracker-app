@@ -20,6 +20,7 @@ export async function initDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         gender TEXT,
+        birth_date TEXT,
         height_cm REAL,
         current_weight_kg REAL,
         current_body_fat REAL,
@@ -138,9 +139,11 @@ export async function initDatabase() {
         await expoDb.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
       } catch (error) {
         // 忽略錯誤 (通常是因為欄位已存在)
-        // console.log(`Column migration skipped for ${table}: ${columnDef}`);
       }
     };
+
+    // [新增] 補齊 user_profiles 的生日欄位
+    await addColumn("user_profiles", "birth_date TEXT");
 
     // 補齊 food_items 的詳細營養素
     await addColumn("food_items", "saturated_fat_g REAL DEFAULT 0");

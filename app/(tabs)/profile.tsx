@@ -13,8 +13,8 @@ import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { format } from "date-fns";
-// 僅定義 ID，文字在 Render 時透過 t() 取得
+import { format, isValid } from "date-fns"; // [修正] 引入 isValid
+
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
 
@@ -65,7 +65,15 @@ export default function ProfileScreen() {
           const p = result[0];
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
-          if (p.birthDate) setBirthDate(new Date(p.birthDate));
+          
+          // [修正] 安全讀取日期，防止 Invalid Date 崩潰
+          if (p.birthDate) {
+            const d = new Date(p.birthDate);
+            if (isValid(d)) {
+                setBirthDate(d);
+            }
+          }
+          
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
@@ -106,10 +114,12 @@ export default function ProfileScreen() {
         const h = parseInt(heightCm) || 170;
         
         // Calculate Age for BMR
+        // [修正] 確保計算時使用有效日期
+        const safeBirth = isValid(birthDate) ? birthDate : new Date(1990, 0, 1);
         const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        let age = today.getFullYear() - safeBirth.getFullYear();
+        const m = today.getMonth() - safeBirth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) {
             age--;
         }
         
@@ -127,7 +137,7 @@ export default function ProfileScreen() {
 
         const profileData = {
             gender, 
-            birthDate: format(birthDate, "yyyy-MM-dd"),
+            birthDate: format(safeBirth, "yyyy-MM-dd"), // [修正] 確保格式化有效日期
             heightCm: h, 
             currentWeightKg: w, 
             currentBodyFat: parseFloat(bodyFat) || null,
@@ -145,10 +155,10 @@ export default function ProfileScreen() {
             await db.insert(userProfiles).values(profileData);
         }
         Alert.alert(t('save_settings', lang), t('success', lang));
-    } catch (e) { Alert.alert(t('error', lang), "Failed"); } 
+    } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
   };
-//BirthDateChange
+
   const onBirthDateChange = (event: any, selectedDate?: Date) => {
       setShowDatePicker(false);
       if (selectedDate) setBirthDate(selectedDate);
@@ -210,9 +220,19 @@ export default function ProfileScreen() {
                <View style={{flex:1}}>
                   <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang) || "Birth Date"}</ThemedText>
                   <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
-                      <ThemedText style={{color:textColor}}>{format(birthDate, 'yyyy-MM-dd')}</ThemedText>
+                      {/* [修正] 渲染前檢查 isValid */}
+                      <ThemedText style={{color:textColor}}>
+                          {isValid(birthDate) ? format(birthDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
+                      </ThemedText>
                   </Pressable>
-                  {showDatePicker && <DateTimePicker value={birthDate} mode="date" onChange={onBirthDateChange} maximumDate={new Date()} />}
+                  {showDatePicker && (
+                    <DateTimePicker 
+                        value={isValid(birthDate) ? birthDate : new Date()} 
+                        mode="date" 
+                        onChange={onBirthDateChange} 
+                        maximumDate={new Date()} 
+                    />
+                  )}
                </View>
             </View>
 
