@@ -1,6 +1,11 @@
 import { drizzle } from "drizzle-orm/expo-sqlite";
 import { openDatabaseSync } from "expo-sqlite";
+import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm";
 import * as schema from "../drizzle/schema";
+import { 
+  userProfiles, foodItems, foodLogs, recipes, 
+  reminderSettings, activityLogs, dailyMetrics 
+} from "../drizzle/schema";
 
 // 開啟本地資料庫檔案
 export const expoDb = openDatabaseSync("food_tracker.db");
@@ -14,7 +19,7 @@ export async function initDatabase() {
     // 啟用 WAL 模式以提升效能
     await expoDb.execAsync("PRAGMA journal_mode = WAL;");
     
-    // 1. 建立資料表 (僅在不存在時建立)
+    // 1. 建立資料表 (SQL 保持您原本提供的內容，確保結構完整)
     await expoDb.execAsync(`
       CREATE TABLE IF NOT EXISTS user_profiles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,23 +154,14 @@ export async function initDatabase() {
       );
     `);
 
-    // 2. 資料庫遷移 (Migration) - 補上後來新增的欄位
-    // 使用 helper 函式來嘗試加入欄位，若已存在則忽略錯誤
+    // 2. Migration 邏輯 (保持不變，略過錯誤)
     const addColumn = async (table: string, columnDef: string) => {
-      try {
-        await expoDb.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
-      } catch (error) {
-        // 忽略錯誤 (通常是因為欄位已存在)
-      }
+      try { await expoDb.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`); } catch (e) {}
     };
-
-    // [新增] 補齊 user_profiles 的生日欄位
-    await addColumn("user_profiles", "birth_date TEXT");
-
-    // [新增] 補齊 user_profiles 的 target_date 欄位
-    await addColumn("user_profiles", "target_date TEXT");
     
-    // 補齊 food_items 的詳細營養素
+    // 確保所有擴充欄位都存在
+    await addColumn("user_profiles", "birth_date TEXT");
+    await addColumn("user_profiles", "target_date TEXT");
     await addColumn("food_items", "saturated_fat_g REAL DEFAULT 0");
     await addColumn("food_items", "trans_fat_g REAL DEFAULT 0");
     await addColumn("food_items", "sugar_g REAL DEFAULT 0");
@@ -174,8 +170,6 @@ export async function initDatabase() {
     await addColumn("food_items", "magnesium_mg REAL DEFAULT 0");
     await addColumn("food_items", "zinc_mg REAL DEFAULT 0");
     await addColumn("food_items", "iron_mg REAL DEFAULT 0");
-
-    // 補齊 food_logs 的詳細營養素紀錄
     await addColumn("food_logs", "total_saturated_fat_g REAL DEFAULT 0");
     await addColumn("food_logs", "total_trans_fat_g REAL DEFAULT 0");
     await addColumn("food_logs", "total_sugar_g REAL DEFAULT 0");
@@ -189,4 +183,151 @@ export async function initDatabase() {
   } catch (e) {
     console.error("Database initialization failed:", e);
   }
+}
+
+// =========================================================
+//  以下為從 server/db.ts 移植過來的 Helper Functions
+//  這些函式可以直接在 APP 的前端頁面或 Hooks 中呼叫
+// =========================================================
+
+// --- User Profile ---
+
+export async function getUserProfile() {
+  // 單機版通常只有一個用戶，取第一個，若無則建立預設
+  let result = await db.select().from(userProfiles).limit(1);
+  if (result.length === 0) {
+      await db.insert(userProfiles).values({ 
+        name: "User", 
+        dailyCalorieTarget: 2000,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      result = await db.select().from(userProfiles).limit(1);
+  }
+  return result[0];
+}
+
+export async function updateUserProfile(data: Partial<typeof userProfiles.$inferInsert>) {
+  const profile = await getUserProfile();
+  await db.update(userProfiles)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(userProfiles.id, profile.id));
+}
+
+// --- Food Items ---
+
+export async function getFoodItemById(id: number) {
+  const result = await db.select().from(foodItems).where(eq(foodItems.id, id));
+  return result[0] || null;
+}
+
+export async function getFoodItemByBarcode(barcode: string) {
+  const result = await db.select().from(foodItems).where(eq(foodItems.barcode, barcode));
+  return result[0] || null;
+}
+
+export async function createFoodItem(data: typeof foodItems.$inferInsert) {
+  const result = await db.insert(foodItems).values(data).returning({ insertedId: foodItems.id });
+  return result[0].insertedId;
+}
+
+export async function searchFoodItems(query: string, limit = 20) {
+  return db
+    .select()
+    .from(foodItems)
+    .where(sql`${foodItems.name} LIKE ${`%${query}%`}`)
+    .limit(limit);
+}
+
+// --- Food Logs ---
+
+export async function getFoodLogsByDate(date: Date) {
+  // SQLite 儲存日期格式為 YYYY-MM-DD
+  const dateStr = date.toISOString().split('T')[0];
+  return db
+    .select()
+    .from(foodLogs)
+    .where(eq(foodLogs.date, dateStr))
+    .orderBy(desc(foodLogs.loggedAt));
+}
+
+export async function createFoodLog(data: typeof foodLogs.$inferInsert) {
+  const result = await db.insert(foodLogs).values(data).returning({ insertedId: foodLogs.id });
+  return result[0].insertedId;
+}
+
+export async function updateFoodLog(id: number, data: Partial<typeof foodLogs.$inferInsert>) {
+  await db.update(foodLogs).set(data).where(eq(foodLogs.id, id));
+}
+
+export async function deleteFoodLog(id: number) {
+  await db.delete(foodLogs).where(eq(foodLogs.id, id));
+}
+
+// --- Nutrition Summary ---
+
+export async function getDailyNutritionSummary(date: Date) {
+  const dateStr = date.toISOString().split('T')[0];
+  const result = await db
+    .select({
+      totalCalories: sql<number>`SUM(${foodLogs.totalCalories})`,
+      totalProtein: sql<number>`SUM(${foodLogs.totalProteinG})`,
+      totalCarbs: sql<number>`SUM(${foodLogs.totalCarbsG})`,
+      totalFat: sql<number>`SUM(${foodLogs.totalFatG})`,
+      totalSodium: sql<number>`SUM(${foodLogs.totalSodiumMg})`,
+    })
+    .from(foodLogs)
+    .where(eq(foodLogs.date, dateStr));
+
+  return result[0] || { 
+    totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0, totalSodium: 0 
+  };
+}
+
+// --- Recipes ---
+
+export async function getAllRecipes(filters?: {
+  mealType?: string;
+  maxCalories?: number;
+}) {
+  const conditions: any[] = [];
+
+  if (filters?.mealType) {
+    conditions.push(eq(recipes.mealType, filters.mealType));
+  }
+
+  if (filters?.maxCalories) {
+    conditions.push(lte(recipes.totalCalories, filters.maxCalories));
+  }
+
+  if (conditions.length > 0) {
+    return db.select().from(recipes).where(and(...conditions)).orderBy(recipes.name);
+  }
+
+  return db.select().from(recipes).orderBy(recipes.name);
+}
+
+export async function createRecipe(data: typeof recipes.$inferInsert) {
+  const result = await db.insert(recipes).values(data).returning({ insertedId: recipes.id });
+  return result[0].insertedId;
+}
+
+// --- Activity Logs ---
+
+export async function getActivityLogsByDate(date: Date) {
+  const dateStr = date.toISOString().split('T')[0];
+  return db
+    .select()
+    .from(activityLogs)
+    .where(eq(activityLogs.date, dateStr))
+    .orderBy(desc(activityLogs.loggedAt));
+}
+
+export async function createActivityLog(data: typeof activityLogs.$inferInsert) {
+  const result = await db.insert(activityLogs).values(data).returning({ insertedId: activityLogs.id });
+  return result[0].insertedId;
+}
+
+export async function deleteActivityLog(id: number) {
+  await db.delete(activityLogs).where(eq(activityLogs.id, id));
 }
