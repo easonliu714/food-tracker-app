@@ -97,7 +97,9 @@ export const TRANSLATIONS = {
     scan_failed: "查無資料", scan_failed_msg: "無此商品，請選擇：",
     scan_ai_option: "拍照分析營養標示", manual_option: "手動輸入", 
     food_name: "食物名稱", brand_name: "品牌名稱", serving_size: "每份量", serving_unit: "單位", servings_per_container: "每包份數",
-
+    val_per_100g: "每100克含量", val_per_serving: "每份含量",
+    
+    // Changes
     increase: "增加", decrease: "減少", no_change: "無變化"
 
   },
