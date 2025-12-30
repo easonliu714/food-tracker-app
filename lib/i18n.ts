@@ -65,7 +65,7 @@ export const TRANSLATIONS = {
     axis_l: "(左)", axis_r: "(右)",
 
     // Profile & AI
-    ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", 
+    ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", prifile: "個人資料",
     birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", 
@@ -159,7 +159,7 @@ export const TRANSLATIONS = {
     week: "7 Days", month: "30 Days", avg_daily: "Daily Avg",
     axis_l: "(L)", axis_r: "(R)",
     
-    ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female", 
+    ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female", prifile: "Profile",
     birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
     target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
     api_key_placeholder: "Paste API Key", get_api_key: "Get API Key", how_to_get_key:"How to obtain the API Key？", test_key: "Test Key", test_key_first: "Test Key First", current_model: "Model", language: "Language", version_history: "Version History",
@@ -251,7 +251,7 @@ export const TRANSLATIONS = {
     week: "7日間", month: "30日間", avg_daily: "日平均",
     axis_l: "(左)", axis_r: "(右)",
 
-    ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性", 
+    ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性", prifile: "プロフィール",
     birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
     target_goals: "目標設定", training_goal: "トレーニング目標", activity_level: "活動レベル", save_settings: "設定を保存",
     api_key_placeholder: "API Keyを入力", how_to_get_key:"API Keyはどうやって取得しますか？",
@@ -336,7 +336,7 @@ export const TRANSLATIONS = {
     week: "7일", month: "30일", avg_daily: "일평균",
     axis_l: "(좌)", axis_r: "(우)",
 
-    ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성", 
+    ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성", prifile: "프로필",
     birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",
     target_goals: "목표 설정", training_goal: "훈련 목표", activity_level: "활동 수준", save_settings: "설정 저장",
     api_key_placeholder: "API Key 입력", how_to_get_key:"API Key는 어떻게 얻나요?",

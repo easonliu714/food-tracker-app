@@ -61,37 +61,11 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [修正] 自動搜尋資料庫檔案路徑
-  const findDbPath = async () => {
+  // 取得 DB 路徑 (不檢查存在與否，僅回傳路徑字串)
+  const getPossibleDbPath = () => {
       const docDir = FileSystem.documentDirectory;
-      
-      if (!docDir) {
-          console.error("FileSystem.documentDirectory is null. Try restarting the app.");
-          return null;
-      }
-
-      // 1. 標準路徑
-      const standardPath = docDir + 'SQLite/food_tracker.db';
-      const fileInfo = await FileSystem.getInfoAsync(standardPath).catch(() => null);
-      if (fileInfo && fileInfo.exists) return standardPath;
-
-      // 2. 搜尋 SQLite 目錄
-      try {
-          const sqliteDir = docDir + 'SQLite/';
-          const files = await FileSystem.readDirectoryAsync(sqliteDir);
-          const dbFile = files.find(f => f.endsWith('.db'));
-          if (dbFile) return sqliteDir + dbFile;
-      } catch (e) {}
-
-      // 3. 搜尋根目錄
-      try {
-          const rootFiles = await FileSystem.readDirectoryAsync(docDir);
-          const dbFile = rootFiles.find(f => f.endsWith('.db'));
-          if (dbFile) return docDir + dbFile;
-      } catch (e) {}
-
-      // 4. 回傳預設值 (即使不存在，讓還原功能知道目標位置)
-      return standardPath;
+      if (!docDir) return null;
+      return docDir + 'SQLite/food_tracker.db';
   };
 
   useEffect(() => {
@@ -136,19 +110,19 @@ export default function ProfileScreen() {
 
   // 備份資料庫
   const handleBackup = async () => {
-      try {
-          const dbPath = await findDbPath();
-          if (!dbPath) {
-              Alert.alert(t('error', lang), "System Error: Cannot verify storage path. Please restart app.");
-              return;
-          }
+      const dbPath = getPossibleDbPath();
+      
+      // 1. 若 Native Module 未初始化 (通常是未重啟 App 導致)
+      if (!dbPath) {
+          return Alert.alert(
+              t('error', lang), 
+              "System Error: FileSystem is not ready.\nPlease completely close and restart the App."
+          );
+      }
 
-          const fileInfo = await FileSystem.getInfoAsync(dbPath);
-          if (!fileInfo.exists) {
-              Alert.alert(t('error', lang), "Database file not found yet. Try recording some data first.");
-              return;
-          }
-          
+      try {
+          // 2. 直接嘗試分享 (移除 getInfoAsync 以避免棄用警告)
+          // 若檔案不存在，shareAsync 會拋出錯誤，我們在 catch 處理
           await Sharing.shareAsync(dbPath, {
               mimeType: 'application/x-sqlite3',
               dialogTitle: t('backup_db', lang),
@@ -156,12 +130,15 @@ export default function ProfileScreen() {
           });
       } catch (e: any) {
           console.error("Backup Error:", e);
-          Alert.alert(t('error', lang), "Backup failed: " + e.message);
+          Alert.alert(t('error', lang), "Backup failed. Database file may not exist yet.");
       }
   };
 
   // 還原資料庫
   const handleRestore = async () => {
+      const dbPath = getPossibleDbPath();
+      if (!dbPath) return Alert.alert(t('error', lang), "System Error: Restart App");
+
       Alert.alert(
           t('restore_confirm_title', lang),
           t('restore_confirm_msg', lang),
@@ -180,25 +157,18 @@ export default function ProfileScreen() {
                           if (result.canceled) return;
 
                           const sourceUri = result.assets[0].uri;
-                          const targetPath = await findDbPath();
-                          
-                          if (!targetPath) {
-                              Alert.alert(t('error', lang), "Target path not found");
-                              return;
-                          }
                           
                           // 確保資料夾存在
-                          const folder = targetPath.substring(0, targetPath.lastIndexOf('/'));
+                          const folder = dbPath.substring(0, dbPath.lastIndexOf('/'));
                           await FileSystem.makeDirectoryAsync(folder, { intermediates: true }).catch(()=>{});
 
                           // 覆蓋檔案
                           await FileSystem.copyAsync({
                               from: sourceUri,
-                              to: targetPath
+                              to: dbPath
                           });
 
                           Alert.alert(t('success', lang), t('restore_success_msg', lang));
-                          // 強制重整 (但在 Expo Router 中通常需要用戶重啟 App 才能重載 DB 連線)
                       } catch (e: any) {
                           console.error("Restore Error:", e);
                           Alert.alert(t('error', lang), "Restore failed: " + e.message);
