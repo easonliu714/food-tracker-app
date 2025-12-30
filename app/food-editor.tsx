@@ -62,10 +62,10 @@ export default function FoodEditorScreen() {
   const [selectedMeal, setSelectedMeal] = useState("breakfast");
   const [mealManuallyChanged, setMealManuallyChanged] = useState(false);
   
-  // [新增] 用於自動滾動的 Ref
   const mealScrollRef = useRef<ScrollView>(null);
 
   const [foodName, setFoodName] = useState("");
+  const [brand, setBrand] = useState(""); // [新增] 品牌 State
   const [barcode, setBarcode] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [dbFoodId, setDbFoodId] = useState<number | null>(null); 
@@ -80,14 +80,13 @@ export default function FoodEditorScreen() {
 
   const isInitialized = useRef(false);
 
-  // [新增] 當 selectedMeal 改變時，自動滾動到該項目
+  // Meal Scroll Logic
   useEffect(() => {
       if (mealScrollRef.current) {
           const index = MEAL_PERIODS.findIndex(m => m.id === selectedMeal);
           if (index !== -1) {
-              // 假設每個按鈕寬度約 100 (包含 padding/margin)，計算置中位置
               const buttonWidth = 100; 
-              const centerOffset = (SCREEN_WIDTH / 2) - (buttonWidth / 2) - 16; // 16 is padding
+              const centerOffset = (SCREEN_WIDTH / 2) - (buttonWidth / 2) - 16;
               const x = index * buttonWidth - centerOffset;
               mealScrollRef.current.scrollTo({ x: Math.max(0, x), animated: true });
           }
@@ -125,6 +124,7 @@ export default function FoodEditorScreen() {
                     setRecordDate(targetDate);
                     if (isClone) { updateCategoryByTime(targetDate); setMealManuallyChanged(false); }
                     else { setSelectedMeal(log.mealTimeCategory); setMealManuallyChanged(true); }
+                    
                     setFoodName(log.foodName);
                     setInputMode(log.servingType as any || 'weight');
                     setServings(String(log.servingAmount || "1"));
@@ -136,6 +136,7 @@ export default function FoodEditorScreen() {
                         const itemRes = await db.select().from(foodItems).where(eq(foodItems.id, log.foodItemId));
                         if (itemRes.length > 0) {
                             const item = itemRes[0];
+                            setBrand(item.brand || ""); // [新增] 載入品牌
                             const nutrients = mapDbToState(item);
                             setBaseNutrients(nutrients);
                             setInitialBaseNutrients(nutrients);
@@ -148,7 +149,7 @@ export default function FoodEditorScreen() {
                 updateCategoryByTime(now);
                 if (params.barcode) {
                     setBarcode(params.barcode as string);
-                    // Handle barcode load...
+                    // Handle barcode load logic here if needed (omitted for brevity)
                 } else if (params.imageUri) {
                     setImageUri(params.imageUri as string);
                     if (params.analyze === "true" && params.imageBase64) {
@@ -249,21 +250,18 @@ export default function FoodEditorScreen() {
   const handleSave = async () => {
     if (!foodName || !totalWeight) return Alert.alert(t('error', lang), t('data_incomplete', lang));
     
-    // Check local DB changes
     let isModified = false;
     if (initialBaseNutrients) {
-        // Compare current baseNutrients with initial
         isModified = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
     }
     
-    // Ask to update DB or create new if modified
     if (dbFoodId && isModified) {
         Alert.alert(
             t('tip', lang),
-            t('food_modified_msg', lang) || "Values changed. Update original item?",
+            t('food_modified_msg', lang),
             [
-                { text: t('save_as_new', lang) || "Save as New", onPress: () => saveToDb(true) },
-                { text: t('update_original', lang) || "Update Original", onPress: () => saveToDb(false) }
+                { text: t('save_as_new', lang), onPress: () => saveToDb(true) },
+                { text: t('update_original', lang), onPress: () => saveToDb(false) }
             ]
         );
     } else {
@@ -278,9 +276,10 @@ export default function FoodEditorScreen() {
           
           let foodId = dbFoodId;
 
-          // 1. Update/Create Food Item
+          // 1. Update/Create Food Item (包含 Brand)
           const itemData = {
               name: foodName,
+              brand: brand, // [新增]
               calories: parseFloat(baseNutrients.calories) || 0,
               proteinG: parseFloat(baseNutrients.protein) || 0,
               fatG: parseFloat(baseNutrients.fat) || 0,
@@ -320,7 +319,6 @@ export default function FoodEditorScreen() {
               totalFatG: itemData.fatG * ratio,
               totalCarbsG: itemData.carbsG * ratio,
               totalSodiumMg: itemData.sodiumMg * ratio,
-              // details
               totalSugarG: itemData.sugarG * ratio,
               totalFiberG: itemData.fiberG * ratio,
               totalSaturatedFatG: itemData.saturatedFatG * ratio,
@@ -399,7 +397,6 @@ export default function FoodEditorScreen() {
             </ThemedView>
         )}
 
-        {/* [修正] 滑動式用餐時段選擇器 */}
         <View style={{marginBottom: 16}}>
             <ScrollView 
                 ref={mealScrollRef}
@@ -442,6 +439,19 @@ export default function FoodEditorScreen() {
                     {isAnalyzing ? <ActivityIndicator color="#FFF" size="small"/> : <Ionicons name="sparkles" size={20} color="#FFF" />}
                 </TouchableOpacity>
             </View>
+            
+            {/* [新增] 品牌輸入框 */}
+            <View style={{marginTop: 12}}>
+                <ThemedText style={{fontSize:12, color:'#888', marginBottom:4}}>{t('brand', lang)}</ThemedText>
+                <TextInput 
+                    style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
+                    value={brand} 
+                    onChangeText={setBrand} 
+                    placeholder={t('brand_placeholder', lang)}  
+                    placeholderTextColor={theme.icon} 
+                />
+            </View>
+
             {barcode && <View style={{flexDirection:'row', marginTop: 8}}><Ionicons name="barcode-outline" size={16} color={theme.icon} /><ThemedText style={{fontSize: 12, color: theme.icon}}>{t('barcode_scanned', lang)} {barcode}</ThemedText></View>}
         </ThemedView>
         
@@ -503,7 +513,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16 },
   dateTimeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, backgroundColor: 'rgba(120,120,120,0.1)', flex: 0.48 },
-  mealBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(120,120,120,0.1)', borderWidth:1, borderColor:'transparent', minWidth: 80, alignItems:'center' }, // Adjusted style
+  mealBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(120,120,120,0.1)', borderWidth:1, borderColor:'transparent', minWidth: 80, alignItems:'center' }, 
   card: { padding: 16, borderRadius: 12, marginBottom: 16, backgroundColor: 'rgba(120,120,120,0.05)' },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, fontSize: 16, paddingVertical: 8 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
