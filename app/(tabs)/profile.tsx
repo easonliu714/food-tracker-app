@@ -11,9 +11,9 @@ import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
 import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { t, useLanguage, setAppLanguage, LANGUAGES } from "@/lib/i18n";
+import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { format, isValid } from "date-fns"; // [修正] 引入 isValid
+import { format, isValid } from "date-fns";
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -30,7 +30,7 @@ export default function ProfileScreen() {
   
   const [profileId, setProfileId] = useState<number | null>(null);
   const [gender, setGender] = useState<"male"|"female">("male");
-  const [birthDate, setBirthDate] = useState<Date>(new Date(1990, 0, 1)); // Default
+  const [birthDate, setBirthDate] = useState<Date>(new Date(1990, 0, 1)); 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [heightCm, setHeightCm] = useState("");
@@ -45,6 +45,8 @@ export default function ProfileScreen() {
   const [testingKey, setTestingKey] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [showApiHelpModal, setShowApiHelpModal] = useState(false); // [新增]
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -66,7 +68,6 @@ export default function ProfileScreen() {
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
           
-          // [修正] 安全讀取日期，防止 Invalid Date 崩潰
           if (p.birthDate) {
             const d = new Date(p.birthDate);
             if (isValid(d)) {
@@ -113,8 +114,6 @@ export default function ProfileScreen() {
         const w = parseFloat(currentWeight) || 60;
         const h = parseInt(heightCm) || 170;
         
-        // Calculate Age for BMR
-        // [修正] 確保計算時使用有效日期
         const safeBirth = isValid(birthDate) ? birthDate : new Date(1990, 0, 1);
         const today = new Date();
         let age = today.getFullYear() - safeBirth.getFullYear();
@@ -123,7 +122,6 @@ export default function ProfileScreen() {
             age--;
         }
         
-        // Mifflin-St Jeor Equation
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         const activityMap: Record<string, number> = {
             'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55,
@@ -137,7 +135,7 @@ export default function ProfileScreen() {
 
         const profileData = {
             gender, 
-            birthDate: format(safeBirth, "yyyy-MM-dd"), // [修正] 確保格式化有效日期
+            birthDate: format(safeBirth, "yyyy-MM-dd"),
             heightCm: h, 
             currentWeightKg: w, 
             currentBodyFat: parseFloat(bodyFat) || null,
@@ -185,8 +183,9 @@ export default function ProfileScreen() {
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
               <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
-              <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
-                  <ThemedText style={{fontSize:11, color: tintColor, marginTop:6, textDecorationLine:'underline'}}>{t('get_api_key', lang) || "Get API Key"}</ThemedText>
+              {/* [新增] API 說明按鈕 */}
+              <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}>
+                  <ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText>
               </Pressable>
             </View>
             <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>
@@ -204,8 +203,6 @@ export default function ProfileScreen() {
          {/* Basic Info */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
             <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
-            
-            {/* Gender & Birth Date */}
             <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
                <View style={{flex:1}}>
                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('gender', lang)}</ThemedText>
@@ -220,7 +217,6 @@ export default function ProfileScreen() {
                <View style={{flex:1}}>
                   <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang) || "Birth Date"}</ThemedText>
                   <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
-                      {/* [修正] 渲染前檢查 isValid */}
                       <ThemedText style={{color:textColor}}>
                           {isValid(birthDate) ? format(birthDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
                       </ThemedText>
@@ -236,7 +232,6 @@ export default function ProfileScreen() {
                </View>
             </View>
 
-            {/* Height & Weight */}
             <View style={[styles.row, {marginBottom: 12}]}>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)} (cm)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
@@ -247,7 +242,6 @@ export default function ProfileScreen() {
                 <TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
              </View>
 
-            {/* Targets */}
             <ThemedText style={{fontSize:14, fontWeight:'bold', marginTop:8, marginBottom:8}}>{t('target_goals', lang) || "Target Goals"}</ThemedText>
             <View style={[styles.row, {marginBottom: 12}]}>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
@@ -288,8 +282,12 @@ export default function ProfileScreen() {
                </View>
             </View>
          </View>
-         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20, marginBottom: 40}]}>
+         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
             <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
+         </Pressable>
+         {/* [新增] 改版履歷按鈕 */}
+         <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center', marginBottom: 40}}>
+             <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
          </Pressable>
       </ScrollView>
 
@@ -306,6 +304,49 @@ export default function ProfileScreen() {
             <Pressable onPress={()=>setShowLangPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText style={{color:textSecondary}}>{t('cancel', lang)}</ThemedText></Pressable>
           </View>
         </View>
+      </Modal>
+
+      {/* API Help Modal */}
+      <Modal visible={showApiHelpModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '60%'}]}>
+                  <ThemedText type="subtitle" style={{marginBottom: 16}}>{t('api_guide_title', lang)}</ThemedText>
+                  <ScrollView>
+                      {[1,2,3,4,5].map(step => (
+                          <ThemedText key={step} style={{marginBottom: 8, fontSize: 14}}>{t(`api_step_${step}`, lang)}</ThemedText>
+                      ))}
+                  </ScrollView>
+                  <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')} style={[styles.btn, {backgroundColor: tintColor, marginTop: 16}]}>
+                      <ThemedText style={{color: 'white'}}>{t('go_to_site', lang)}</ThemedText>
+                  </Pressable>
+                  <Pressable onPress={() => setShowApiHelpModal(false)} style={{padding:16, alignItems:'center'}}>
+                      <ThemedText style={{color: textSecondary}}>{t('close', lang)}</ThemedText>
+                  </Pressable>
+              </View>
+          </View>
+      </Modal>
+
+      {/* Version History Modal */}
+      <Modal visible={showVersionModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '80%'}]}>
+                  <ThemedText type="subtitle" style={{marginBottom: 16}}>{t('version_history', lang)}</ThemedText>
+                  <ScrollView>
+                      {getVersionLogs(lang).map((log, idx) => (
+                          <View key={idx} style={{marginBottom: 16, borderBottomWidth:1, borderColor:'#eee', paddingBottom:8}}>
+                              <View style={{flexDirection:'row', justifyContent:'space-between'}}>
+                                  <ThemedText type="defaultSemiBold">{log.version}</ThemedText>
+                                  <ThemedText style={{color: textSecondary}}>{log.date}</ThemedText>
+                              </View>
+                              <ThemedText style={{marginTop: 4, lineHeight: 20}}>{log.content}</ThemedText>
+                          </View>
+                      ))}
+                  </ScrollView>
+                  <Pressable onPress={() => setShowVersionModal(false)} style={{padding:15, alignItems:'center'}}>
+                      <ThemedText style={{color:tintColor}}>{t('close', lang)}</ThemedText>
+                  </Pressable>
+              </View>
+          </View>
       </Modal>
 
       {/* Model Modal */}

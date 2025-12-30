@@ -13,8 +13,8 @@ import { format, subDays, eachDayOfInterval } from "date-fns";
 import { t, useLanguage } from "@/lib/i18n";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const CHART_WIDTH = SCREEN_WIDTH - 48; // 扣除 padding
-const INITIAL_SPACING = 20; // 統一的起始間距
+const PADDING_H = 16;
+const VISIBLE_WIDTH = SCREEN_WIDTH - (PADDING_H * 2) - 10; // 扣除邊距
 
 export default function AnalysisScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
@@ -26,17 +26,15 @@ export default function AnalysisScreen() {
   const [dataSet, setDataSet] = useState<any[]>([]); 
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
 
-  // [精算] 圖表參數設定
-  // 目標：讓 LineChart 的點 精準對齊 BarChart 的中心
-  // BarChart Slot Width = barWidth + spacing
-  // LineChart Point Distance = barWidth + spacing
-  const chartConfig = period === 7 
-    ? { barWidth: 24, spacing: 32 } // 7天: 較寬
-    : { barWidth: 8, spacing: 12 }; // 30天: 較窄
+  // [參數精算]
+  // 30天模式：每個 Bar 12px + 間距 20px = 32px => 總寬 960px (自動滑動)
+  // 7天模式：自適應寬度，填滿畫面
+  const config = period === 30 
+    ? { barWidth: 12, spacing: 20 }
+    : { barWidth: 24, spacing: (VISIBLE_WIDTH / 7) - 24 };
 
-  const lineSpacing = chartConfig.barWidth + chartConfig.spacing;
-  // LineChart 起始點 = BarChart起始間距 + (Bar寬度 / 2) -> 對齊 Bar 中心
-  const lineInitialSpacing = INITIAL_SPACING + (chartConfig.barWidth / 2);
+  const lineSpacing = config.barWidth + config.spacing;
+  const lineInitialSpacing = config.spacing + (config.barWidth / 2); // 居中對齊
 
   useFocusEffect(
     useCallback(() => { loadAnalysis(period); }, [period])
@@ -51,11 +49,10 @@ export default function AnalysisScreen() {
           const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
           const strStart = format(startDate, 'yyyy-MM-dd');
 
-          // 初始化 Map (確保每一天都有佔位)
+          // 初始化 Map
           const dataMap = new Map();
           dateRange.forEach(d => {
               const k = format(d, 'yyyy-MM-dd');
-              // X軸標籤顯示邏輯
               const showLabel = days === 7 || d.getDate() % 5 === 0;
               dataMap.set(k, { 
                   in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, 
@@ -66,7 +63,7 @@ export default function AnalysisScreen() {
               });
           });
 
-          // 讀取數據
+          // Fetch Data
           const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
           const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart));
@@ -110,32 +107,30 @@ export default function AnalysisScreen() {
                   { value: -(d.out), color: '#FF9500' }, 
               ],
               frontColor: 'transparent',
-              // 存入完整資訊供 Tooltip 使用
               customData: { ...d, index: idx, total: chartArr.length } 
           }));
           setCalData(stackData);
 
-          // 2. 體重體脂數據 (插補邏輯)
-          // 確保回傳陣列長度 == days，空值用插補填補但隱藏點
+          // 2. 體重體脂數據 (強制補齊所有日期)
           const interpolate = (arr: any[], key: string) => {
+             // 找出所有有真實數據的 index
              const knownIndices = arr.map((item, i) => item[key] !== null ? i : -1).filter(i => i !== -1);
              
+             // 遍歷每一天 (確保長度與 dateRange 一致)
              return arr.map((item, i) => {
-                 // 情況 A: 有真實數據
                  if (item[key] !== null) {
                      return { 
                          value: item[key], 
-                         label: item.label, // 必須保留 label 以佔位 X 軸
                          dataPointText: item[key].toString(),
                          customData: { ...item, type: 'real' }
                      };
                  }
                  
-                 // 情況 B: 無數據 (需插補)
+                 // 插補計算
                  const prevIdx = knownIndices.filter(idx => idx < i).pop();
                  const nextIdx = knownIndices.filter(idx => idx > i).shift();
 
-                 let val;
+                 let val = 0;
                  if (prevIdx !== undefined && nextIdx !== undefined) {
                      const startVal = arr[prevIdx][key];
                      const endVal = arr[nextIdx][key];
@@ -145,14 +140,11 @@ export default function AnalysisScreen() {
                      val = arr[prevIdx][key]; 
                  } else if (nextIdx !== undefined) {
                      val = arr[nextIdx][key]; 
-                 } else {
-                     val = 0; 
                  }
                  
                  return { 
                      value: Number(val.toFixed(1)), 
-                     label: item.label, 
-                     hideDataPoint: true, // 隱藏點，只留線
+                     hideDataPoint: true, // 隱藏點，保留 X 軸位置
                      customData: { ...item, type: 'interpolated' }
                  };
              });
@@ -185,7 +177,7 @@ export default function AnalysisScreen() {
               }
           ]);
 
-          // 統計摘要
+          // Summary
           const validInDays = chartArr.filter(d => d.in > 0).length || 1;
           const validOutDays = chartArr.filter(d => d.out > 0).length || 1;
           const validMacroDays = chartArr.filter(d => d.hasData).length || 1;
@@ -207,16 +199,12 @@ export default function AnalysisScreen() {
       } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // Tooltip 元件：熱量圖
   const renderCalTooltip = (item: any) => {
       if (!item.customData) return null;
       const { index, total } = item.customData;
-      // 智慧定位：若在右半邊，視窗靠左顯示 (-110)，否則靠右 (10)
       const isRightSide = index > total / 2;
-      const leftPos = isRightSide ? -110 : 10;
-
       return (
-          <View style={[styles.tooltip, { left: leftPos, top: 0 }]}>
+          <View style={[styles.tooltip, { left: isRightSide ? -110 : 10, top: 0 }]}>
               <ThemedText style={styles.tooltipTitle}>{item.customData.dateStr}</ThemedText>
               <ThemedText style={styles.tooltipText}>{t('intake', lang)}: {Math.round(item.customData.in)}</ThemedText>
               <ThemedText style={styles.tooltipText}>{t('burned', lang)}: {Math.round(item.customData.out)}</ThemedText>
@@ -224,21 +212,12 @@ export default function AnalysisScreen() {
       );
   };
 
-  // Tooltip 元件：折線圖
   const renderLineTooltip = (item: any) => {
-      const idx = item.customData?.index || 0;
-      const total = item.customData?.total || 1;
-      const name = item.customData?.name || '';
-      
-      // 插補點不顯示數值
       if (item.customData?.type === 'interpolated') return null;
-
-      // 智慧定位
-      const isRightSide = idx > total / 2;
-      const leftPos = isRightSide ? -90 : 10;
-
+      const { index, total, name } = item.customData || {};
+      const isRightSide = index > (total || 1) / 2;
       return (
-          <View style={[styles.tooltip, { left: leftPos, top: 0 }]}>
+          <View style={[styles.tooltip, { left: isRightSide ? -90 : 10, top: 0 }]}>
               <ThemedText style={styles.tooltipTitle}>{item.customData?.dateStr}</ThemedText>
               <ThemedText style={styles.tooltipText}>{name}: {item.value}</ThemedText>
           </View>
@@ -274,21 +253,22 @@ export default function AnalysisScreen() {
               <BarChart 
                 data={calData} 
                 stackData={calData}
-                barWidth={chartConfig.barWidth} 
-                spacing={chartConfig.spacing}
-                initialSpacing={INITIAL_SPACING} // [對齊關鍵]
+                barWidth={config.barWidth} 
+                spacing={config.spacing}
+                initialSpacing={config.spacing}
                 noOfSections={3} 
                 barBorderRadius={4} 
                 yAxisThickness={0} 
                 xAxisThickness={1}
                 hideRules
                 height={180}
-                width={CHART_WIDTH} // 確保寬度一致
+                // 當總寬度 > 視窗寬度，自動滑動
+                width={VISIBLE_WIDTH} 
                 isAnimated
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                // Tooltip 設定
                 focusBarOnPress={true}
                 renderTooltip={renderCalTooltip}
+                scrollToEnd={true} // 自動聚焦最新
               />
           </View>
 
@@ -303,15 +283,14 @@ export default function AnalysisScreen() {
                 dataSet={dataSet}
                 hideRules
                 height={180}
-                width={CHART_WIDTH} // 確保寬度一致
-                spacing={lineSpacing} // [對齊關鍵] BarWidth + BarSpacing
-                initialSpacing={lineInitialSpacing} // [對齊關鍵] BarInitial + (BarWidth/2)
+                width={VISIBLE_WIDTH} 
+                spacing={lineSpacing} // 精準對齊
+                initialSpacing={lineInitialSpacing} // 精準對齊
                 curved
                 isAnimated
                 yAxisThickness={0}
                 xAxisThickness={1}
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                // Tooltip 設定
                 pointerConfig={{
                     pointerStripUptoDataPoint: true,
                     pointerStripColor: 'lightgray',
@@ -319,6 +298,7 @@ export default function AnalysisScreen() {
                     strokeDashArray: [2, 5],
                     pointerLabelComponent: (items: any) => renderLineTooltip(items[0]),
                 }}
+                scrollToEnd={true} // 自動聚焦最新
               />
           </View>
        </ScrollView>
@@ -345,7 +325,7 @@ const styles = StyleSheet.create({
         padding: 10,
         borderRadius: 8,
         minWidth: 100,
-        zIndex: 9999, // 確保在最上層
+        zIndex: 9999, 
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)'
     },
