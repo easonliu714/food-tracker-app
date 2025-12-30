@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { View, ScrollView, StyleSheet, Dimensions, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
@@ -14,7 +14,8 @@ import { t, useLanguage } from "@/lib/i18n";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const PADDING_H = 16;
-const VISIBLE_WIDTH = SCREEN_WIDTH - (PADDING_H * 2) - 10; // 扣除邊距
+// 圖表顯示區域寬度
+const VISIBLE_WIDTH = SCREEN_WIDTH - (PADDING_H * 2);
 
 export default function AnalysisScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
@@ -26,18 +27,29 @@ export default function AnalysisScreen() {
   const [dataSet, setDataSet] = useState<any[]>([]); 
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
 
-  // [參數精算]
-  // 30天模式：每個 Bar 12px + 間距 20px = 32px => 總寬 960px (自動滑動)
-  // 7天模式：自適應寬度，填滿畫面
-  const config = period === 30 
-    ? { barWidth: 12, spacing: 20 }
-    : { barWidth: 24, spacing: (VISIBLE_WIDTH / 7) - 24 };
+  // 使用 Ref 來控制捲動，解決跳動問題
+  const barChartRef = useRef<any>(null);
+  const lineChartRef = useRef<any>(null);
 
-  const lineSpacing = config.barWidth + config.spacing;
-  const lineInitialSpacing = config.spacing + (config.barWidth / 2); // 居中對齊
+  // [參數精算]
+  // 為了確保對齊，固定 BarWidth 和 Spacing，讓總寬度超出螢幕時自動產生捲動
+  const barWidth = 12;
+  const spacing = 28; // 間距加大，讓標籤不擁擠
+  const initialSpacing = 10;
+  
+  // 計算總內容寬度 (用於檢查是否需要滑動)
+  // 但 GiftedCharts 會自動根據 data 數量處理，我們只需設定 width={VISIBLE_WIDTH}
+  // 並確保 LineChart 的點與 BarChart 的柱子中心對齊
+  
+  // LineChart 的點間距 = BarWidth + Spacing
+  const lineSpacing = barWidth + spacing;
+  // LineChart 的起始位移 = InitialSpacing + (BarWidth / 2)
+  const lineInitialSpacing = initialSpacing + (barWidth / 2);
 
   useFocusEffect(
-    useCallback(() => { loadAnalysis(period); }, [period])
+    useCallback(() => { 
+        loadAnalysis(period); 
+    }, [period])
   );
 
   const loadAnalysis = async (days: number) => {
@@ -45,7 +57,6 @@ export default function AnalysisScreen() {
       try {
           const endDate = new Date(); 
           const startDate = subDays(endDate, days - 1);
-          
           const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
           const strStart = format(startDate, 'yyyy-MM-dd');
 
@@ -53,12 +64,12 @@ export default function AnalysisScreen() {
           const dataMap = new Map();
           dateRange.forEach(d => {
               const k = format(d, 'yyyy-MM-dd');
-              const showLabel = days === 7 || d.getDate() % 5 === 0;
               dataMap.set(k, { 
                   in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, 
                   w: null, bf: null, 
                   hasData: false, 
-                  label: showLabel ? format(d, 'MM/dd') : '',
+                  // 根據天數決定標籤顯示頻率
+                  label: days === 7 ? format(d, 'MM/dd') : (d.getDate() % 5 === 0 ? format(d, 'MM/dd') : ''),
                   dateStr: k
               });
           });
@@ -68,6 +79,7 @@ export default function AnalysisScreen() {
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
           const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart));
 
+          // Fill Data
           logs.forEach(l => {
               if (dataMap.has(l.date)) {
                   const d = dataMap.get(l.date);
@@ -79,7 +91,6 @@ export default function AnalysisScreen() {
                   d.hasData = true;
               }
           });
-          
           acts.forEach(a => {
               if (dataMap.has(a.date)) {
                   const d = dataMap.get(a.date);
@@ -87,7 +98,6 @@ export default function AnalysisScreen() {
                   d.hasData = true;
               }
           });
-
           metrics.forEach(m => {
               if (dataMap.has(m.date)) {
                   const d = dataMap.get(m.date);
@@ -101,7 +111,7 @@ export default function AnalysisScreen() {
           // 1. 熱量堆疊圖數據
           const stackData = chartArr.map((d, idx) => ({
               label: d.label,
-              labelTextStyle: { fontSize: 9, color: '#888', width: 40, textAlign: 'center' },
+              labelTextStyle: { fontSize: 10, color: '#888', width: 40, textAlign: 'center' },
               stacks: [
                   { value: d.in, color: '#34C759', marginBottom: 2 },
                   { value: -(d.out), color: '#FF9500' }, 
@@ -111,12 +121,10 @@ export default function AnalysisScreen() {
           }));
           setCalData(stackData);
 
-          // 2. 體重體脂數據 (強制補齊所有日期)
+          // 2. 體重體脂數據 (關鍵修正：確保每個日期都有點)
           const interpolate = (arr: any[], key: string) => {
-             // 找出所有有真實數據的 index
              const knownIndices = arr.map((item, i) => item[key] !== null ? i : -1).filter(i => i !== -1);
              
-             // 遍歷每一天 (確保長度與 dateRange 一致)
              return arr.map((item, i) => {
                  if (item[key] !== null) {
                      return { 
@@ -126,25 +134,20 @@ export default function AnalysisScreen() {
                      };
                  }
                  
-                 // 插補計算
+                 // 插補邏輯
                  const prevIdx = knownIndices.filter(idx => idx < i).pop();
                  const nextIdx = knownIndices.filter(idx => idx > i).shift();
-
                  let val = 0;
                  if (prevIdx !== undefined && nextIdx !== undefined) {
                      const startVal = arr[prevIdx][key];
                      const endVal = arr[nextIdx][key];
-                     const ratio = (i - prevIdx) / (nextIdx - prevIdx);
-                     val = startVal + (endVal - startVal) * ratio;
-                 } else if (prevIdx !== undefined) {
-                     val = arr[prevIdx][key]; 
-                 } else if (nextIdx !== undefined) {
-                     val = arr[nextIdx][key]; 
-                 }
+                     val = startVal + (endVal - startVal) * ((i - prevIdx) / (nextIdx - prevIdx));
+                 } else if (prevIdx !== undefined) val = arr[prevIdx][key]; 
+                 else if (nextIdx !== undefined) val = arr[nextIdx][key]; 
                  
                  return { 
                      value: Number(val.toFixed(1)), 
-                     hideDataPoint: true, // 隱藏點，保留 X 軸位置
+                     hideDataPoint: true, 
                      customData: { ...item, type: 'interpolated' }
                  };
              });
@@ -155,6 +158,8 @@ export default function AnalysisScreen() {
           
           const enrich = (arr: any[], name: string) => arr.map((item, idx) => ({
              ...item,
+             // 重要：如果不設定 label，GiftedCharts 可能會忽略寬度計算
+             label: item.label || ' ', 
              customData: { ...item.customData, index: idx, total: arr.length, name }
           }));
 
@@ -195,6 +200,12 @@ export default function AnalysisScreen() {
               avgCarb: Math.round(sum.avgCarb / validMacroDays),
               avgSod: Math.round(sum.avgSod / validMacroDays),
           });
+
+          // [修正] 使用 setTimeout 延遲捲動，避免渲染衝突導致的跳動
+          setTimeout(() => {
+              if(barChartRef.current) barChartRef.current.scrollToEnd({ animated: false });
+              if(lineChartRef.current) lineChartRef.current.scrollToEnd({ animated: false });
+          }, 100);
 
       } catch(e) { console.error(e); } finally { setLoading(false); }
   };
@@ -251,24 +262,25 @@ export default function AnalysisScreen() {
           <View style={[styles.card, {marginTop: 16}]}>
               <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_cal', lang)}</ThemedText>
               <BarChart 
+                ref={barChartRef}
                 data={calData} 
                 stackData={calData}
-                barWidth={config.barWidth} 
-                spacing={config.spacing}
-                initialSpacing={config.spacing}
+                barWidth={barWidth} 
+                spacing={spacing}
+                initialSpacing={initialSpacing}
                 noOfSections={3} 
                 barBorderRadius={4} 
                 yAxisThickness={0} 
                 xAxisThickness={1}
                 hideRules
                 height={180}
-                // 當總寬度 > 視窗寬度，自動滑動
+                // 設定 width=VISIBLE_WIDTH 並不代表內容只有這麼寬
+                // GiftedCharts 會自動延伸內容並允許滑動
                 width={VISIBLE_WIDTH} 
-                isAnimated
+                isAnimated={false} // 關閉動畫以避免捲動時跳動
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
                 focusBarOnPress={true}
                 renderTooltip={renderCalTooltip}
-                scrollToEnd={true} // 自動聚焦最新
               />
           </View>
 
@@ -280,14 +292,15 @@ export default function AnalysisScreen() {
                   <ThemedText style={{color:'#007AFF', fontSize:12}}>━ {t('body_fat', lang)}</ThemedText>
               </View>
               <LineChart 
+                ref={lineChartRef}
                 dataSet={dataSet}
                 hideRules
                 height={180}
                 width={VISIBLE_WIDTH} 
-                spacing={lineSpacing} // 精準對齊
-                initialSpacing={lineInitialSpacing} // 精準對齊
+                spacing={lineSpacing} // 強制與 BarChart 物理對齊
+                initialSpacing={lineInitialSpacing} 
                 curved
-                isAnimated
+                isAnimated={false} // 關閉動畫
                 yAxisThickness={0}
                 xAxisThickness={1}
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
@@ -298,7 +311,6 @@ export default function AnalysisScreen() {
                     strokeDashArray: [2, 5],
                     pointerLabelComponent: (items: any) => renderLineTooltip(items[0]),
                 }}
-                scrollToEnd={true} // 自動聚焦最新
               />
           </View>
        </ScrollView>

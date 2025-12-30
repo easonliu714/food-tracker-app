@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
+import { differenceInDays } from "date-fns";
 
 async function getModel() {
   const { apiKey, model } = await getSettings();
@@ -19,26 +20,41 @@ export async function validateApiKey(apiKey: string) {
   }
 }
 
-// 輔助函式：計算年齡
-const getAge = (profile: any) => {
+// [新增] 輔助函式：產生包含年齡與期限的上下文
+const getProfileContext = (profile: any) => {
+    // 1. 計算年齡
+    let age = 30;
     if (profile?.birthDate) {
-        return new Date().getFullYear() - new Date(profile.birthDate).getFullYear();
+        age = new Date().getFullYear() - new Date(profile.birthDate).getFullYear();
     }
-    return 30; // 預設
+    
+    // 2. 計算目標期限
+    let deadlineInfo = "";
+    if (profile?.targetDate) {
+        const diff = differenceInDays(new Date(profile.targetDate), new Date());
+        if (diff > 0) {
+            deadlineInfo = `, Target Deadline: ${profile.targetDate} (${diff} days remaining)`;
+        } else if (diff === 0) {
+            deadlineInfo = `, Target Deadline: Today`;
+        } else {
+            deadlineInfo = `, Target Deadline: Passed (${Math.abs(diff)} days ago)`;
+        }
+    }
+
+    return `User Profile: Age ${age}, Gender: ${profile?.gender || 'N/A'}, Goal: ${profile?.goal || "Maintain"}${deadlineInfo}`;
 };
 
 // 圖像分析
 export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
   try {
     const model = await getModel();
-    const age = getAge(profile);
-    const goal = profile?.goal || "Maintain";
+    const context = getProfileContext(profile);
 
     const prompt = `
       You are a professional nutritionist. Analyze this food image.
       Output ONLY valid JSON.
       Language: ${lang}.
-      User Profile: Age ${age}, Goal=${goal}.
+      ${context}.
 
       Required JSON Structure:
       {
@@ -47,7 +63,7 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
         "sugar_100g": 0, "fiber_100g": 0, "saturated_fat_100g": 0, "trans_fat_100g": 0, "cholesterol_100g": 0,
         "zinc_100g": 0, "magnesium_100g": 0, "iron_100g": 0,
         "composition": "Ingredients list...",
-        "suggestion": "Advice based on user goal..."
+        "suggestion": "Advice based on user goal and remaining days..."
       }
     `;
 
@@ -64,18 +80,17 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
   }
 }
 
-// [新增] 純文字食物分析
+// 純文字食物分析
 export async function analyzeFoodText(foodName: string, lang: string, profile?: any) {
     try {
       const model = await getModel();
-      const age = getAge(profile);
-      const goal = profile?.goal || "Maintain";
+      const context = getProfileContext(profile);
   
       const prompt = `
         You are a professional nutritionist. Estimate nutrition for: "${foodName}".
         Output ONLY valid JSON.
         Language: ${lang}.
-        User Profile: Age ${age}, Goal=${goal}.
+        ${context}.
   
         Required JSON Structure:
         {
@@ -84,7 +99,7 @@ export async function analyzeFoodText(foodName: string, lang: string, profile?: 
           "sugar_100g": 0, "fiber_100g": 0, "saturated_fat_100g": 0, "trans_fat_100g": 0, "cholesterol_100g": 0,
           "zinc_100g": 0, "magnesium_100g": 0, "iron_100g": 0,
           "composition": "Estimated ingredients...",
-          "suggestion": "Advice..."
+          "suggestion": "Advice based on user goal..."
         }
       `;
   
@@ -108,12 +123,13 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
 
         const chat = model.startChat({
             history: chatHistory,
-            generationConfig: { maxOutputTokens: 500 },
+            generationConfig: { maxOutputTokens: 800 },
         });
-        // 注入 System Context (透過第一則訊息或每次 Prompt 附加)
-        const context = `(Context: You are an AI Nutrition Coach. Language: ${lang}. User Remaining Calories: ${profile?.remaining}. Goal: ${profile?.goal}.)`;
+
+        const context = getProfileContext(profile);
+        const status = `(Current Status: Remaining Calories: ${profile?.remaining} kcal. Language: ${lang}.)`;
         
-        const result = await chat.sendMessage(context + "\n" + newMessage);
+        const result = await chat.sendMessage(`${context}\n${status}\nUser: ${newMessage}`);
         return result.response.text();
     } catch (e) {
         console.error("Chat Error:", e);
@@ -124,13 +140,12 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
 export async function suggestRecipe(remainingCalories: number, type: 'STORE'|'COOK', lang: string, profile?: any) {
   try {
     const model = await getModel();
-    const age = getAge(profile);
-    const goal = profile?.trainingGoal || "維持身形";
-    const status = remainingCalories < 0 ? "超標(負值)" : "充足";
-    // [修正] 明確指定回傳語言
+    const context = getProfileContext(profile);
+    const status = remainingCalories < 0 ? "Exceeded (Negative)" : "Sufficient";
+    
     const prompt = `
       You are a professional nutritionist AI.
-      User Profile: Age ${age}, Goal: ${goal}.
+      ${context}.
       Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
       
       Please suggest a recipe/meal plan (Type: ${type}).
@@ -142,7 +157,7 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE'|'CO
         "calories": 500,
         "ingredients": ["item1", "item2"],
         "steps": ["step1", "step2"],
-        "reason": "Reason in ${lang}"
+        "reason": "Reason based on timeline and goal (in ${lang})"
       }
       Only return JSON.
     `;
@@ -158,16 +173,15 @@ export async function suggestRecipe(remainingCalories: number, type: 'STORE'|'CO
 export async function suggestWorkout(profile: any, remainingCalories: number, lang: string) {
   try {
     const model = await getModel();
-    const age = getAge(profile);
-    const goal = profile?.trainingGoal || "維持身形";
-    const status = remainingCalories < 0 ? "超標(負值)" : "充足";
-    // [修正] 明確指定回傳語言
+    const context = getProfileContext(profile);
+    const status = remainingCalories < 0 ? "Exceeded (Negative)" : "Sufficient";
+
     const prompt = `
       You are a fitness coach AI.
-      User Profile: Age ${age}, Gender ${profile?.gender}, Goal: ${goal}.
+      ${context}.
       Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
       
-      Suggest a workout session.
+      Suggest a workout session considering the deadline.
       **IMPORTANT: Reply in language code: ${lang}.**
       
       Output JSON format:
@@ -175,7 +189,7 @@ export async function suggestWorkout(profile: any, remainingCalories: number, la
         "activity": "Activity Name (in ${lang})",
         "duration_minutes": 30,
         "estimated_calories": 200,
-        "reason": "Reason in ${lang}",
+        "reason": "Reason based on deadline urgency (in ${lang})",
         "video_url": "https://youtube.com/results?search_query=..."
       }
       Only return JSON.

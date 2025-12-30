@@ -13,7 +13,7 @@ import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { format, isValid } from "date-fns";
+import { format, isValid, differenceInDays } from "date-fns";
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -33,6 +33,10 @@ export default function ProfileScreen() {
   const [birthDate, setBirthDate] = useState<Date>(new Date(1990, 0, 1)); 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // [新增] 目標日期 State
+  const [targetDate, setTargetDate] = useState<Date | null>(null);
+  const [showTargetDatePicker, setShowTargetDatePicker] = useState(false);
+
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [bodyFat, setBodyFat] = useState("");
@@ -46,7 +50,7 @@ export default function ProfileScreen() {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [showApiHelpModal, setShowApiHelpModal] = useState(false); // [新增]
+  const [showApiHelpModal, setShowApiHelpModal] = useState(false);
 
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
@@ -70,9 +74,13 @@ export default function ProfileScreen() {
           
           if (p.birthDate) {
             const d = new Date(p.birthDate);
-            if (isValid(d)) {
-                setBirthDate(d);
-            }
+            if (isValid(d)) setBirthDate(d);
+          }
+
+          // [新增] 讀取目標日期
+          if (p.targetDate) {
+              const td = new Date(p.targetDate);
+              if (isValid(td)) setTargetDate(td);
           }
           
           setHeightCm(p.heightCm?.toString() || "");
@@ -141,6 +149,8 @@ export default function ProfileScreen() {
             currentBodyFat: parseFloat(bodyFat) || null,
             targetWeightKg: parseFloat(targetWeight) || null, 
             targetBodyFat: parseFloat(targetBodyFat) || null,
+            // [新增] 儲存目標日期
+            targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null,
             activityLevel, 
             goal: trainingGoal, 
             dailyCalorieTarget: Math.round(targetCal), 
@@ -160,6 +170,12 @@ export default function ProfileScreen() {
   const onBirthDateChange = (event: any, selectedDate?: Date) => {
       setShowDatePicker(false);
       if (selectedDate) setBirthDate(selectedDate);
+  };
+
+  // [新增] 目標日期變更 Handle
+  const onTargetDateChange = (event: any, selectedDate?: Date) => {
+      setShowTargetDatePicker(false);
+      if (selectedDate) setTargetDate(selectedDate);
   };
 
   if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems: 'center'}]}><ActivityIndicator size="large"/></View>;
@@ -183,7 +199,6 @@ export default function ProfileScreen() {
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
               <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
-              {/* [新增] API 說明按鈕 */}
               <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}>
                   <ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText>
               </Pressable>
@@ -215,7 +230,7 @@ export default function ProfileScreen() {
                  </View>
                </View>
                <View style={{flex:1}}>
-                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang) || "Birth Date"}</ThemedText>
+                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang)}</ThemedText>
                   <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
                       <ThemedText style={{color:textColor}}>
                           {isValid(birthDate) ? format(birthDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
@@ -242,11 +257,34 @@ export default function ProfileScreen() {
                 <TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
              </View>
 
-            <ThemedText style={{fontSize:14, fontWeight:'bold', marginTop:8, marginBottom:8}}>{t('target_goals', lang) || "Target Goals"}</ThemedText>
+            <ThemedText style={{fontSize:14, fontWeight:'bold', marginTop:8, marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
             <View style={[styles.row, {marginBottom: 12}]}>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
+            </View>
+
+            {/* [新增] 目標完成日期 UI */}
+            <View style={{marginBottom: 12}}>
+                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('target_date', lang)}</ThemedText>
+                <Pressable onPress={()=>setShowTargetDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor, flexDirection:'row', justifyContent:'space-between'}]}>
+                    <ThemedText style={{color: targetDate ? textColor : '#999'}}>
+                        {targetDate ? format(targetDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
+                    </ThemedText>
+                    {targetDate && (
+                        <ThemedText style={{fontSize: 12, color: tintColor}}>
+                            {differenceInDays(targetDate, new Date())} {t('days_remaining', lang)}
+                        </ThemedText>
+                    )}
+                </Pressable>
+                {showTargetDatePicker && (
+                    <DateTimePicker 
+                        value={targetDate || new Date()} 
+                        mode="date" 
+                        minimumDate={new Date()}
+                        onChange={onTargetDateChange} 
+                    />
+                )}
             </View>
             
             <View style={{marginTop:12}}>
@@ -285,7 +323,6 @@ export default function ProfileScreen() {
          <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
             <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
          </Pressable>
-         {/* [新增] 改版履歷按鈕 */}
          <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center', marginBottom: 40}}>
              <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
          </Pressable>

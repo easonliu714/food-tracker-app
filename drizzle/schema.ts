@@ -12,6 +12,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   currentBodyFat: real("current_body_fat"),
   targetWeightKg: real("target_weight_kg"),
   targetBodyFat: real("target_body_fat"),
+  targetDate: text("target_date"), // [新增] 預計完成日 (YYYY-MM-DD)
   activityLevel: text("activity_level"),
   goal: text("goal"), // lose_weight, maintain, gain_weight
   

@@ -25,7 +25,8 @@ export async function initDatabase() {
         current_weight_kg REAL,
         current_body_fat REAL,
         target_weight_kg REAL,
-        target_body_fat REAL,
+        target_body_fat REAL, 
+        target_date TEXT,
         activity_level TEXT,
         goal TEXT,
         daily_calorie_target INTEGER,
@@ -57,7 +58,15 @@ export async function initDatabase() {
         protein_g REAL DEFAULT 0,
         fat_g REAL DEFAULT 0,
         carbs_g REAL DEFAULT 0,
-        sodium_mg REAL DEFAULT 0,
+        sodium_mg REAL DEFAULT 0, 
+        saturated_fat_g REAL DEFAULT 0, 
+        trans_fat_g REAL DEFAULT 0, 
+        sugar_g REAL DEFAULT 0, 
+        fiber_g REAL DEFAULT 0, 
+        cholesterol_mg REAL DEFAULT 0, 
+        magnesium_mg REAL DEFAULT 0, 
+        zinc_mg REAL DEFAULT 0, 
+        iron_mg REAL DEFAULT 0, 
         is_user_created INTEGER DEFAULT 1,
         source TEXT DEFAULT 'manual',
         updated_at INTEGER
@@ -78,7 +87,15 @@ export async function initDatabase() {
         total_protein_g REAL,
         total_fat_g REAL,
         total_carbs_g REAL,
-        total_sodium_mg REAL,
+        total_sodium_mg REAL, 
+        total_saturated_fat_g REAL DEFAULT 0, 
+        total_trans_fat_g REAL DEFAULT 0, 
+        total_sugar_g REAL DEFAULT 0, 
+        total_fiber_g REAL DEFAULT 0, 
+        total_cholesterol_mg REAL DEFAULT 0, 
+        total_magnesium_mg REAL DEFAULT 0, 
+        total_zinc_mg REAL DEFAULT 0, 
+        total_iron_mg REAL DEFAULT 0, 
         image_url TEXT,
         ai_analysis_log TEXT
       );
@@ -145,6 +162,9 @@ export async function initDatabase() {
     // [新增] 補齊 user_profiles 的生日欄位
     await addColumn("user_profiles", "birth_date TEXT");
 
+    // [新增] 補齊 user_profiles 的 target_date 欄位
+    await addColumn("user_profiles", "target_date TEXT");
+    
     // 補齊 food_items 的詳細營養素
     await addColumn("food_items", "saturated_fat_g REAL DEFAULT 0");
     await addColumn("food_items", "trans_fat_g REAL DEFAULT 0");

@@ -55,7 +55,7 @@ export const TRANSLATIONS = {
 
     // Profile & AI
     ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", 
-    birth_date: "出生日期", height: "身高", weight: "體重", body_fat: "體脂率",
+    birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", how_to_get_key:"如何取得 API Key？",
     get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", version_history: "版本紀錄",
@@ -71,6 +71,8 @@ export const TRANSLATIONS = {
     moderately_active: "中度活動", moderately_active_desc: "每週 3-5 天",
     very_active: "高度活動", very_active_desc: "每週 6-7 天",
     extra_active: "極度活動", extra_active_desc: "體力工作",
+    target_date: "預計完成日",
+    days_remaining: "剩餘天數",
 
     ai_coach: "AI 教練", ai_hello: "嗨! 我是你的營養師暨訓練員.", remaining_budget: "今日剩餘熱量", generate_plan: "生成計畫",
     recipe_suggestion: "食譜建議", workout_suggestion: "運動建議", ask_ai: "詢問 AI...",
@@ -139,7 +141,7 @@ export const TRANSLATIONS = {
     axis_l: "(L)", axis_r: "(R)",
     
     ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female", 
-    birth_date: "Birth Date", height: "Height", weight: "Weight", body_fat: "Body Fat",
+    birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
     target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
     api_key_placeholder: "Paste API Key", get_api_key: "Get API Key", how_to_get_key:"How to obtain the API Key？", test_key: "Test Key", test_key_first: "Test Key First", current_model: "Model", language: "Language", version_history: "Version History",
     
@@ -154,6 +156,8 @@ export const TRANSLATIONS = {
     moderately_active: "Moderately Active", moderately_active_desc: "3-5 days/week",
     very_active: "Very Active", very_active_desc: "6-7 days/week",
     extra_active: "Extra Active", extra_active_desc: "Physical job",
+    target_date: "Target Date",
+    days_remaining: "Days Remaining",
 
     ai_coach: "AI Coach", ai_hello: "Hi! I am your AI Coach.", remaining_budget: "Remaining", generate_plan: "Generate Plan",
     recipe_suggestion: "Recipe Suggestion", workout_suggestion: "Workout Suggestion", ask_ai: "Ask AI...",
@@ -220,7 +224,7 @@ export const TRANSLATIONS = {
     axis_l: "(左)", axis_r: "(右)",
 
     ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性", 
-    birth_date: "生年月日", height: "身長", weight: "体重", body_fat: "体脂肪率",
+    birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
     target_goals: "目標設定", training_goal: "トレーニング目標", activity_level: "活動レベル", save_settings: "設定を保存",
     api_key_placeholder: "API Keyを入力", how_to_get_key:"API Keyはどうやって取得しますか？",
     get_api_key: "API Keyを取得", test_key: "キーをテスト", test_key_first: "先にキーをテストしてください", current_model: "モデル", language: "言語", version_history: "バージョン履歴",
@@ -230,6 +234,8 @@ export const TRANSLATIONS = {
 
     sedentary: "ほぼ座りっぱなし", lightly_active: "軽い運動", moderately_active: "中程度の運動", very_active: "活発な運動", extra_active: "非常に活発",
     sedentary_desc: "運動しない", lightly_active_desc: "週1-3日", moderately_active_desc: "週3-5日", very_active_desc: "週6-7日", extra_active_desc: "肉体労働など",
+    target_date: "目標達成日",
+    days_remaining: "残り日数",
 
     ai_coach: "AIコーチ", ai_hello: "こんにちは！AI栄養トレーナーです。", remaining_budget: "残りのカロリー", generate_plan: "プラン作成",
     recipe_suggestion: "レシピ提案", workout_suggestion: "運動提案", ask_ai: "AIに質問...",
@@ -293,7 +299,7 @@ export const TRANSLATIONS = {
     axis_l: "(좌)", axis_r: "(우)",
 
     ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성", 
-    birth_date: "생년월일", height: "키", weight: "체중", body_fat: "체지방률",
+    birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",
     target_goals: "목표 설정", training_goal: "훈련 목표", activity_level: "활동 수준", save_settings: "설정 저장",
     api_key_placeholder: "API Key 입력", how_to_get_key:"API Key는 어떻게 얻나요?",
     get_api_key: "API Key 받기", test_key: "키 테스트", test_key_first: "키를 먼저 테스트하세요", current_model: "모델", language: "언어", version_history: "버전 기록",
@@ -303,7 +309,9 @@ export const TRANSLATIONS = {
 
     sedentary: "활동 적음", lightly_active: "가벼운 활동", moderately_active: "보통 활동", very_active: "활발한 활동", extra_active: "매우 활발",
     sedentary_desc: "운동 안 함", lightly_active_desc: "주 1-3일", moderately_active_desc: "주 3-5일", very_active_desc: "주 6-7일", extra_active_desc: "육체 노동",
-
+    target_date: "목표 완료일",
+    days_remaining: "남은 일수",
+    
     ai_coach: "AI 코치", ai_hello: "안녕하세요! AI 영양 코치입니다.", remaining_budget: "남은 칼로리", generate_plan: "계획 생성",
     recipe_suggestion: "식단 추천", workout_suggestion: "운동 추천", ask_ai: "AI에게 질문...",
     ask_recipe: "추천 메뉴가 있나요?", ask_workout: "추천 운동이 있나요?",
