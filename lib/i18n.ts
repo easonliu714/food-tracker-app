@@ -46,7 +46,7 @@ export const TRANSLATIONS = {
 
     // Profile & AI
     profile: "個人資料", ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", 
-    birth_date: "出生日期", height: "身高", weight: "體重", body_fat: "體脂率",
+    birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言",
     
@@ -120,7 +120,7 @@ export const TRANSLATIONS = {
     axis_l: "(L)", axis_r: "(R)",
     
     profile: "Profile", ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female", 
-    birth_date: "Birth Date", height: "Height", weight: "Weight", body_fat: "Body Fat",
+    birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
     target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
     api_key_placeholder: "Paste API Key", get_api_key: "Get API Key", test_key: "Test Key", test_key_first: "Test Key First", current_model: "Model", language: "Language",
     
@@ -166,7 +166,7 @@ export const TRANSLATIONS = {
     intensity_low: "Low", intensity_medium: "Medium", intensity_high: "High",
     
     increase: "Inc", decrease: "Dec", no_change: "-"
-  }
+  },
 };
 
 interface LanguageState {
@@ -225,7 +225,10 @@ export const VERSION_LOGS = [
   },
   { version: '1.0.8', date: '2025-12-24', content: '全面多語言支援(含AI)；新增API Key申請連結；優化相機UI與掃碼流程；資料庫欄位擴充。' },
   { version: '1.0.7', date: '2025-12-23', content: '優化編輯介面(支援份數調整)；修正相機與AI模型問題；強化掃碼存檔機制。' },
-  { version: '1.0.6', date: '2025-12-23', content: '新增訓練目標與年齡推算；強化 AI 教練建議邏輯；優化掃碼功能；食物確認頁面改版。' },
+  { version: '1.0.6', date: '2025-12-23', content: '新增訓練目標與年齡推算；強化 AI 教練建議邏輯；優化掃碼功能(支援外部資料庫查詢)；食物確認頁面改版(分離基準值)。' },
   { version: '1.0.5', date: '2025-12-22', content: '修復推播導致的閃退問題；優化運動熱量計算公式；新增營養素攝取比例圖表。' },
   { version: '1.0.4', date: '2025-12-21', content: 'UI/UX全面優化：解決語言切換延遲問題；新增相簿匯入功能；AI教練建議分開儲存；鈉含量單位修正。' },
+  { version: '1.0.3', date: '2025-12-20', content: '新增多語言支援；新增體脂率紀錄；趨勢分析增加年/月/週切換；AI 邏輯優化。' },
+  { version: '1.0.2', date: '2025-12-18', content: '修正 AI 金鑰失效問題，開放自訂 Key；修正條碼掃描；優化趨勢圖表。' },
+  { version: '1.0.1', date: '2025-12-15', content: '基本功能發布：飲食紀錄、卡路里計算、個人檔案、AI 辨識、條碼掃描。' },
 ];
