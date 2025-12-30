@@ -4,6 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View, Dimensions } from "react-nati
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { t, useLanguage } from "@/lib/i18n";
 
 const { width } = Dimensions.get("window");
 const SCAN_SIZE = width * 0.7;
@@ -12,16 +13,17 @@ export default function BarcodeScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const router = useRouter();
+  const lang = useLanguage();
 
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
       <View style={styles.container}>
         <Text style={{ textAlign: 'center', marginBottom: 20, color: '#fff' }}>
-          需要相機權限以掃描條碼
+          {t('camera', lang)} Permission Required
         </Text>
         <TouchableOpacity onPress={requestPermission} style={styles.permissionBtn}>
-          <Text style={{ color: '#000' }}>授予權限</Text>
+          <Text style={{ color: '#000' }}>Allow</Text>
         </TouchableOpacity>
       </View>
     );
@@ -30,12 +32,10 @@ export default function BarcodeScannerScreen() {
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
-    // 修改點：掃碼後直接導向 food-editor
     router.push({
         pathname: "/food-editor",
         params: { barcode: data }
     });
-    // 稍微延遲重置，避免重複掃描
     setTimeout(() => setScanned(false), 2000);
   };
 
@@ -49,15 +49,13 @@ export default function BarcodeScannerScreen() {
             barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "qr"],
         }}
       />
-      
       <View style={styles.overlay}>
           <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
              <Ionicons name="close" size={30} color="white" />
           </TouchableOpacity>
-
           <View style={styles.scanFrameContainer}>
               <View style={styles.scanFrame} />
-              <Text style={styles.hintText}>請將條碼對準框內</Text>
+              <Text style={styles.hintText}>{t('scan_hint', lang)}</Text>
           </View>
       </View>
     </SafeAreaView>

@@ -278,13 +278,14 @@ export default function HomeScreen() {
   // [新增] 快速紀錄區塊
   const renderQuickAdd = () => (
       <View style={{paddingHorizontal: 16, marginTop: 20}}>
-          <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('recent_foods', lang)}</ThemedText>
+          <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_record', lang)}</ThemedText>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {recentFoods.length > 0 ? recentFoods.map((item, idx) => (
                   <TouchableOpacity 
                     key={idx} 
                     style={[styles.quickChip, {borderColor: theme.icon}]}
-                    onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id } })} // Should ideally pass item data to prepopulate new entry, here using edit for simplicity or modify food-editor to support cloning
+                    // [修正] 傳遞 clone=true, 且傳 logId 讓 editor 讀取資料但不鎖定 ID
+                    onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id, clone: "true" } })} 
                   >
                       <ThemedText>{item.foodName}</ThemedText>
                   </TouchableOpacity>

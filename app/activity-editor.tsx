@@ -22,65 +22,56 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { t, useLanguage } from "@/lib/i18n"; // i18n
 
-// --- 詳細運動數據庫 ---
-type ActivityItem = { id: string; name: string; mets: number; icon: string };
-type ActivityCategory = { id: string; name: string; items: ActivityItem[] };
+type ActivityItem = { id: string; mets: number; icon: string };
+type ActivityCategory = { id: string; items: ActivityItem[] };
 
-const ACTIVITY_DATA: ActivityCategory[] = [
+// 只存 ID，顯示時再翻譯
+const ACTIVITY_RAW: ActivityCategory[] = [
   {
-    id: "cardio",
-    name: "有氧與耐力",
+    id: "cat_cardio",
     items: [
-      { id: "walk", name: "散步", mets: 3.0, icon: "walk" },
-      { id: "run_slow", name: "慢跑", mets: 6.0, icon: "footsteps" },
-      { id: "run_fast", name: "快跑", mets: 10.0, icon: "timer" },
-      { id: "cycling", name: "騎腳踏車", mets: 7.5, icon: "bicycle" },
-      { id: "swim", name: "游泳", mets: 8.0, icon: "water" },
-      { id: "hike", name: "登山健行", mets: 7.0, icon: "trail-sign" },
-      { id: "jump_rope", name: "跳繩", mets: 11.0, icon: "fitness" },
+      { id: "act_walk", mets: 3.0, icon: "walk" },
+      { id: "act_run_slow", mets: 6.0, icon: "footsteps" },
+      { id: "act_run_fast", mets: 10.0, icon: "timer" },
+      { id: "act_cycling", mets: 7.5, icon: "bicycle" },
+      { id: "act_swim", mets: 8.0, icon: "water" },
+      { id: "act_hike", mets: 7.0, icon: "trail-sign" },
+      { id: "act_jump_rope", mets: 11.0, icon: "fitness" },
     ],
   },
   {
-    id: "gym",
-    name: "健身房",
+    id: "cat_gym",
     items: [
-      { id: "weight_training", name: "重量訓練 (一般)", mets: 5.0, icon: "barbell" },
-      { id: "powerlifting", name: "健力/大重量", mets: 6.0, icon: "hammer" },
-      { id: "yoga", name: "瑜珈", mets: 2.5, icon: "body" },
-      { id: "pilates", name: "皮拉提斯", mets: 3.0, icon: "accessibility" },
-      { id: "hiit", name: "HIIT 間歇", mets: 8.0, icon: "flash" },
-      { id: "elliptical", name: "橢圓機", mets: 5.0, icon: "repeat" },
+      { id: "act_weight_training", mets: 5.0, icon: "barbell" },
+      { id: "act_powerlifting", mets: 6.0, icon: "hammer" },
+      { id: "act_yoga", mets: 2.5, icon: "body" },
+      { id: "act_pilates", mets: 3.0, icon: "accessibility" },
+      { id: "act_hiit", mets: 8.0, icon: "flash" },
+      { id: "act_elliptical", mets: 5.0, icon: "repeat" },
     ],
   },
   {
-    id: "sport",
-    name: "球類與競技",
+    id: "cat_sport",
     items: [
-      { id: "basketball", name: "籃球", mets: 8.0, icon: "basketball" },
-      { id: "badminton", name: "羽球", mets: 5.5, icon: "tennisball" }, // 無羽球icon暫用tennisball
-      { id: "tennis", name: "網球", mets: 7.3, icon: "tennisball" },
-      { id: "soccer", name: "足球", mets: 9.0, icon: "football" },
-      { id: "baseball", name: "棒球/壘球", mets: 5.0, icon: "baseball" },
+      { id: "act_basketball", mets: 8.0, icon: "basketball" },
+      { id: "act_badminton", mets: 5.5, icon: "tennisball" },
+      { id: "act_tennis", mets: 7.3, icon: "tennisball" },
+      { id: "act_soccer", mets: 9.0, icon: "football" },
+      { id: "act_baseball", mets: 5.0, icon: "baseball" },
     ],
   },
   {
-    id: "life",
-    name: "日常生活",
+    id: "cat_life",
     items: [
-      { id: "housework", name: "做家事", mets: 3.0, icon: "home" },
-      { id: "gardening", name: "園藝", mets: 4.0, icon: "leaf" },
-      { id: "moving", name: "搬運重物", mets: 6.0, icon: "cube" },
+      { id: "act_housework", mets: 3.0, icon: "home" },
+      { id: "act_gardening", mets: 4.0, icon: "leaf" },
+      { id: "act_moving", mets: 6.0, icon: "cube" },
     ],
   },
-  { id: "custom", name: "自訂", items: [] }
+  { id: "cat_custom", items: [] }
 ];
-
-const INTENSITY_MULTIPLIER = {
-  low: { label: "低強度", value: 0.8, color: "#34C759" },
-  medium: { label: "中強度", value: 1.0, color: "#FF9500" },
-  high: { label: "高強度", value: 1.2, color: "#FF3B30" },
-};
 
 const FEELING_EMOJIS = ["😫", "😓", "😐", "🙂", "🤩", "💪"];
 
@@ -88,21 +79,19 @@ export default function ActivityEditorScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
+  const lang = useLanguage();
 
-  // State
   const [recordDate, setRecordDate] = useState(new Date());
   const [recordTime, setRecordTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  const [category, setCategory] = useState<ActivityCategory | null>(null);
-  const [activity, setActivity] = useState<ActivityItem | null>(null);
+  const [category, setCategory] = useState<any>(null);
+  const [activity, setActivity] = useState<any>(null);
   const [showSelector, setShowSelector] = useState(false);
   const [customActivityName, setCustomActivityName] = useState("");
 
-  const [intensity, setIntensity] = useState<keyof typeof INTENSITY_MULTIPLIER>("medium");
-  
-  // 數值輸入：改為預設空字串
+  const [intensity, setIntensity] = useState<"low"|"medium"|"high">("medium");
   const [duration, setDuration] = useState(""); 
   const [distance, setDistance] = useState("");
   const [steps, setSteps] = useState("");
@@ -124,45 +113,30 @@ export default function ActivityEditorScreen() {
     loadUserProfile();
   }, []);
 
-  // --- 改良版熱量估算邏輯 ---
   const calculatedCalories = useMemo(() => {
-    // 1. 如果有時間 (標準 METs 公式)
-    // Formula: METs * 強度 * 體重(kg) * 時間(hr)
     const timeMins = parseFloat(duration);
     if (!isNaN(timeMins) && timeMins > 0) {
         const baseMets = activity ? activity.mets : 4.0;
-        const multiplier = INTENSITY_MULTIPLIER[intensity].value;
+        const multiplier = intensity === 'low' ? 0.8 : (intensity === 'high' ? 1.2 : 1.0);
         return Math.round(baseMets * multiplier * userWeight * (timeMins / 60));
     }
-
-    // 2. 如果沒時間，但有其他數據 (估算)
     let estCalories = 0;
-
-    // 距離 (例如跑步/走路 1km 約消耗 1kcal * kg * 0.9)
     const distKm = parseFloat(distance);
-    if (!isNaN(distKm) && distKm > 0) {
-        estCalories += distKm * userWeight * 0.9;
-    }
-
-    // 步數 (粗估 1步 0.04 kcal)
+    if (!isNaN(distKm) && distKm > 0) estCalories += distKm * userWeight * 0.9;
     const stepCount = parseInt(steps);
     if (!isNaN(stepCount) && stepCount > 0) {
-        // 如果同時有距離，取最大值避免重複計算，或者這裡僅作為備用
         const stepCal = stepCount * 0.04;
         if (stepCal > estCalories) estCalories = stepCal;
     }
-
     return Math.round(estCalories);
-
   }, [activity, intensity, duration, distance, steps, userWeight]);
 
   const handleSave = async () => {
-    // 驗證邏輯修正：只要 名稱OK 且 (四個數值任一有值) 即可
     const hasValue = duration || distance || steps || floors;
-    const hasName = (category?.id === 'custom' && customActivityName) || activity;
+    const hasName = (category?.id === 'cat_custom' && customActivityName) || activity;
 
     if (!hasName || !hasValue) {
-      Alert.alert("資料不完整", "請選擇運動項目，並至少輸入一項數據(時間/距離/步數/樓層)");
+      Alert.alert(t('data_incomplete', lang), t('data_incomplete_msg', lang));
       return;
     }
 
@@ -171,12 +145,14 @@ export default function ActivityEditorScreen() {
       logDate.setHours(recordTime.getHours());
       logDate.setMinutes(recordTime.getMinutes());
 
-      const finalName = category?.id === 'custom' ? customActivityName : activity?.name || customActivityName;
+      // 儲存時，名稱直接存當下翻譯好的，或者存 ID
+      // 這裡示範存 "名稱 (ID)" 或直接存顯示名稱
+      const finalName = category?.id === 'cat_custom' ? customActivityName : t(activity.id, lang);
 
       await db.insert(activityLogs).values({
         date: format(logDate, 'yyyy-MM-dd'),
         loggedAt: logDate,
-        category: category?.name || "自訂",
+        category: t(category?.id, lang),
         activityName: finalName,
         intensity: intensity,
         durationMinutes: parseInt(duration) || 0,
@@ -188,20 +164,20 @@ export default function ActivityEditorScreen() {
         notes: details,
       });
 
-      Alert.alert("成功", "運動紀錄已儲存", [{ text: "OK", onPress: () => router.back() }]);
+      Alert.alert(t('success', lang), "OK", [{ text: "OK", onPress: () => router.back() }]);
     } catch (e) {
       console.error(e);
-      Alert.alert("錯誤", "儲存失敗");
+      Alert.alert(t('error', lang), "Save Failed");
     }
   };
 
-  // Render Helpers
+  // Render
   const renderSelectorModal = () => (
     <Modal visible={showSelector} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
           <View style={styles.modalHeader}>
-            <ThemedText type="subtitle">選擇運動</ThemedText>
+            <ThemedText type="subtitle">{t('select_activity', lang)}</ThemedText>
             <TouchableOpacity onPress={() => setShowSelector(false)}>
               <Ionicons name="close" size={24} color={theme.text} />
             </TouchableOpacity>
@@ -209,14 +185,14 @@ export default function ActivityEditorScreen() {
           
           <View style={{flexDirection: 'row', flex: 1}}>
             <View style={[styles.categoryList, { borderColor: theme.icon }]}>
-              {ACTIVITY_DATA.map(cat => (
+              {ACTIVITY_RAW.map(cat => (
                 <TouchableOpacity 
                   key={cat.id} 
                   style={[styles.catItem, category?.id === cat.id && { backgroundColor: theme.tint + '20' }]}
                   onPress={() => setCategory(cat)}
                 >
                   <ThemedText style={{fontWeight: category?.id === cat.id ? 'bold' : 'normal', color: category?.id === cat.id ? theme.tint : theme.text}}>
-                    {cat.name}
+                    {t(cat.id, lang)}
                   </ThemedText>
                 </TouchableOpacity>
               ))}
@@ -226,18 +202,18 @@ export default function ActivityEditorScreen() {
               data={category?.items || []}
               keyExtractor={item => item.id}
               ListEmptyComponent={
-                category?.id === 'custom' ? (
+                category?.id === 'cat_custom' ? (
                   <View style={{padding: 16}}>
-                    <ThemedText>請在主畫面直接輸入名稱</ThemedText>
+                    <ThemedText>{t('custom_activity', lang)}</ThemedText>
                     <TouchableOpacity 
                         style={[styles.confirmBtn, {backgroundColor: theme.tint, marginTop: 20}]}
                         onPress={() => { setActivity(null); setShowSelector(false); }}
                     >
-                        <ThemedText style={{color: '#FFF'}}>確認自訂</ThemedText>
+                        <ThemedText style={{color: '#FFF'}}>OK</ThemedText>
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <View style={{padding: 16}}><ThemedText style={{color: theme.icon}}>請先選擇左側類別</ThemedText></View>
+                  <View style={{padding: 16}}><ThemedText style={{color: theme.icon}}>Please Select Category</ThemedText></View>
                 )
               }
               renderItem={({ item }) => (
@@ -247,7 +223,7 @@ export default function ActivityEditorScreen() {
                 >
                   <View style={{flexDirection:'row', alignItems:'center'}}>
                       <Ionicons name={item.icon as any} size={20} color={theme.text} style={{marginRight: 10}}/>
-                      <ThemedText>{item.name}</ThemedText>
+                      <ThemedText>{t(item.id, lang)}</ThemedText>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={theme.icon} />
                 </TouchableOpacity>
@@ -262,25 +238,15 @@ export default function ActivityEditorScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={28} color={theme.text} />
-        </TouchableOpacity>
-        <ThemedText type="subtitle">紀錄運動</ThemedText>
-        <TouchableOpacity onPress={handleSave}>
-          <Ionicons name="save" size={28} color={theme.tint} />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color={theme.text} /></TouchableOpacity>
+        <ThemedText type="subtitle">{t('record_activity', lang)}</ThemedText>
+        <TouchableOpacity onPress={handleSave}><Ionicons name="save" size={28} color={theme.tint} /></TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.dateTimeRow}>
-            <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateBtn}>
-                <Ionicons name="calendar-outline" size={20} color={theme.text} />
-                <ThemedText style={{marginLeft: 8}}>{format(recordDate, "yyyy-MM-dd")}</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.dateBtn}>
-                <Ionicons name="time-outline" size={20} color={theme.text} />
-                <ThemedText style={{marginLeft: 8}}>{format(recordTime, "HH:mm")}</ThemedText>
-            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateBtn}><Ionicons name="calendar-outline" size={20} color={theme.text} /><ThemedText style={{marginLeft: 8}}>{format(recordDate, "yyyy-MM-dd")}</ThemedText></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.dateBtn}><Ionicons name="time-outline" size={20} color={theme.text} /><ThemedText style={{marginLeft: 8}}>{format(recordTime, "HH:mm")}</ThemedText></TouchableOpacity>
         </View>
         {showDatePicker && <DateTimePicker value={recordDate} mode="date" onChange={(e,d) => {setShowDatePicker(false); if(d) setRecordDate(d)}} />}
         {showTimePicker && <DateTimePicker value={recordTime} mode="time" onChange={(e,d) => {setShowTimePicker(false); if(d) setRecordTime(d)}} />}
@@ -288,42 +254,33 @@ export default function ActivityEditorScreen() {
         <ThemedView style={styles.card}>
           <TouchableOpacity style={styles.selectorBtn} onPress={() => setShowSelector(true)}>
              <View>
-                <ThemedText style={styles.labelSmall}>運動項目</ThemedText>
+                <ThemedText style={styles.labelSmall}>{t('select_activity', lang)}</ThemedText>
                 <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
                     {activity?.icon && <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>}
                     <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
-                        {category?.id === 'custom' ? "自訂運動" : (activity?.name || "點擊選擇運動")}
+                        {category?.id === 'cat_custom' ? t('custom_activity', lang) : (activity ? t(activity.id, lang) : t('select_activity', lang))}
                     </ThemedText>
                 </View>
              </View>
              <Ionicons name="chevron-down" size={20} color={theme.icon} />
           </TouchableOpacity>
-          {category?.id === 'custom' && (
-             <TextInput
-                style={[styles.input, { marginTop: 12, color: theme.text, borderColor: theme.icon }]}
-                placeholder="輸入運動名稱"
-                placeholderTextColor="#D1D1D6"
-                value={customActivityName}
-                onChangeText={setCustomActivityName}
-             />
+          {category?.id === 'cat_custom' && (
+             <TextInput style={[styles.input, { marginTop: 12, color: theme.text, borderColor: theme.icon }]} placeholder={t('input_activity_name', lang)} placeholderTextColor="#D1D1D6" value={customActivityName} onChangeText={setCustomActivityName} />
           )}
         </ThemedView>
 
         {renderSelectorModal()}
 
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>運動強度</ThemedText>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>{t('activity_intensity', lang)}</ThemedText>
             <View style={styles.intensityContainer}>
-                {(Object.keys(INTENSITY_MULTIPLIER) as Array<keyof typeof INTENSITY_MULTIPLIER>).map((key) => {
-                    const item = INTENSITY_MULTIPLIER[key];
+                {['low', 'medium', 'high'].map((key) => {
+                    const label = t(`intensity_${key}`, lang);
+                    const color = key==='low'?'#34C759':(key==='medium'?'#FF9500':'#FF3B30');
                     const isSelected = intensity === key;
                     return (
-                        <TouchableOpacity
-                            key={key}
-                            style={[styles.intensityBtn, { borderColor: item.color, backgroundColor: isSelected ? item.color : 'transparent' }]}
-                            onPress={() => setIntensity(key)}
-                        >
-                            <ThemedText style={{color: isSelected ? '#FFF' : item.color, fontWeight: '600'}}>{item.label}</ThemedText>
+                        <TouchableOpacity key={key} style={[styles.intensityBtn, { borderColor: color, backgroundColor: isSelected ? color : 'transparent' }]} onPress={() => setIntensity(key as any)}>
+                            <ThemedText style={{color: isSelected ? '#FFF' : color, fontWeight: '600'}}>{label}</ThemedText>
                         </TouchableOpacity>
                     );
                 })}
@@ -331,91 +288,31 @@ export default function ActivityEditorScreen() {
         </ThemedView>
 
         <ThemedView style={styles.card}>
-             <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>詳細數據</ThemedText>
+             <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>{t('activity_details', lang)}</ThemedText>
              <View style={styles.inputRow}>
-                 <View style={styles.inputItem}>
-                     <ThemedText style={styles.labelSmall}>時間 (分鐘)</ThemedText>
-                     <TextInput 
-                        style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
-                        value={duration} 
-                        onChangeText={setDuration}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#D1D1D6"
-                     />
-                 </View>
-                 <View style={styles.inputItem}>
-                     <ThemedText style={styles.labelSmall}>距離 (km)</ThemedText>
-                     <TextInput 
-                        style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
-                        value={distance} 
-                        onChangeText={setDistance}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#D1D1D6"
-                     />
-                 </View>
+                 <View style={styles.inputItem}><ThemedText style={styles.labelSmall}>{t('time_min', lang)}</ThemedText><TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon }]} value={duration} onChangeText={setDuration} keyboardType="numeric"/></View>
+                 <View style={styles.inputItem}><ThemedText style={styles.labelSmall}>{t('distance_km', lang)}</ThemedText><TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon }]} value={distance} onChangeText={setDistance} keyboardType="numeric"/></View>
              </View>
-
              <View style={styles.inputRow}>
-                 <View style={styles.inputItem}>
-                     <ThemedText style={styles.labelSmall}>步數</ThemedText>
-                     <TextInput 
-                        style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
-                        value={steps} 
-                        onChangeText={setSteps}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#D1D1D6"
-                     />
-                 </View>
-                 <View style={styles.inputItem}>
-                     <ThemedText style={styles.labelSmall}>樓層</ThemedText>
-                     <TextInput 
-                        style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
-                        value={floors} 
-                        onChangeText={setFloors}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        placeholderTextColor="#D1D1D6"
-                     />
-                 </View>
+                 <View style={styles.inputItem}><ThemedText style={styles.labelSmall}>{t('steps', lang)}</ThemedText><TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon }]} value={steps} onChangeText={setSteps} keyboardType="numeric"/></View>
+                 <View style={styles.inputItem}><ThemedText style={styles.labelSmall}>{t('floors', lang)}</ThemedText><TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon }]} value={floors} onChangeText={setFloors} keyboardType="numeric"/></View>
              </View>
-
              <View style={styles.caloriesBox}>
-                 <View>
-                     <ThemedText>預估消耗熱量</ThemedText>
-                     <ThemedText style={{fontSize: 12, color: theme.icon}}>
-                         {duration ? "基於 時間 與 METs" : "基於 距離/步數 粗估"}
-                     </ThemedText>
-                 </View>
-                 <View style={{alignItems: 'flex-end'}}>
-                     <ThemedText type="title" style={{color: '#FF9500'}}>{calculatedCalories} kcal</ThemedText>
-                 </View>
+                 <View><ThemedText>{t('est_calories', lang)}</ThemedText></View>
+                 <View style={{alignItems: 'flex-end'}}><ThemedText type="title" style={{color: '#FF9500'}}>{calculatedCalories} kcal</ThemedText></View>
              </View>
         </ThemedView>
 
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>運動感受 & 筆記</ThemedText>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>{t('feeling_notes', lang)}</ThemedText>
             <View style={styles.feelingContainer}>
                 {FEELING_EMOJIS.map(emoji => (
-                    <TouchableOpacity 
-                        key={emoji} 
-                        style={[styles.emojiBtn, feeling === emoji && { backgroundColor: theme.tint + '30', borderColor: theme.tint }]}
-                        onPress={() => setFeeling(emoji)}
-                    >
+                    <TouchableOpacity key={emoji} style={[styles.emojiBtn, feeling === emoji && { backgroundColor: theme.tint + '30', borderColor: theme.tint }]} onPress={() => setFeeling(emoji)}>
                         <ThemedText style={{fontSize: 24}}>{emoji}</ThemedText>
                     </TouchableOpacity>
                 ))}
             </View>
-            <TextInput
-                style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: 12, color: theme.text, borderColor: theme.icon }]}
-                placeholder="輸入運動筆記..."
-                placeholderTextColor="#D1D1D6"
-                multiline
-                value={details}
-                onChangeText={setDetails}
-            />
+            <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top', marginTop: 12, color: theme.text, borderColor: theme.icon }]} placeholder={t('enter_notes', lang)} placeholderTextColor="#D1D1D6" multiline value={details} onChangeText={setDetails} />
         </ThemedView>
       </ScrollView>
     </SafeAreaView>
@@ -424,10 +321,7 @@ export default function ActivityEditorScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5EA',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
   scrollContent: { padding: 16 },
   dateTimeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, backgroundColor: 'rgba(142, 142, 147, 0.1)', flex: 0.48, justifyContent: 'center' },

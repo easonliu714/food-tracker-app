@@ -126,7 +126,7 @@ export default function AICoachScreen() {
           {messages.length === 0 && (
               <View style={{marginTop: 40, alignItems: 'center'}}>
                   <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
-                  <ThemedText style={{color:'#888', marginTop:10}}>Hi! I am your AI Coach.</ThemedText>
+                  <ThemedText style={{color:'#888', marginTop:10}}>{t('ai_hello', lang)}</ThemedText>
               </View>
           )}
 
@@ -153,7 +153,7 @@ export default function AICoachScreen() {
               <View style={{flexDirection:'row', flexWrap:'wrap', gap: 8, marginTop: 20}}>
                   <Pressable onPress={() => handleSend(t('ask_recipe', lang))} style={[styles.chip, {backgroundColor: tintColor}]}><ThemedText style={{fontSize: 12, color: 'white'}}>{t('ask_recipe', lang)}</ThemedText></Pressable>
                   <Pressable onPress={() => handleSend(t('ask_workout', lang))} style={[styles.chip, {backgroundColor: tintColor}]}><ThemedText style={{fontSize: 12, color: 'white'}}>{t('ask_workout', lang)}</ThemedText></Pressable>
-                  {[t('follow_up_1', lang), t('follow_up_2', lang)].map((q, i) => (
+                  {[t('follow_up_1', lang), t('follow_up_2', lang), t('follow_up_3', lang)].map((q, i) => (
                       <Pressable key={i} onPress={() => handleSend(q)} style={[styles.chip, {borderColor: tintColor, borderWidth:1}]}><ThemedText style={{fontSize: 12, color: tintColor}}>{q}</ThemedText></Pressable>
                   ))}
               </View>

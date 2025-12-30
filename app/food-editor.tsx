@@ -28,11 +28,11 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n";
 
 const MEAL_PERIODS = [
-  { id: "breakfast", label: "早餐", start: 5, end: 10 },
-  { id: "lunch", label: "午餐", start: 10, end: 14 },
-  { id: "afternoon_tea", label: "下午茶", start: 14, end: 16 },
-  { id: "dinner", label: "晚餐", start: 16, end: 20 },
-  { id: "late_night", label: "宵夜", start: 20, end: 29 }, 
+  { id: "breakfast", start: 5, end: 10 },
+  { id: "lunch", start: 10, end: 14 },
+  { id: "afternoon_tea", start: 14, end: 16 },
+  { id: "dinner", start: 16, end: 20 },
+  { id: "late_night", start: 20, end: 29 }, 
 ];
 
 const DEFAULT_NUTRIENTS = {
@@ -47,6 +47,7 @@ export default function FoodEditorScreen() {
   const theme = Colors[colorScheme];
   const lang = useLanguage();
 
+  // State
   const [logId, setLogId] = useState<number | null>(null);
   const [recordDate, setRecordDate] = useState(new Date());
   
@@ -76,6 +77,26 @@ export default function FoodEditorScreen() {
 
   const isInitialized = useRef(false);
 
+  // [修正] 自動計算邏輯：當份數或單份重改變時，自動更新總重
+  useEffect(() => {
+    if (inputMode === "serving") {
+      const s = parseFloat(servings) || 0;
+      const u = parseFloat(unitWeight) || 0;
+      const total = s * u;
+      // 避免無限迴圈，只有當數值有顯著差異時才更新，或者直接更新字串
+      // 使用 Number(total.toFixed(2)) 去除多餘小數點
+      setTotalWeight(String(Number(total.toFixed(2))));
+    }
+  }, [servings, unitWeight, inputMode]);
+
+  // [修正] 總熱量顯示：監聽 totalWeight
+  const calculatedTotal = useMemo(() => {
+    const w = parseFloat(totalWeight) || 0;
+    const ratio = w / 100;
+    return Math.round((parseFloat(baseNutrients.calories) || 0) * ratio);
+  }, [totalWeight, baseNutrients.calories]);
+
+  // 初始化
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
@@ -84,14 +105,25 @@ export default function FoodEditorScreen() {
       try {
         if (params.logId) {
           const id = parseInt(params.logId as string);
-          setLogId(id);
+          const isClone = params.clone === "true";
+
+          if (!isClone) setLogId(id);
+
           const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
           
           if (logRes.length > 0) {
             const log = logRes[0];
-            setRecordDate(new Date(log.loggedAt));
-            setSelectedMeal(log.mealTimeCategory);
-            setMealManuallyChanged(true);
+            const targetDate = isClone ? new Date() : new Date(log.loggedAt);
+            setRecordDate(targetDate);
+            
+            if (isClone) {
+                updateCategoryByTime(targetDate);
+                setMealManuallyChanged(false);
+            } else {
+                setSelectedMeal(log.mealTimeCategory);
+                setMealManuallyChanged(true);
+            }
+            
             setFoodName(log.foodName);
             setInputMode(log.servingType as any || 'weight');
             setServings(String(log.servingAmount || "1"));
@@ -134,20 +166,23 @@ export default function FoodEditorScreen() {
     init();
   }, []);
 
+  // Helper: DB 數值轉字串，確保無資料時為 "0"
+  const safeStr = (val: any) => (val === null || val === undefined || isNaN(val)) ? "0" : String(val);
+
   const mapDbToState = (item: any) => ({
-      calories: String(item.calories || 0), 
-      protein: String(item.proteinG || 0), 
-      fat: String(item.fatG || 0),
-      saturatedFat: String(item.saturatedFatG || 0), 
-      transFat: String(item.transFatG || 0),
-      carbs: String(item.carbsG || 0), 
-      sugar: String(item.sugarG || 0), 
-      fiber: String(item.fiberG || 0),
-      sodium: String(item.sodiumMg || 0), 
-      cholesterol: String(item.cholesterolMg || 0),
-      magnesium: String(item.magnesiumMg || 0), 
-      zinc: String(item.zincMg || 0), 
-      iron: String(item.ironMg || 0)
+      calories: safeStr(item.calories), 
+      protein: safeStr(item.proteinG), 
+      fat: safeStr(item.fatG),
+      saturatedFat: safeStr(item.saturatedFatG), 
+      transFat: safeStr(item.transFatG),
+      carbs: safeStr(item.carbsG), 
+      sugar: safeStr(item.sugarG), 
+      fiber: safeStr(item.fiberG),
+      sodium: safeStr(item.sodiumMg), 
+      cholesterol: safeStr(item.cholesterolMg),
+      magnesium: safeStr(item.magnesiumMg), 
+      zinc: safeStr(item.zincMg), 
+      iron: safeStr(item.ironMg)
   });
 
   const performAiAnalysis = async (base64: string) => {
@@ -158,22 +193,21 @@ export default function FoodEditorScreen() {
           const result = await analyzeFoodImage(base64, lang, profile);
           
           if (result) {
-              setFoodName(result.foodName || "AI 識別食物");
+              setFoodName(result.foodName || t('ai_analysis', lang));
               setBaseNutrients({
-                  ...DEFAULT_NUTRIENTS,
-                  calories: String(result.calories_100g || 0),
-                  protein: String(result.protein_100g || 0),
-                  fat: String(result.fat_100g || 0),
-                  carbs: String(result.carbs_100g || 0),
-                  sodium: String(result.sodium_100g || 0),
-                  sugar: String(result.sugar_100g || 0),
-                  fiber: String(result.fiber_100g || 0),
-                  saturatedFat: String(result.saturated_fat_100g || 0),
-                  transFat: String(result.trans_fat_100g || 0),
-                  cholesterol: String(result.cholesterol_100g || 0),
-                  zinc: String(result.zinc_100g || 0),
-                  magnesium: String(result.magnesium_100g || 0),
-                  iron: String(result.iron_100g || 0),
+                  calories: safeStr(result.calories_100g),
+                  protein: safeStr(result.protein_100g),
+                  fat: safeStr(result.fat_100g),
+                  carbs: safeStr(result.carbs_100g),
+                  sodium: safeStr(result.sodium_100g),
+                  sugar: safeStr(result.sugar_100g),
+                  fiber: safeStr(result.fiber_100g),
+                  saturatedFat: safeStr(result.saturated_fat_100g),
+                  transFat: safeStr(result.trans_fat_100g),
+                  cholesterol: safeStr(result.cholesterol_100g),
+                  zinc: safeStr(result.zinc_100g),
+                  magnesium: safeStr(result.magnesium_100g),
+                  iron: safeStr(result.iron_100g),
               });
               setAiComposition(result.composition || "");
               setAiAdvice(result.suggestion || "");
@@ -182,7 +216,7 @@ export default function FoodEditorScreen() {
               Alert.alert(t('error', lang), t('read_failed', lang));
           }
       } catch (e) {
-          Alert.alert(t('error', lang), "AI 連線異常");
+          Alert.alert(t('error', lang), "AI Error");
       } finally {
           setIsAnalyzing(false);
       }
@@ -219,6 +253,11 @@ export default function FoodEditorScreen() {
     }
   };
 
+  const handleMealChange = (mealId: string) => {
+      setSelectedMeal(mealId);
+      setMealManuallyChanged(true);
+  };
+
   const loadFoodByBarcode = async (code: string) => {
     try {
         const localRes = await db.select().from(foodItems).where(eq(foodItems.barcode, code)).limit(1);
@@ -226,24 +265,22 @@ export default function FoodEditorScreen() {
             const item = localRes[0];
             setDbFoodId(item.id);
             setFoodName(item.name);
-            const nutrients = mapDbToState(item);
-            setBaseNutrients(nutrients);
-            setInitialBaseNutrients(nutrients);
+            setBaseNutrients(mapDbToState(item));
+            setInitialBaseNutrients(mapDbToState(item));
             Alert.alert(t('local_db', lang), `${t('loaded', lang)}: ${item.name}`);
         } else {
             const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
             const data = await response.json();
             if (data.status === 1) {
-                const p = data.product;
-                const n = p.nutriments;
-                setFoodName(p.product_name || "未知商品");
+                const n = data.product.nutriments;
+                setFoodName(data.product.product_name || "Unknown");
                 setBaseNutrients({
                     ...DEFAULT_NUTRIENTS,
-                    calories: String(n["energy-kcal_100g"] || 0),
-                    protein: String(n.protein_100g || 0),
-                    fat: String(n.fat_100g || 0), saturatedFat: String(n["saturated-fat_100g"] || 0), transFat: String(n["trans-fat_100g"] || 0),
-                    carbs: String(n.carbohydrates_100g || 0), sugar: String(n.sugars_100g || 0), fiber: String(n.fiber_100g || 0),
-                    sodium: String((n.salt_100g || 0) * 400),
+                    calories: safeStr(n["energy-kcal_100g"]),
+                    protein: safeStr(n.protein_100g),
+                    fat: safeStr(n.fat_100g), saturatedFat: safeStr(n["saturated-fat_100g"]), transFat: safeStr(n["trans-fat_100g"]),
+                    carbs: safeStr(n.carbohydrates_100g), sugar: safeStr(n.sugars_100g), fiber: safeStr(n.fiber_100g),
+                    sodium: safeStr((n.salt_100g || 0) * 400),
                 });
                 Alert.alert("OpenFoodFacts", t('downloaded', lang));
             } else {
@@ -252,23 +289,19 @@ export default function FoodEditorScreen() {
                     t('scan_failed_msg', lang),
                     [
                         { text: t('cancel', lang), style: 'cancel' },
-                        { 
-                            text: t('scan_ai_option', lang), 
-                            onPress: () => router.push({ pathname: "/camera", params: { analyze: "true" } }) 
-                        },
+                        { text: t('scan_ai_option', lang), onPress: () => router.push({ pathname: "/camera", params: { analyze: "true" } }) },
                         { text: t('manual_option', lang), style: 'default' }
                     ]
                 );
             }
         }
     } catch (e) {
-        console.error(e);
         Alert.alert(t('error', lang), t('read_failed', lang));
     }
   };
 
   const handleSave = async () => {
-    if (!foodName || !totalWeight) return Alert.alert("資料不完整", "請輸入名稱與重量");
+    if (!foodName || !totalWeight) return Alert.alert(t('error', lang), t('data_incomplete', lang));
 
     let hasBaseChange = false;
     if (dbFoodId && initialBaseNutrients) {
@@ -278,9 +311,9 @@ export default function FoodEditorScreen() {
     if (hasBaseChange) {
         Alert.alert(
             "基準變更",
-            "您修改了每 100g 的營養成分，是否更新所有歷史紀錄？",
+            "基準數值已修改，是否更新所有紀錄？",
             [
-                { text: "取消", style: "cancel" },
+                { text: t('cancel', lang), style: "cancel" },
                 { text: "另存新食物", onPress: () => saveToDb(true) },
                 { text: "更新全部", onPress: () => saveToDb(false) },
             ]
@@ -294,6 +327,7 @@ export default function FoodEditorScreen() {
       try {
         let currentFoodId = dbFoodId;
         const pf = (v: string) => parseFloat(v) || 0;
+
         const itemData = {
             name: foodName, barcode: barcode, baseAmount: 100,
             calories: pf(baseNutrients.calories), proteinG: pf(baseNutrients.protein),
@@ -344,18 +378,27 @@ export default function FoodEditorScreen() {
         } else {
             await db.insert(foodLogs).values(logData);
         }
-        Alert.alert(t('save', lang), "OK", [{ text: "OK", onPress: () => router.back() }]);
+        Alert.alert(t('save', lang), t('success', lang), [{ text: "OK", onPress: () => router.back() }]);
       } catch(e) { console.error(e); Alert.alert(t('error', lang), "Save Failed"); }
   };
 
-  // ... (NutrientRow, calculatedTotal, updateNutrient 同前)
-  const updateNutrient = (key: keyof typeof baseNutrients, val: string) => setBaseNutrients(prev => ({ ...prev, [key]: val }));
-  const calculatedTotal = useMemo(() => Math.round((parseFloat(baseNutrients.calories)||0) * (parseFloat(totalWeight)||0)/100), [totalWeight, baseNutrients]);
+  const updateNutrient = (key: keyof typeof baseNutrients, val: string) => {
+      setBaseNutrients(prev => ({ ...prev, [key]: val }));
+  };
 
-  const NutrientRow = ({ label, val, k, update, isMain }: any) => (
+  const NutrientRow = ({ label, val, k, update, isMain, unit='g' }: any) => (
     <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
-        <ThemedText style={{fontSize: isMain?14:13, fontWeight: isMain?'600':'400', color: theme.text}}>{label}</ThemedText>
-        <TextInput style={[styles.input, {width: 80, paddingVertical: 4, height: 32, textAlign:'center', color:theme.text, borderColor: theme.icon}]} value={val} onChangeText={(v) => update(k, v)} keyboardType="numeric"/>
+        <ThemedText style={{fontSize: isMain?14:13, fontWeight: isMain?'600':'400', color: theme.text}}>
+            {label} <ThemedText style={{fontSize:10, color:'#888'}}>({unit})</ThemedText>
+        </ThemedText>
+        <TextInput
+            style={[styles.input, {width: 80, paddingVertical: 4, height: 32, textAlign:'center', color:theme.text, borderColor: theme.icon}]}
+            value={val}
+            onChangeText={(v) => update(k, v)}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor="#999"
+        />
     </View>
   );
 
@@ -370,6 +413,7 @@ export default function FoodEditorScreen() {
 
       {isLoading ? <ActivityIndicator size="large" style={{marginTop: 50}}/> : 
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        
         <View style={styles.dateTimeRow}>
             <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateBtn}><Ionicons name="calendar-outline" size={20} color={theme.text} /><ThemedText style={{marginLeft: 8}}>{format(recordDate, "yyyy-MM-dd")}</ThemedText></TouchableOpacity>
             <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.dateBtn}><Ionicons name="time-outline" size={20} color={theme.text} /><ThemedText style={{marginLeft: 8}}>{format(recordDate, "HH:mm")}</ThemedText></TouchableOpacity>
@@ -380,7 +424,7 @@ export default function FoodEditorScreen() {
         {imageUri && (
             <View style={styles.imagePreview}>
                 <Image source={{ uri: imageUri }} style={{ width: '100%', height: 200, borderRadius: 12 }} />
-                {isAnalyzing && <View style={styles.analyzingOverlay}><ActivityIndicator color="#FFF" /><ThemedText style={{color:'#FFF'}}>{t('analyzing', lang)}</ThemedText></View>}
+                {isAnalyzing && <View style={styles.analyzingOverlay}><ActivityIndicator color="#FFF" /><ThemedText style={{color:'#FFF', marginTop:8}}>{t('analyzing', lang)}</ThemedText></View>}
             </View>
         )}
 
@@ -394,7 +438,7 @@ export default function FoodEditorScreen() {
 
         <View style={styles.mealSelector}>
             {MEAL_PERIODS.map((meal) => (
-                <TouchableOpacity key={meal.id} style={[styles.mealBtn, selectedMeal === meal.id && { backgroundColor: theme.tint }]} onPress={() => {setSelectedMeal(meal.id); setMealManuallyChanged(true);}}>
+                <TouchableOpacity key={meal.id} style={[styles.mealBtn, selectedMeal === meal.id && { backgroundColor: theme.tint }]} onPress={() => handleMealChange(meal.id)}>
                     <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text }}>{t(meal.id as any, lang) || meal.label}</ThemedText>
                 </TouchableOpacity>
             ))}
@@ -409,36 +453,47 @@ export default function FoodEditorScreen() {
         <ThemedView style={styles.card}>
             <View style={styles.rowBetween}>
                 <ThemedText type="defaultSemiBold">{t('portion', lang)}</ThemedText>
-                <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}><ThemedText style={{color: theme.tint}}>⇄ {inputMode === 'serving' ? 'g' : 'Qty'}</ThemedText></TouchableOpacity>
+                <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}>
+                    <ThemedText style={{color: theme.tint, fontSize: 14}}>⇄ {inputMode === 'serving' ? t('switch_to_weight', lang) : t('switch_to_serving', lang)}</ThemedText>
+                </TouchableOpacity>
             </View>
             {inputMode === 'serving' ? (
                 <View style={styles.rowInputs}>
-                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>Qty</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={servings} onChangeText={setServings} keyboardType="numeric"/></View>
+                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>{t('portion_count', lang)}</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={servings} onChangeText={setServings} keyboardType="numeric"/></View>
                     <ThemedText style={{alignSelf: 'flex-end', marginBottom: 12}}>X</ThemedText>
-                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>Unit(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={unitWeight} onChangeText={setUnitWeight} keyboardType="numeric"/></View>
+                    <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>{t('unit_weight', lang)}(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={unitWeight} onChangeText={setUnitWeight} keyboardType="numeric"/></View>
                 </View>
             ) : (
-                <View><ThemedText style={styles.labelSmall}>Total(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={totalWeight} onChangeText={setTotalWeight} keyboardType="numeric"/></View>
+                <View><ThemedText style={styles.labelSmall}>{t('total_weight_input', lang)}(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={totalWeight} onChangeText={setTotalWeight} keyboardType="numeric"/></View>
             )}
-            <View style={styles.totalSummary}><ThemedText type="defaultSemiBold" style={{color: theme.tint}}>Total: {totalWeight} g</ThemedText><ThemedText>{t('calories', lang)}: {calculatedTotal} kcal</ThemedText></View>
+            <View style={styles.totalSummary}><ThemedText type="defaultSemiBold" style={{color: theme.tint}}>{t('total_label', lang)}: {totalWeight} g</ThemedText><ThemedText>{t('calories', lang)}: {calculatedTotal} kcal</ThemedText></View>
         </ThemedView>
 
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>Nutrients / 100g</ThemedText>
-            <NutrientRow label={t('calories', lang)} val={baseNutrients.calories} k="calories" update={updateNutrient} isMain/>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>{t('val_per_100g', lang)}</ThemedText>
+            <NutrientRow label={t('calories', lang)} val={baseNutrients.calories} k="calories" update={updateNutrient} isMain unit="kcal"/>
+            <View style={styles.divider}/>
             <NutrientRow label={t('protein', lang)} val={baseNutrients.protein} k="protein" update={updateNutrient} isMain/>
+            <View style={styles.divider}/>
             <NutrientRow label={t('fat', lang)} val={baseNutrients.fat} k="fat" update={updateNutrient} isMain/>
             <View style={{paddingLeft: 16}}>
                 <NutrientRow label={t('saturated_fat', lang)} val={baseNutrients.saturatedFat} k="saturatedFat" update={updateNutrient}/>
                 <NutrientRow label={t('trans_fat', lang)} val={baseNutrients.transFat} k="transFat" update={updateNutrient}/>
-                <NutrientRow label={t('cholesterol', lang)} val={baseNutrients.cholesterol} k="cholesterol" update={updateNutrient}/>
+                <NutrientRow label={t('cholesterol', lang)} val={baseNutrients.cholesterol} k="cholesterol" update={updateNutrient} unit="mg"/>
             </View>
+            <View style={styles.divider}/>
             <NutrientRow label={t('carbs', lang)} val={baseNutrients.carbs} k="carbs" update={updateNutrient} isMain/>
             <View style={{paddingLeft: 16}}>
                 <NutrientRow label={t('sugar', lang)} val={baseNutrients.sugar} k="sugar" update={updateNutrient}/>
                 <NutrientRow label={t('fiber', lang)} val={baseNutrients.fiber} k="fiber" update={updateNutrient}/>
             </View>
-            <NutrientRow label={t('sodium', lang)} val={baseNutrients.sodium} k="sodium" update={updateNutrient} isMain/>
+            <View style={styles.divider}/>
+            <NutrientRow label={t('sodium', lang)} val={baseNutrients.sodium} k="sodium" update={updateNutrient} isMain unit="mg"/>
+            <View style={{paddingLeft: 16}}>
+                <NutrientRow label={t('zinc', lang)} val={baseNutrients.zinc} k="zinc" update={updateNutrient} unit="mg"/>
+                <NutrientRow label={t('magnesium', lang)} val={baseNutrients.magnesium} k="magnesium" update={updateNutrient} unit="mg"/>
+                <NutrientRow label={t('iron', lang)} val={baseNutrients.iron} k="iron" update={updateNutrient} unit="mg"/>
+            </View>
         </ThemedView>
       </ScrollView>
       }

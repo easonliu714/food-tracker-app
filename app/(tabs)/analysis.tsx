@@ -22,13 +22,11 @@ export default function AnalysisScreen() {
   
   const [calData, setCalData] = useState<any[]>([]);
   const [weightData, setWeightData] = useState<any[]>([]);
+  const [bfData, setBfData] = useState<any[]>([]); // 體脂資料
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
 
-  // 確保切換 Tab 或 Period 時重新讀取
   useFocusEffect(
-    useCallback(() => {
-      loadAnalysis(period);
-    }, [period])
+    useCallback(() => { loadAnalysis(period); }, [period])
   );
 
   const loadAnalysis = async (days: number) => {
@@ -39,23 +37,29 @@ export default function AnalysisScreen() {
           const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
           const strStart = format(startDate, 'yyyy-MM-dd');
 
+          // 初始化對應表，確保每天都有數據
           const dataMap = new Map();
           dateRange.forEach(d => {
               const k = format(d, 'yyyy-MM-dd');
-              dataMap.set(k, { in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, label: format(d, days===7 ? 'MM/dd' : 'dd') });
+              // label 根據天數縮放顯示，避免擁擠
+              const showLabel = days === 7 || d.getDate() % 5 === 0;
+              dataMap.set(k, { 
+                  in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, 
+                  w: 0, bf: 0,
+                  label: showLabel ? format(d, 'MM/dd') : '' 
+              });
           });
 
-          // 讀取資料
+          // Fetch Data
           const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
-          const weights = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart)).orderBy(desc(dailyMetrics.date));
+          const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart));
 
-          // 計算有效天數 (分母)
+          // Fill Data
           const activeDays = new Set();
-
           logs.forEach(l => {
-              activeDays.add(l.date);
               if (dataMap.has(l.date)) {
+                  activeDays.add(l.date);
                   const d = dataMap.get(l.date);
                   d.in += l.totalCalories || 0;
                   d.pro += l.totalProteinG || 0;
@@ -65,13 +69,23 @@ export default function AnalysisScreen() {
               }
           });
           acts.forEach(a => {
-              activeDays.add(a.date);
               if (dataMap.has(a.date)) {
+                  activeDays.add(a.date);
                   dataMap.get(a.date).out += a.caloriesBurned || 0;
+              }
+          });
+          // 體重體脂填入 (需處理當天多筆取最新，這裡簡化為覆蓋)
+          metrics.forEach(m => {
+              if (dataMap.has(m.date)) {
+                  const d = dataMap.get(m.date);
+                  if (m.weightKg) d.w = m.weightKg;
+                  if (m.bodyFatPercentage) d.bf = m.bodyFatPercentage;
               }
           });
 
           const chartArr = Array.from(dataMap.values());
+
+          // 1. 熱量堆疊圖
           const stackData = chartArr.map(d => ({
               label: d.label,
               stacks: [
@@ -82,10 +96,16 @@ export default function AnalysisScreen() {
           }));
           setCalData(stackData);
 
-          const wData = weights.map(w => ({ value: w.weightKg, label: w.date.slice(5) })).reverse();
-          setWeightData(wData.length ? wData : [{value: 0}]);
+          // 2. 體重體脂圖 (雙 Y 軸)
+          // Line 1: Weight (左軸)
+          const wArr = chartArr.map(d => ({ value: d.w, label: d.label, hideDataPoint: d.w===0 }));
+          // Line 2: Body Fat (右軸 - 需要 secondaryData)
+          const bfArr = chartArr.map(d => ({ value: d.bf, hideDataPoint: d.bf===0 }));
+          
+          setWeightData(wArr);
+          setBfData(bfArr);
 
-          // 計算平均：總合 / 有效天數 (至少為 1)
+          // Summary
           const totalDays = Math.max(activeDays.size, 1);
           const sum = chartArr.reduce((acc, cur) => ({
               avgIn: acc.avgIn + cur.in, avgOut: acc.avgOut + cur.out,
@@ -109,7 +129,7 @@ export default function AnalysisScreen() {
     <SafeAreaView style={[styles.container, {backgroundColor: theme.background}]}>
        <ScrollView contentContainerStyle={{padding: 16}}>
           <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
-              <ThemedText type="title">{t('analysis', lang)}</ThemedText>
+              <ThemedText type="title">{t('trend_analysis', lang)}</ThemedText>
               <View style={styles.periodSwitch}>
                   <Pressable onPress={()=>setPeriod(7)} style={[styles.pBtn, period===7 && {backgroundColor:theme.tint}]}><ThemedText style={{color:period===7?'#FFF':theme.text, fontSize:12}}>{t('week', lang)}</ThemedText></Pressable>
                   <Pressable onPress={()=>setPeriod(30)} style={[styles.pBtn, period===30 && {backgroundColor:theme.tint}]}><ThemedText style={{color:period===30?'#FFF':theme.text, fontSize:12}}>{t('month', lang)}</ThemedText></Pressable>
@@ -128,8 +148,9 @@ export default function AnalysisScreen() {
               </View>
           </View>
 
+          {/* Calorie Chart */}
           <View style={[styles.card, {marginTop: 16}]}>
-              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('trend_calories', lang)}</ThemedText>
+              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_cal', lang)}</ThemedText>
               <BarChart 
                 data={calData} 
                 stackData={calData}
@@ -146,19 +167,29 @@ export default function AnalysisScreen() {
               />
           </View>
 
-          <View style={[styles.card, {marginTop: 16}]}>
-              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('trend_body', lang)}</ThemedText>
+          {/* Body Metrics Chart (Double Axis) */}
+          <View style={[styles.card, {marginTop: 16, marginBottom: 40}]}>
+              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_body', lang)}</ThemedText>
+              <View style={{flexDirection:'row', justifyContent:'center', marginBottom:10}}>
+                  <ThemedText style={{color:'#FF9500', fontSize:12, marginRight:10}}>━ {t('weight', lang)} (L)</ThemedText>
+                  <ThemedText style={{color:'#007AFF', fontSize:12}}>━ {t('body_fat', lang)} (R)</ThemedText>
+              </View>
               <LineChart 
                 data={weightData} 
                 color="#FF9500" 
                 thickness={3} 
                 dataPointsColor="#FF9500"
                 hideRules
-                hideYAxisText
                 height={180}
                 width={SCREEN_WIDTH - 80}
                 curved
                 isAnimated
+                // Secondary Axis for Body Fat
+                secondaryData={bfData}
+                secondaryLineConfig={{ color: '#007AFF', thickness: 3 }}
+                showSecondaryYAxis
+                secondaryYAxisColor={theme.text}
+                secondaryYAxisLabelTextStyle={{color: '#007AFF', fontSize: 10}}
               />
           </View>
        </ScrollView>
