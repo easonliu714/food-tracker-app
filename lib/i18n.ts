@@ -15,84 +15,131 @@ export const LANGUAGES = [
 // 翻譯字典
 export const TRANSLATIONS = {
   'zh-TW': {
+    // Tab Titles
+    tab_home: "首頁",
+    tab_analysis: "分析",
+    tab_ai_coach: "AI 教練",
+    tab_settings: "設定",
+
+    // General
     welcome: "歡迎",
-    today_summary: "今日概況",
-    calories: "熱量",
-    protein: "蛋白質",
-    fat: "脂肪",
-    carbs: "碳水",
-    sodium: "鈉",
     save: "儲存",
     cancel: "取消",
-    settings: "設定",
-    ai_analysis: "AI 分析",
-    analyzing: "分析中...",
-    food_name: "食物名稱",
-    food_name_placeholder: "輸入名稱或掃描條碼",
-    portion: "份量",
-    camera: "相機",
-    gallery: "相簿",
-    scan_barcode: "掃描條碼",
-    manual_input: "手動輸入",
+    error: "錯誤",
+    success: "成功",
+    loading: "載入中...",
     
-    // 餐別
+    // Home Screen
+    body_metrics: "身體數值",
+    record_metrics: "+ 紀錄",
+    target_weight: "目標體重",
+    target_body_fat: "目標體脂",
+    intake: "攝取",
+    burned: "消耗",
+    net_intake_pct: "靜攝取 %",
+    intake_target: "攝取/目標",
+    burned_cal: "消耗熱量",
+    quick_record: "快速紀錄",
+    recent_foods: "常用食物",
+    no_recent_foods: "暫無常用紀錄",
+    
+    // Actions
+    camera: "拍照",
+    scan_barcode: "掃碼", // Modified as requested
+    manual_input: "手輸",
+    exercise: "運動",
+    
+    // Meals
     breakfast: "早餐",
     lunch: "午餐",
     dinner: "晚餐",
     afternoon_tea: "下午茶",
     late_night: "宵夜",
     snack: "點心",
+    no_records: "尚無紀錄",
     
-    exercise: "運動",
-    weight: "體重",
-    body_fat: "體脂",
-    analysis: "分析",
-    ai_coach: "AI 教練",
-    recipes: "食譜",
-    profile: "個人設定",
-    daily_goal: "每日目標",
-    intake: "攝取",
-    burned: "消耗",
-    remaining: "剩餘",
+    // Nutrients
+    calories: "熱量",
+    protein: "蛋白質",
+    fat: "脂肪",
+    carbs: "碳水",
+    sodium: "鈉",
+    sugar: "糖",
+    fiber: "膳食纖維",
+    saturated_fat: "飽和脂肪",
+    trans_fat: "反式脂肪",
+    cholesterol: "膽固醇",
+
+    // Analysis
+    trend_analysis: "數據分析",
+    chart_title_cal_weight: "熱量與體重趨勢",
+    chart_title_nutrients: "營養素攝取比例",
     week: "近7天",
     month: "近30天",
     avg_daily: "日均數值",
-    trend_calories: "熱量收支趨勢",
-    trend_body: "體重體脂趨勢",
-    composition: "食物組成",
-    suggestion: "攝取建議",
-    ask_ai: "詢問 AI...",
-    send: "發送",
+    weight_trend: "體重趨勢",
     
-    // 預設提問
+    // Profile / Settings
+    ai_settings: "AI 設定",
+    basic_info: "基本資料",
+    gender: "性別",
+    male: "男",
+    female: "女",
+    height: "身高",
+    birth_year: "出生年份",
+    weight: "體重",
+    body_fat: "體脂率",
+    training_goal: "訓練目標",
+    activity_level: "日常活動量",
+    save_settings: "儲存設定",
+    api_key_placeholder: "貼上您的 API Key",
+    test_key: "測試 Key",
+    current_model: "當前模型",
+    language: "語言",
+    
+    // Goals Descriptions
+    lose_weight: "減重",
+    lose_weight_desc: "熱量赤字，專注減脂",
+    maintain: "維持",
+    maintain_desc: "維持目前體重與體態",
+    gain_weight: "增重",
+    gain_weight_desc: "熱量盈餘，專注增肌",
+    recomp: "體態重組",
+    recomp_desc: "增肌同時減脂(適合新手)",
+    blood_sugar: "控制血糖",
+    blood_sugar_desc: "穩定血糖波動，低 GI 飲食",
+
+    // Activity Descriptions
+    sedentary: "久坐少動",
+    sedentary_desc: "辦公室工作，幾乎不運動",
+    lightly_active: "輕度活動",
+    lightly_active_desc: "每週運動 1-3 天",
+    moderately_active: "中度活動",
+    moderately_active_desc: "每週運動 3-5 天",
+    very_active: "高度活動",
+    very_active_desc: "每週運動 6-7 天",
+    extra_active: "極度活動",
+    extra_active_desc: "體力工作或每日兩練",
+
+    // AI Coach
+    ai_coach_title: "AI 教練",
+    remaining_budget: "今日剩餘熱量",
+    generate_plan: "生成計畫",
+    recipe_suggestion: "食譜建議",
+    workout_suggestion: "運動建議",
+    ask_ai: "詢問 AI...",
     ask_recipe: "今天有什麼建議菜單？",
     ask_workout: "今天有什麼建議的訓練？",
     follow_up_1: "這餐適合運動後吃嗎？",
     follow_up_2: "如何調整更健康？",
     follow_up_3: "推薦的搭配飲料？",
     
-    version_history: "版本履歷",
-    logout: "登出",
-    language: "語言",
-    theme: "主題",
-    export_pdf: "匯出 PDF",
-    ingredients: "食材",
-    steps: "步驟",
-    reason: "推薦原因",
-    workout_suggestion: "運動建議",
-    recipe_suggestion: "食譜建議",
-    generate_plan: "生成計畫",
-    watch_video: "觀看影片",
-    remaining_budget: "今日剩餘熱量",
-    
-    // 營養素詳細
-    sugar: "糖",
-    fiber: "膳食纖維",
-    saturated_fat: "飽和脂肪",
-    trans_fat: "反式脂肪",
-    cholesterol: "膽固醇",
-    
-    // 掃碼與 Alert
+    // Food Editor
+    ai_analysis_title: "AI 分析",
+    composition: "食物組成",
+    suggestion: "攝取建議",
+    food_name_placeholder: "輸入名稱或掃描條碼",
+    barcode_scanned: "已讀取條碼：",
     local_db: "本地資料庫",
     loaded: "已載入",
     downloaded: "已下載資訊",
@@ -100,99 +147,138 @@ export const TRANSLATIONS = {
     scan_failed_msg: "資料庫與網路皆無此商品，請選擇：",
     scan_ai_option: "拍照分析營養標示",
     manual_option: "手動輸入",
-    error: "錯誤",
-    read_failed: "讀取失敗",
-    barcode_scanned: "Barcode: ",
     
-    // Profile
-    gender: "性別",
-    male: "男",
-    female: "女",
-    height: "身高",
-    birth_year: "出生年份",
-    training_goal: "訓練目標",
-    activity_level: "活動量",
-    save_settings: "儲存設定",
-    ai_settings: "AI 設定",
-    api_key_placeholder: "貼上您的 API Key",
-    test_key: "測試 Key",
-    current_model: "當前模型"
+    // Compare
+    increase: "增加",
+    decrease: "減少",
+    no_change: "無變化"
   },
   'en': {
+    // Tab Titles
+    tab_home: "Home",
+    tab_analysis: "Analysis",
+    tab_ai_coach: "AI Coach",
+    tab_settings: "Settings",
+
+    // General
     welcome: "Welcome",
-    today_summary: "Today's Summary",
-    calories: "Calories",
-    protein: "Protein",
-    fat: "Fat",
-    carbs: "Carbs",
-    sodium: "Sodium",
     save: "Save",
     cancel: "Cancel",
-    settings: "Settings",
-    ai_analysis: "AI Analysis",
-    analyzing: "Analyzing...",
-    food_name: "Food Name",
-    food_name_placeholder: "Enter name or scan barcode",
-    portion: "Portion",
-    camera: "Camera",
-    gallery: "Gallery",
-    scan_barcode: "Scan Barcode",
-    manual_input: "Manual Input",
+    error: "Error",
+    success: "Success",
+    loading: "Loading...",
     
+    // Home Screen
+    body_metrics: "Body Metrics",
+    record_metrics: "+ Record",
+    target_weight: "Target Weight",
+    target_body_fat: "Target Body Fat",
+    intake: "Intake",
+    burned: "Burned",
+    net_intake_pct: "Net Intake %",
+    intake_target: "Intake/Target",
+    burned_cal: "Calories Burned",
+    quick_record: "Quick Add",
+    recent_foods: "Recent Foods",
+    no_recent_foods: "No recent records",
+    
+    // Actions
+    camera: "Camera",
+    scan_barcode: "Scan Code",
+    manual_input: "Manual",
+    exercise: "Exercise",
+    
+    // Meals
     breakfast: "Breakfast",
     lunch: "Lunch",
     dinner: "Dinner",
     afternoon_tea: "Afternoon Tea",
     late_night: "Late Night",
     snack: "Snack",
+    no_records: "No records",
     
-    exercise: "Exercise",
-    weight: "Weight",
-    body_fat: "Body Fat",
-    analysis: "Analysis",
-    ai_coach: "AI Coach",
-    recipes: "Recipes",
-    profile: "Profile",
-    daily_goal: "Daily Goal",
-    intake: "Intake",
-    burned: "Burned",
-    remaining: "Remaining",
+    // Nutrients
+    calories: "Calories",
+    protein: "Protein",
+    fat: "Fat",
+    carbs: "Carbs",
+    sodium: "Sodium",
+    sugar: "Sugar",
+    fiber: "Fiber",
+    saturated_fat: "Saturated Fat",
+    trans_fat: "Trans Fat",
+    cholesterol: "Cholesterol",
+
+    // Analysis
+    trend_analysis: "Analysis",
+    chart_title_cal_weight: "Calories & Weight Trend",
+    chart_title_nutrients: "Nutrient Ratios",
     week: "7 Days",
     month: "30 Days",
     avg_daily: "Daily Avg",
-    trend_calories: "Calorie Trend",
-    trend_body: "Body Metrics Trend",
-    composition: "Composition",
-    suggestion: "Suggestion",
-    ask_ai: "Ask AI...",
-    send: "Send",
+    weight_trend: "Weight Trend",
     
+    // Profile / Settings
+    ai_settings: "AI Settings",
+    basic_info: "Basic Info",
+    gender: "Gender",
+    male: "Male",
+    female: "Female",
+    height: "Height",
+    birth_year: "Birth Year",
+    weight: "Weight",
+    body_fat: "Body Fat",
+    training_goal: "Goal",
+    activity_level: "Activity Level",
+    save_settings: "Save Settings",
+    api_key_placeholder: "Paste API Key",
+    test_key: "Test Key",
+    current_model: "Current Model",
+    language: "Language",
+    
+    // Goals Descriptions
+    lose_weight: "Weight Loss",
+    lose_weight_desc: "Calorie deficit, fat loss focus",
+    maintain: "Maintain",
+    maintain_desc: "Maintain current weight",
+    gain_weight: "Gain Weight",
+    gain_weight_desc: "Calorie surplus, muscle gain",
+    recomp: "Recomp",
+    recomp_desc: "Gain muscle, lose fat",
+    blood_sugar: "Blood Sugar Control",
+    blood_sugar_desc: "Stable blood sugar, low GI",
+
+    // Activity Descriptions
+    sedentary: "Sedentary",
+    sedentary_desc: "Office job, little exercise",
+    lightly_active: "Lightly Active",
+    lightly_active_desc: "Exercise 1-3 days/week",
+    moderately_active: "Moderately Active",
+    moderately_active_desc: "Exercise 3-5 days/week",
+    very_active: "Very Active",
+    very_active_desc: "Exercise 6-7 days/week",
+    extra_active: "Extra Active",
+    extra_active_desc: "Physical job or 2x daily training",
+
+    // AI Coach
+    ai_coach_title: "AI Coach",
+    remaining_budget: "Remaining Calories",
+    generate_plan: "Generate Plan",
+    recipe_suggestion: "Recipe Suggestion",
+    workout_suggestion: "Workout Suggestion",
+    ask_ai: "Ask AI...",
     ask_recipe: "Suggest a meal plan for today?",
     ask_workout: "Suggest a workout for today?",
     follow_up_1: "Good for post-workout?",
     follow_up_2: "How to make it healthier?",
     follow_up_3: "Best drink pairing?",
     
-    version_history: "Version History",
-    logout: "Log Out",
-    language: "Language",
-    theme: "Theme",
-    export_pdf: "Export PDF",
-    ingredients: "Ingredients",
-    steps: "Steps",
-    reason: "Reason",
-    workout_suggestion: "Workout Suggestion",
-    recipe_suggestion: "Recipe Suggestion",
-    generate_plan: "Generate Plan",
-    watch_video: "Watch Video",
-    remaining_budget: "Remaining Calories",
-    
-    sugar: "Sugar",
-    fiber: "Fiber",
-    saturated_fat: "Saturated Fat",
-    trans_fat: "Trans Fat",
-    cholesterol: "Cholesterol",
-    
+    // Food Editor
+    ai_analysis_title: "AI Analysis",
+    composition: "Composition",
+    suggestion: "Suggestion",
+    food_name_placeholder: "Enter name or scan barcode",
+    barcode_scanned: "Barcode: ",
     local_db: "Local DB",
     loaded: "Loaded",
     downloaded: "Downloaded",
@@ -200,26 +286,14 @@ export const TRANSLATIONS = {
     scan_failed_msg: "Item not found. Please choose:",
     scan_ai_option: "Scan Nutrition Label (AI)",
     manual_option: "Manual Input",
-    error: "Error",
-    read_failed: "Read Failed",
-    barcode_scanned: "Barcode: ",
     
-    gender: "Gender",
-    male: "Male",
-    female: "Female",
-    height: "Height",
-    birth_year: "Birth Year",
-    training_goal: "Goal",
-    activity_level: "Activity Level",
-    save_settings: "Save Settings",
-    ai_settings: "AI Settings",
-    api_key_placeholder: "Paste API Key",
-    test_key: "Test Key",
-    current_model: "Model"
+    // Compare
+    increase: "Increase",
+    decrease: "Decrease",
+    no_change: "No Change"
   }
 };
 
-// 狀態管理 Store
 interface LanguageState {
   locale: string;
   setLocale: (locale: string) => void;
@@ -230,20 +304,19 @@ export const useLanguageStore = create<LanguageState>((set) => ({
   setLocale: (locale) => set({ locale }),
 }));
 
-// Listener 機制 (保留相容性)
+// Listener for non-reactive usage if needed
 const listeners: ((lang: string) => void)[] = [];
 let currentLang = 'zh-TW';
 
 export const t = (key: string, lang: string = 'zh-TW') => {
   const dict = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS['en'];
   // @ts-ignore
-  return dict[key] || key;
+  return dict[key] || key; // Return key if translation missing
 };
 
 export const useLanguage = () => {
   const locale = useLanguageStore((state) => state.locale);
   
-  // 初始化讀取
   useEffect(() => {
     getSettings().then(s => { 
       if(s.language && s.language !== currentLang) {

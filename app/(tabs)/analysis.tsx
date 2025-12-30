@@ -24,8 +24,11 @@ export default function AnalysisScreen() {
   const [weightData, setWeightData] = useState<any[]>([]);
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
 
+  // 確保切換 Tab 或 Period 時重新讀取
   useFocusEffect(
-    useCallback(() => { loadAnalysis(period); }, [period])
+    useCallback(() => {
+      loadAnalysis(period);
+    }, [period])
   );
 
   const loadAnalysis = async (days: number) => {
@@ -42,11 +45,12 @@ export default function AnalysisScreen() {
               dataMap.set(k, { in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, label: format(d, days===7 ? 'MM/dd' : 'dd') });
           });
 
+          // 讀取資料
           const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
           const weights = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart)).orderBy(desc(dailyMetrics.date));
 
-          // 計算有效天數
+          // 計算有效天數 (分母)
           const activeDays = new Set();
 
           logs.forEach(l => {
@@ -81,6 +85,7 @@ export default function AnalysisScreen() {
           const wData = weights.map(w => ({ value: w.weightKg, label: w.date.slice(5) })).reverse();
           setWeightData(wData.length ? wData : [{value: 0}]);
 
+          // 計算平均：總合 / 有效天數 (至少為 1)
           const totalDays = Math.max(activeDays.size, 1);
           const sum = chartArr.reduce((acc, cur) => ({
               avgIn: acc.avgIn + cur.in, avgOut: acc.avgOut + cur.out,
@@ -127,7 +132,7 @@ export default function AnalysisScreen() {
               <ThemedText type="subtitle" style={{marginBottom:16}}>{t('trend_calories', lang)}</ThemedText>
               <BarChart 
                 data={calData} 
-                stackData={calData} // Use stackData prop for stacked bars
+                stackData={calData}
                 barWidth={period===7 ? 20 : 6} 
                 spacing={period===7 ? 20 : 4}
                 noOfSections={3} 

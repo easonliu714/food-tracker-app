@@ -13,21 +13,9 @@ import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES } from "@/lib/i18n";
 
-const ACTIVITY_OPTIONS = [
-  { id: 'sedentary', label: '久坐少動', desc: '辦公室工作，幾乎不運動' },
-  { id: 'lightly_active', label: '輕度活動', desc: '每週運動 1-3 天' },
-  { id: 'moderately_active', label: '中度活動', desc: '每週運動 3-5 天' },
-  { id: 'very_active', label: '高度活動', desc: '每週運動 6-7 天' },
-  { id: 'extra_active', label: '極度活動', desc: '體力工作或每日兩練' },
-];
-
-const GOAL_OPTIONS = [
-  { id: 'lose_weight', label: '減重', desc: '熱量赤字，專注減脂' },
-  { id: 'maintain', label: '維持', desc: '維持目前體重與體態' },
-  { id: 'gain_weight', label: '增重', desc: '熱量盈餘，專注增肌' },
-  { id: 'recomp', label: '體態重組', desc: '增肌同時減脂(適合新手)' },
-  { id: 'blood_sugar', label: '控制血糖', desc: '穩定血糖波動，低 GI 飲食' },
-];
+// [修改] 僅定義 ID，文字在 Render 時透過 t() 取得
+const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
+const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -95,14 +83,13 @@ export default function ProfileScreen() {
     setTestingKey(true);
     const res = await validateApiKey(apiKey);
     setTestingKey(false);
-    
     if (res.valid && res.models) {
       setModelList(res.models);
       const bestMatch = res.models.find(m => m.includes('flash')) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
-      Alert.alert("測試成功", `金鑰有效！`);
+      Alert.alert(t('success', lang), "API Key OK");
     } else {
-      Alert.alert("測試失敗", res.error || "API Key 無效或被停用");
+      Alert.alert(t('error', lang), res.error || "Invalid Key");
     }
   };
 
@@ -132,8 +119,8 @@ export default function ProfileScreen() {
                 activityLevel, goal: trainingGoal, dailyCalorieTarget: Math.round(targetCal), updatedAt: new Date()
             }).where(eq(userProfiles.id, profileId));
         }
-        Alert.alert(t('save_settings', lang), "Updated.");
-    } catch (e) { Alert.alert("Error", "Failed"); } 
+        Alert.alert(t('save_settings', lang), t('success', lang));
+    } catch (e) { Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
   };
 
@@ -156,7 +143,7 @@ export default function ProfileScreen() {
             <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
             <View style={{marginTop:12}}>
               <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>Gemini API Key</ThemedText>
-              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="API Key" placeholderTextColor="#999" />
+              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder={t('api_key_placeholder', lang)} placeholderTextColor="#999" />
               <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
                   <ThemedText style={{fontSize:11, color: tintColor, marginTop:6, textDecorationLine:'underline'}}>Get API Key from Google AI Studio</ThemedText>
               </Pressable>
@@ -174,7 +161,7 @@ export default function ProfileScreen() {
          </View>
 
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
-            <ThemedText type="subtitle" style={{marginBottom:12}}>基本資料</ThemedText>
+            <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
             <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
                <View style={{flex:1}}>
                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('gender', lang)}</ThemedText>
@@ -191,27 +178,28 @@ export default function ProfileScreen() {
                   <TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/>
                </View>
             </View>
-            {/* Weight inputs... same structure */}
             <View style={[styles.row, {marginBottom: 12}]}>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
             </View>
-            {/* Target inputs... */}
             <View style={[styles.row, {marginBottom: 12}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>Target Weight</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>Target Body Fat</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
             </View>
             
             <View style={{marginTop:12}}>
                <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('training_goal', lang)}</ThemedText>
                <View style={{gap: 8}}>
-                  {GOAL_OPTIONS.map(g => (
-                    <Pressable key={g.id} onPress={()=>setTrainingGoal(g.id)} style={[styles.listOption, trainingGoal===g.id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                  {GOAL_IDS.map(id => (
+                    <Pressable key={id} onPress={()=>setTrainingGoal(id)} style={[styles.listOption, trainingGoal===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
                        <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                           <View><ThemedText style={{fontWeight:'bold', color: trainingGoal===g.id?tintColor:textColor}}>{g.label}</ThemedText><ThemedText style={{fontSize:12, color:textSecondary}}>{g.desc}</ThemedText></View>
-                           {trainingGoal===g.id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                           <View>
+                               <ThemedText style={{fontWeight:'bold', color: trainingGoal===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
+                           </View>
+                           {trainingGoal===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
                        </View>
                     </Pressable>
                   ))}
@@ -220,11 +208,14 @@ export default function ProfileScreen() {
             <View style={{marginTop:16}}>
                <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('activity_level', lang)}</ThemedText>
                <View style={{gap: 8}}>
-                  {ACTIVITY_OPTIONS.map(a => (
-                    <Pressable key={a.id} onPress={()=>setActivityLevel(a.id)} style={[styles.listOption, activityLevel===a.id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                  {ACTIVITY_IDS.map(id => (
+                    <Pressable key={id} onPress={()=>setActivityLevel(id)} style={[styles.listOption, activityLevel===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
                        <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                           <View><ThemedText style={{fontWeight:'bold', color: activityLevel===a.id?tintColor:textColor}}>{a.label}</ThemedText><ThemedText style={{fontSize:12, color:textSecondary}}>{a.desc}</ThemedText></View>
-                           {activityLevel===a.id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                           <View>
+                               <ThemedText style={{fontWeight:'bold', color: activityLevel===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
+                           </View>
+                           {activityLevel===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
                        </View>
                     </Pressable>
                   ))}
