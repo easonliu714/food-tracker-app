@@ -19,7 +19,18 @@ export const TRANSLATIONS = {
     // General
     welcome: "歡迎", save: "儲存", cancel: "取消", delete: "刪除", error: "錯誤", success: "成功", loading: "載入中...",
     tip: "提示", save_success: "儲存成功", invalid_input: "輸入數值無效", settings: "設定", edit: "編輯",
-
+    close: "關閉", version_history: "改版履歷", how_to_get_key: "如何取得 Key?",
+    
+    // Backup & Restore
+    data_backup: "資料備份與還原",
+    backup_db: "匯出資料庫 (備份)",
+    restore_db: "匯入資料庫 (還原)",
+    backup_desc: "將資料庫檔案匯出至 Google Drive 或本機",
+    restore_desc: "從檔案還原資料庫 (將覆蓋目前資料)",
+    restore_confirm_title: "確認還原？",
+    restore_confirm_msg: "這將會完全覆蓋目前的紀錄，且無法復原。請確認您選擇的是正確的備份檔案。",
+    restore_success_msg: "還原成功！請完全關閉並重啟 App 以套用變更。",
+    
     // API Guide
     api_guide_title: "申請 Gemini API Key 步驟",
     api_step_1: "1. 點擊下方按鈕前往 Google AI Studio。",
@@ -57,8 +68,7 @@ export const TRANSLATIONS = {
     ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", 
     birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
-    api_key_placeholder: "貼上您的 API Key", how_to_get_key:"如何取得 API Key？",
-    get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", version_history: "版本紀錄",
+    api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", 
     
     lose_weight: "減重", lose_weight_desc: "熱量赤字，專注減脂",
     maintain: "維持", maintain_desc: "維持目前體重與體態",
@@ -112,6 +122,15 @@ export const TRANSLATIONS = {
     tab_home: "Home", tab_analysis: "Analysis", tab_ai_coach: "AI Coach", tab_settings: "Settings",
     welcome: "Welcome", save: "Save", cancel: "Cancel", delete: "Delete", error: "Error", success: "Success", loading: "Loading...",
     tip: "Tip", save_success: "Saved successfully", invalid_input: "Invalid input", settings: "Settings", edit: "Edit",
+
+    data_backup: "Backup & Restore",
+    backup_db: "Export DB (Backup)",
+    restore_db: "Import DB (Restore)",
+    backup_desc: "Export database to Google Drive or local files",
+    restore_desc: "Restore database from file (Overwrites current data)",
+    restore_confirm_title: "Confirm Restore?",
+    restore_confirm_msg: "This will overwrite all current data and cannot be undone. Please ensure you selected the correct backup file.",
+    restore_success_msg: "Restore successful! Please restart the App to apply changes.",
 
     api_guide_title: "How to get Gemini API Key",
     api_step_1: "1. Click button below to go to Google AI Studio.",
@@ -195,6 +214,15 @@ export const TRANSLATIONS = {
     tab_home: "ホーム", tab_analysis: "分析", tab_ai_coach: "AIコーチ", tab_settings: "設定",
     welcome: "ようこそ", save: "保存", cancel: "キャンセル", delete: "削除", error: "エラー", success: "成功", loading: "読み込み中...",
     tip: "ヒント", save_success: "保存しました", invalid_input: "無効な入力", settings: "設定", edit: "編集",
+
+    data_backup: "データバックアップ",
+    backup_db: "DBをエクスポート",
+    restore_db: "DBをインポート",
+    backup_desc: "データベースをGoogleドライブまたはローカルに保存",
+    restore_desc: "ファイルから復元 (現在のデータは上書きされます)",
+    restore_confirm_title: "復元しますか？",
+    restore_confirm_msg: "現在のデータは完全に上書きされ、元に戻すことはできません。",
+    restore_success_msg: "復元しました！アプリを再起動してください。",
     
     api_guide_title: "Gemini APIキーの取得手順",
     api_step_1: "1. 下のボタンをクリックしてGoogle AI Studioへ移動します。",
@@ -271,6 +299,15 @@ export const TRANSLATIONS = {
     tab_home: "홈", tab_analysis: "분석", tab_ai_coach: "AI 코치", tab_settings: "설정",
     welcome: "환영합니다", save: "저장", cancel: "취소", delete: "삭제", error: "오류", success: "성공", loading: "로딩 중...",
     tip: "팁", save_success: "저장되었습니다", invalid_input: "잘못된 입력", settings: "설정", edit: "편집",
+
+    data_backup: "데이터 백업 및 복원",
+    backup_db: "데이터베이스 내보내기 (백업)",
+    restore_db: "데이터베이스 가져오기 (복원)",
+    backup_desc: "데이터베이스 파일을 Google 드라이브 또는 로컬에 내보내기",
+    restore_desc: "파일에서 데이터베이스 복원 (현재 데이터 덮어쓰기)",
+    restore_confirm_title: "복원하시겠습니까?",
+    restore_confirm_msg: "이 작업은 현재 기록을 완전히 덮어쓰며 복구할 수 없습니다. 올바른 백업 파일을 선택했는지 확인하세요.",
+    restore_success_msg: "복원 성공! 변경 사항을 적용하려면 앱을 완전히 종료한 후 다시 시작하세요.",
     
     api_guide_title: "Gemini API 키 발급 순서",
     api_step_1: "1. 아래 버튼을 눌러 Google AI Studio로 이동하세요.",
@@ -380,6 +417,11 @@ export const setAppLanguage = (lang: string) => {
 
 const LOGS_ZH = [
   {
+    version: "V1.0.9.14",
+    date: "2025-12-30",
+    content: "[新增] 資料庫備份與還原功能 (支援 Google Drive)。\n[修正] 分析圖表完全對齊，修復切換週期不聚焦問題。\n[修正] 首頁圓餅圖可顯示超過 100% 之數值。"
+  },
+  {
     version: "V1.0.9.10",
     date: "2025-12-30",
     content: "[修正] 運動紀錄支援編輯與更新。\n[修正] 分析圖表完全對齊，支援滑動查看30天數據，並自動聚焦最新日期。\n[修正] 體重折線圖資料靠左與消失問題修復。\n[新增] 支援日語與韓語介面。"
@@ -400,6 +442,11 @@ const LOGS_ZH = [
 ];
 
 const LOGS_EN = [
+  {
+    version: "V1.0.9.14",
+    date: "2025-12-30",
+content: "[New] Return to the original location (support Google Drive).\n[Fix] Analysis charts perfectly aligned, fixed focus issue when switching periods.\n[Fix] Home pie chart can display values over 100%."
+  },
   {
     version: "V1.0.9.10",
     date: "2025-12-30",

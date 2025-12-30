@@ -29,12 +29,10 @@ export default function AnalysisScreen() {
   const barChartRef = useRef<any>(null);
   const lineChartRef = useRef<any>(null);
 
-  // [參數精算 - 縮小間距]
-  // 30天: Bar=12, Spacing=8 -> 20px/item * 30 = 600px (Screen ~380px) -> 需要滑動
-  // 7天: Bar=16, Spacing=24 -> 40px/item * 7 = 280px (Screen Fit) -> 居中或不滑動
+  // [參數對齊]
   const config = period === 30 
     ? { barWidth: 12, spacing: 8 }
-    : { barWidth: 16, spacing: (VISIBLE_WIDTH / 7) - 16 }; // 自適應填滿
+    : { barWidth: 16, spacing: 24 };
 
   const lineSpacing = config.barWidth + config.spacing;
   const lineInitialSpacing = config.spacing + (config.barWidth / 2); 
@@ -43,13 +41,13 @@ export default function AnalysisScreen() {
     useCallback(() => { loadAnalysis(period); }, [period])
   );
 
-  // [新增] 監聽資料變動，自動聚焦到最右側
+  // [自動聚焦] 資料載入後延遲觸發捲動
   useEffect(() => {
       if (calData.length > 0) {
           setTimeout(() => {
               if (barChartRef.current) barChartRef.current.scrollToEnd({ animated: true });
               if (lineChartRef.current) lineChartRef.current.scrollToEnd({ animated: true });
-          }, 200);
+          }, 300);
       }
   }, [calData, dataSet]);
 
@@ -119,10 +117,9 @@ export default function AnalysisScreen() {
           }));
           setCalData(stackData);
 
-          // 2. Weight/Fat Line Chart (Interpolation)
+          // 2. Weight Line Chart
           const interpolate = (arr: any[], key: string) => {
              const knownIndices = arr.map((item, i) => item[key] !== null ? i : -1).filter(i => i !== -1);
-             
              return arr.map((item, i) => {
                  if (item[key] !== null) {
                      return { 
@@ -131,7 +128,6 @@ export default function AnalysisScreen() {
                          customData: { ...item, type: 'real' }
                      };
                  }
-                 
                  const prevIdx = knownIndices.filter(idx => idx < i).pop();
                  const nextIdx = knownIndices.filter(idx => idx > i).shift();
                  let val = 0;
@@ -265,6 +261,8 @@ export default function AnalysisScreen() {
                 width={VISIBLE_WIDTH} 
                 isAnimated={false} 
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
+                // [修正] Y軸字體大小
+                yAxisTextStyle={{ fontSize: 10, color: '#888' }}
                 focusBarOnPress={true}
                 renderTooltip={renderCalTooltip}
               />
@@ -289,6 +287,8 @@ export default function AnalysisScreen() {
                 yAxisThickness={0}
                 xAxisThickness={1}
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
+                // [修正] Y軸字體大小與上圖一致
+                yAxisTextStyle={{ fontSize: 10, color: '#888' }}
                 pointerConfig={{
                     pointerStripUptoDataPoint: true,
                     pointerStripColor: 'lightgray',
@@ -296,7 +296,6 @@ export default function AnalysisScreen() {
                     strokeDashArray: [2, 5],
                     pointerLabelComponent: (items: any) => renderLineTooltip(items[0]),
                 }}
-                // [修正] 強制傳入 scrollable (雖然 TS 警告，但這是開啟 LineChart 滑動的關鍵)
                 // @ts-ignore
                 scrollable={true} 
               />

@@ -64,7 +64,6 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     setIsLoading(true);
-    // [重要] 每次讀取新日期前，先清空 UI 顯示，避免誤導
     setWeight("");
     setBodyFat("");
     setDiffWeight(null);
@@ -74,7 +73,7 @@ export default function HomeScreen() {
       const dateStr = format(currentDate, "yyyy-MM-dd");
       const yesterdayStr = format(subDays(currentDate, 1), "yyyy-MM-dd");
 
-      // 1. Profile (取得目標值與最新設定)
+      // 1. Profile
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -89,7 +88,7 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
-      // 2. Metrics (比較今天與昨天)
+      // 2. Metrics
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       const yestRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, yesterdayStr));
       
@@ -100,7 +99,6 @@ export default function HomeScreen() {
         setWeight(curW > 0 ? String(curW) : "");
         setBodyFat(curF > 0 ? String(curF) : "");
         
-        // 只有今天有數值時，才計算差異
         if (yestRes.length > 0 && curW > 0) {
             setDiffWeight(parseFloat((curW - (yestRes[0].weightKg || 0)).toFixed(1)));
             setDiffFat(parseFloat((curF - (yestRes[0].bodyFatPercentage || 0)).toFixed(1)));
@@ -152,7 +150,6 @@ export default function HomeScreen() {
           } else {
               await db.insert(dailyMetrics).values({ date: dateStr, weightKg: w, bodyFatPercentage: isNaN(bf)?null:bf });
           }
-          // 同步更新 Profile
           const p = await db.select().from(userProfiles).limit(1);
           if(p.length > 0) {
               await db.update(userProfiles).set({ currentWeightKg: w, currentBodyFat: isNaN(bf)?null:bf }).where(eq(userProfiles.id, p[0].id));
@@ -209,7 +206,7 @@ export default function HomeScreen() {
                     style={[styles.metricInput, {color:theme.text}]} 
                     value={weight} 
                     onChangeText={setWeight} 
-                    placeholder="--" // [修正] 顯示空值提示
+                    placeholder="--" 
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                 />
@@ -221,7 +218,7 @@ export default function HomeScreen() {
                     style={[styles.metricInput, {color:theme.text}]} 
                     value={bodyFat} 
                     onChangeText={setBodyFat} 
-                    placeholder="--" // [修正] 顯示空值提示
+                    placeholder="--" 
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                 />
@@ -272,12 +269,22 @@ export default function HomeScreen() {
     );
   };
 
+  // [修正] 圓餅圖現在顯示真實百分比 (可能超過100%)，但圖形上限鎖定 100
   const renderMacroRing = (label:string, val:number, target:number, color:string, unit="g") => {
-      const pct = target > 0 ? Math.min((val/target)*100, 100) : 0;
-      const data = [{value: pct, color}, {value: 100-pct, color:'#E5E5EA'}];
+      const realPct = target > 0 ? (val/target)*100 : 0; // 真實百分比
+      const visualPct = Math.min(realPct, 100); // 視覺上限 100
+      
+      const data = [{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}];
+      
       return (
           <View style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
-              <PieChart data={data} donut radius={32} innerRadius={24} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(pct)}%</ThemedText>}/>
+              <PieChart 
+                data={data} 
+                donut 
+                radius={32} 
+                innerRadius={24} 
+                centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}
+              />
               <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText>
               <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText>
           </View>
@@ -348,7 +355,6 @@ export default function HomeScreen() {
                     <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
                 </View>
                 {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (
-                    // [修正] 增加左滑編輯 (renderLeftActions)
                     <Swipeable 
                         key={act.id} 
                         renderRightActions={()=><TouchableOpacity style={styles.deleteAction} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}

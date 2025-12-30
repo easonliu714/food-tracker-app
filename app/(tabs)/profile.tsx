@@ -14,6 +14,9 @@ import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format, isValid, differenceInDays } from "date-fns";
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -33,7 +36,6 @@ export default function ProfileScreen() {
   const [birthDate, setBirthDate] = useState<Date>(new Date(1990, 0, 1)); 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // [新增] 目標日期 State
   const [targetDate, setTargetDate] = useState<Date | null>(null);
   const [showTargetDatePicker, setShowTargetDatePicker] = useState(false);
 
@@ -59,6 +61,39 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
+  // [修正] 自動搜尋資料庫檔案路徑
+  const findDbPath = async () => {
+      const docDir = FileSystem.documentDirectory;
+      
+      if (!docDir) {
+          console.error("FileSystem.documentDirectory is null. Try restarting the app.");
+          return null;
+      }
+
+      // 1. 標準路徑
+      const standardPath = docDir + 'SQLite/food_tracker.db';
+      const fileInfo = await FileSystem.getInfoAsync(standardPath).catch(() => null);
+      if (fileInfo && fileInfo.exists) return standardPath;
+
+      // 2. 搜尋 SQLite 目錄
+      try {
+          const sqliteDir = docDir + 'SQLite/';
+          const files = await FileSystem.readDirectoryAsync(sqliteDir);
+          const dbFile = files.find(f => f.endsWith('.db'));
+          if (dbFile) return sqliteDir + dbFile;
+      } catch (e) {}
+
+      // 3. 搜尋根目錄
+      try {
+          const rootFiles = await FileSystem.readDirectoryAsync(docDir);
+          const dbFile = rootFiles.find(f => f.endsWith('.db'));
+          if (dbFile) return docDir + dbFile;
+      } catch (e) {}
+
+      // 4. 回傳預設值 (即使不存在，讓還原功能知道目標位置)
+      return standardPath;
+  };
+
   useEffect(() => {
     async function load() {
       try {
@@ -77,7 +112,6 @@ export default function ProfileScreen() {
             if (isValid(d)) setBirthDate(d);
           }
 
-          // [新增] 讀取目標日期
           if (p.targetDate) {
               const td = new Date(p.targetDate);
               if (isValid(td)) setTargetDate(td);
@@ -99,6 +133,81 @@ export default function ProfileScreen() {
     }
     load();
   }, [isAuthenticated]);
+
+  // 備份資料庫
+  const handleBackup = async () => {
+      try {
+          const dbPath = await findDbPath();
+          if (!dbPath) {
+              Alert.alert(t('error', lang), "System Error: Cannot verify storage path. Please restart app.");
+              return;
+          }
+
+          const fileInfo = await FileSystem.getInfoAsync(dbPath);
+          if (!fileInfo.exists) {
+              Alert.alert(t('error', lang), "Database file not found yet. Try recording some data first.");
+              return;
+          }
+          
+          await Sharing.shareAsync(dbPath, {
+              mimeType: 'application/x-sqlite3',
+              dialogTitle: t('backup_db', lang),
+              UTI: 'public.database'
+          });
+      } catch (e: any) {
+          console.error("Backup Error:", e);
+          Alert.alert(t('error', lang), "Backup failed: " + e.message);
+      }
+  };
+
+  // 還原資料庫
+  const handleRestore = async () => {
+      Alert.alert(
+          t('restore_confirm_title', lang),
+          t('restore_confirm_msg', lang),
+          [
+              { text: t('cancel', lang), style: "cancel" },
+              { 
+                  text: t('restore_db', lang), 
+                  style: "destructive",
+                  onPress: async () => {
+                      try {
+                          const result = await DocumentPicker.getDocumentAsync({
+                              type: '*/*', 
+                              copyToCacheDirectory: true
+                          });
+
+                          if (result.canceled) return;
+
+                          const sourceUri = result.assets[0].uri;
+                          const targetPath = await findDbPath();
+                          
+                          if (!targetPath) {
+                              Alert.alert(t('error', lang), "Target path not found");
+                              return;
+                          }
+                          
+                          // 確保資料夾存在
+                          const folder = targetPath.substring(0, targetPath.lastIndexOf('/'));
+                          await FileSystem.makeDirectoryAsync(folder, { intermediates: true }).catch(()=>{});
+
+                          // 覆蓋檔案
+                          await FileSystem.copyAsync({
+                              from: sourceUri,
+                              to: targetPath
+                          });
+
+                          Alert.alert(t('success', lang), t('restore_success_msg', lang));
+                          // 強制重整 (但在 Expo Router 中通常需要用戶重啟 App 才能重載 DB 連線)
+                      } catch (e: any) {
+                          console.error("Restore Error:", e);
+                          Alert.alert(t('error', lang), "Restore failed: " + e.message);
+                      }
+                  }
+              }
+          ]
+      );
+  };
 
   const handleTestKey = async () => {
     if (!apiKey) return Alert.alert(t('error', lang), t('api_key_placeholder', lang));
@@ -149,7 +258,6 @@ export default function ProfileScreen() {
             currentBodyFat: parseFloat(bodyFat) || null,
             targetWeightKg: parseFloat(targetWeight) || null, 
             targetBodyFat: parseFloat(targetBodyFat) || null,
-            // [新增] 儲存目標日期
             targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null,
             activityLevel, 
             goal: trainingGoal, 
@@ -172,7 +280,6 @@ export default function ProfileScreen() {
       if (selectedDate) setBirthDate(selectedDate);
   };
 
-  // [新增] 目標日期變更 Handle
   const onTargetDateChange = (event: any, selectedDate?: Date) => {
       setShowTargetDatePicker(false);
       if (selectedDate) setTargetDate(selectedDate);
@@ -213,6 +320,22 @@ export default function ProfileScreen() {
                     <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
                 </Pressable>
             </View>
+         </View>
+
+         {/* Backup & Restore Section */}
+         <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
+             <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
+             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:12}}>{t('backup_desc', lang)}</ThemedText>
+             <View style={{flexDirection:'row', gap:10}}>
+                 <Pressable onPress={handleBackup} style={[styles.btn, {flex:1, backgroundColor: '#007AFF', padding:12}]}>
+                     <Ionicons name="cloud-upload-outline" size={20} color="white" style={{marginBottom:4}}/>
+                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('backup_db', lang)}</ThemedText>
+                 </Pressable>
+                 <Pressable onPress={handleRestore} style={[styles.btn, {flex:1, backgroundColor: '#FF9500', padding:12}]}>
+                     <Ionicons name="cloud-download-outline" size={20} color="white" style={{marginBottom:4}}/>
+                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('restore_db', lang)}</ThemedText>
+                 </Pressable>
+             </View>
          </View>
 
          {/* Basic Info */}
@@ -264,7 +387,6 @@ export default function ProfileScreen() {
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
             </View>
 
-            {/* [新增] 目標完成日期 UI */}
             <View style={{marginBottom: 12}}>
                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('target_date', lang)}</ThemedText>
                 <Pressable onPress={()=>setShowTargetDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor, flexDirection:'row', justifyContent:'space-between'}]}>
