@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
@@ -12,8 +12,9 @@ import { db } from "@/lib/db";
 import { userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES } from "@/lib/i18n";
-
-// [修改] 僅定義 ID，文字在 Render 時透過 t() 取得
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { format } from "date-fns";
+// 僅定義 ID，文字在 Render 時透過 t() 取得
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
 
@@ -29,6 +30,9 @@ export default function ProfileScreen() {
   
   const [profileId, setProfileId] = useState<number | null>(null);
   const [gender, setGender] = useState<"male"|"female">("male");
+  const [birthDate, setBirthDate] = useState<Date>(new Date(1990, 0, 1)); // Default
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [heightCm, setHeightCm] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [bodyFat, setBodyFat] = useState("");
@@ -61,6 +65,7 @@ export default function ProfileScreen() {
           const p = result[0];
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
+          if (p.birthDate) setBirthDate(new Date(p.birthDate));
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
@@ -79,7 +84,7 @@ export default function ProfileScreen() {
   }, [isAuthenticated]);
 
   const handleTestKey = async () => {
-    if (!apiKey) return Alert.alert("請輸入 API Key");
+    if (!apiKey) return Alert.alert(t('error', lang), t('api_key_placeholder', lang));
     setTestingKey(true);
     const res = await validateApiKey(apiKey);
     setTestingKey(false);
@@ -99,8 +104,16 @@ export default function ProfileScreen() {
         await saveSettings({ apiKey, model: selectedModel, language: lang });
         const w = parseFloat(currentWeight) || 60;
         const h = parseInt(heightCm) || 170;
-        const age = 30; 
         
+        // Calculate Age for BMR
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        
+        // Mifflin-St Jeor Equation
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         const activityMap: Record<string, number> = {
             'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55,
@@ -112,16 +125,33 @@ export default function ProfileScreen() {
         if (trainingGoal === 'lose_weight') targetCal -= 500;
         else if (trainingGoal === 'gain_weight') targetCal += 300;
 
+        const profileData = {
+            gender, 
+            birthDate: format(birthDate, "yyyy-MM-dd"),
+            heightCm: h, 
+            currentWeightKg: w, 
+            currentBodyFat: parseFloat(bodyFat) || null,
+            targetWeightKg: parseFloat(targetWeight) || null, 
+            targetBodyFat: parseFloat(targetBodyFat) || null,
+            activityLevel, 
+            goal: trainingGoal, 
+            dailyCalorieTarget: Math.round(targetCal), 
+            updatedAt: new Date()
+        };
+
         if (profileId) {
-            await db.update(userProfiles).set({
-                gender, heightCm: h, currentWeightKg: w, currentBodyFat: parseFloat(bodyFat) || null,
-                targetWeightKg: parseFloat(targetWeight) || null, targetBodyFat: parseFloat(targetBodyFat) || null,
-                activityLevel, goal: trainingGoal, dailyCalorieTarget: Math.round(targetCal), updatedAt: new Date()
-            }).where(eq(userProfiles.id, profileId));
+            await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
+        } else {
+            await db.insert(userProfiles).values(profileData);
         }
         Alert.alert(t('save_settings', lang), t('success', lang));
     } catch (e) { Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
+  };
+//BirthDateChange
+  const onBirthDateChange = (event: any, selectedDate?: Date) => {
+      setShowDatePicker(false);
+      if (selectedDate) setBirthDate(selectedDate);
   };
 
   if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems: 'center'}]}><ActivityIndicator size="large"/></View>;
@@ -139,13 +169,14 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={{paddingHorizontal: 16}}>
+         {/* AI Settings */}
          <View style={[styles.card, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
             <View style={{marginTop:12}}>
-              <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>Gemini API Key</ThemedText>
-              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder={t('api_key_placeholder', lang)} placeholderTextColor="#999" />
+              <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
+              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
               <Pressable onPress={() => Linking.openURL('https://aistudio.google.com/app/apikey')}>
-                  <ThemedText style={{fontSize:11, color: tintColor, marginTop:6, textDecorationLine:'underline'}}>Get API Key from Google AI Studio</ThemedText>
+                  <ThemedText style={{fontSize:11, color: tintColor, marginTop:6, textDecorationLine:'underline'}}>{t('get_api_key', lang) || "Get API Key"}</ThemedText>
               </Pressable>
             </View>
             <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>
@@ -153,15 +184,18 @@ export default function ProfileScreen() {
             </Pressable>
             <View style={{marginTop:12}}>
                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable style={[styles.input, {justifyContent:'center', borderColor}]} onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert("Tip", "Test Key first")}>
+                <Pressable style={[styles.input, {justifyContent:'center', borderColor}]} onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert(t('tip', lang), t('test_key_first', lang) || "Test Key First")}>
                     <ThemedText style={{color:textColor}}>{selectedModel}</ThemedText>
                     <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
                 </Pressable>
             </View>
          </View>
 
+         {/* Basic Info */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
             <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
+            
+            {/* Gender & Birth Date */}
             <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
                <View style={{flex:1}}>
                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('gender', lang)}</ThemedText>
@@ -174,17 +208,29 @@ export default function ProfileScreen() {
                  </View>
                </View>
                <View style={{flex:1}}>
-                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('height', lang)} (cm)</ThemedText>
-                  <TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/>
+                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang) || "Birth Date"}</ThemedText>
+                  <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
+                      <ThemedText style={{color:textColor}}>{format(birthDate, 'yyyy-MM-dd')}</ThemedText>
+                  </Pressable>
+                  {showDatePicker && <DateTimePicker value={birthDate} mode="date" onChange={onBirthDateChange} maximumDate={new Date()} />}
                </View>
             </View>
+
+            {/* Height & Weight */}
             <View style={[styles.row, {marginBottom: 12}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)} (cm)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
             </View>
+             <View style={{marginBottom: 12}}>
+                <ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)} %</ThemedText>
+                <TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
+             </View>
+
+            {/* Targets */}
+            <ThemedText style={{fontSize:14, fontWeight:'bold', marginTop:8, marginBottom:8}}>{t('target_goals', lang) || "Target Goals"}</ThemedText>
             <View style={[styles.row, {marginBottom: 12}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)}</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
+               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
                <View style={{width:10}}/>
                <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
             </View>

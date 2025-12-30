@@ -6,6 +6,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name"),
   gender: text("gender"), // male, female, other
+  birthDate: text("birth_date"), // YYYY-MM-DD (新增)
   heightCm: real("height_cm"),
   currentWeightKg: real("current_weight_kg"),
   currentBodyFat: real("current_body_fat"),

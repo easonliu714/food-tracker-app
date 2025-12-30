@@ -8,31 +8,28 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { format, addDays, subDays } from "date-fns";
-import { zhTW, enUS, ja, ko, fr, ru } from "date-fns/locale"; // Import locales
+import { zhTW, enUS, ja, ko, fr, ru } from "date-fns/locale"; 
 import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-gifted-charts";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { t, useLanguage } from "@/lib/i18n"; // i18n hooks
+import { t, useLanguage } from "@/lib/i18n"; 
 
 import { db } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
-
-// Map language code to date-fns locale
 const LOCALE_MAP: any = { 'zh-TW': zhTW, 'en': enUS, 'ja': ja, 'ko': ko, 'fr': fr, 'ru': ru };
 
 export default function HomeScreen() {
@@ -45,8 +42,8 @@ export default function HomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Data
-  const [weight, setWeight] = useState("");
+  // Data State
+  const [weight, setWeight] = useState(""); 
   const [bodyFat, setBodyFat] = useState("");
   const [diffWeight, setDiffWeight] = useState<number | null>(null);
   const [diffFat, setDiffFat] = useState<number | null>(null);
@@ -67,11 +64,17 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     setIsLoading(true);
+    // [重要] 每次讀取新日期前，先清空 UI 顯示，避免誤導
+    setWeight("");
+    setBodyFat("");
+    setDiffWeight(null);
+    setDiffFat(null);
+
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
       const yesterdayStr = format(subDays(currentDate, 1), "yyyy-MM-dd");
 
-      // 1. Profile
+      // 1. Profile (取得目標值與最新設定)
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -84,28 +87,26 @@ export default function HomeScreen() {
         });
         setTargetWeight(p.targetWeightKg || 0);
         setTargetBodyFat(p.targetBodyFat || 0);
-        setWeight(p.currentWeightKg ? String(p.currentWeightKg) : "");
-        setBodyFat(p.currentBodyFat ? String(p.currentBodyFat) : "");
+        // [修正] 這裡不設定 currentWeight 到 weight state，避免切換日期時顯示到 Profile 的最新體重
       }
 
-      // 2. Metrics (Today & Yesterday for Comparison)
+      // 2. Metrics (比較今天與昨天)
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       const yestRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, yesterdayStr));
       
-      let curW = 0, curF = 0;
+      let curW = 0;
+      // [修正] 只有當日有紀錄時，才填入 weight/bodyFat state
       if (metricsRes.length > 0) {
         curW = metricsRes[0].weightKg || 0;
-        curF = metricsRes[0].bodyFatPercentage || 0;
-        setWeight(String(curW));
-        setBodyFat(String(curF));
-      }
-      
-      if (yestRes.length > 0 && curW > 0) {
-          setDiffWeight(parseFloat((curW - (yestRes[0].weightKg || 0)).toFixed(1)));
-          setDiffFat(parseFloat((curF - (yestRes[0].bodyFatPercentage || 0)).toFixed(1)));
-      } else {
-          setDiffWeight(null);
-          setDiffFat(null);
+        const curF = metricsRes[0].bodyFatPercentage || 0;
+        setWeight(curW > 0 ? String(curW) : "");
+        setBodyFat(curF > 0 ? String(curF) : "");
+        
+        // 只有今天有數值時，才計算差異
+        if (yestRes.length > 0 && curW > 0) {
+            setDiffWeight(parseFloat((curW - (yestRes[0].weightKg || 0)).toFixed(1)));
+            setDiffFat(parseFloat((curF - (yestRes[0].bodyFatPercentage || 0)).toFixed(1)));
+        }
       }
 
       // 3. Food Logs
@@ -132,12 +133,8 @@ export default function HomeScreen() {
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
 
-      // 5. Recent Foods (Simple Group By Count)
-      // Note: This is a simplified query as Drizzle explicit group by support varies. 
-      // Using raw SQL for robustness or processing in JS if dataset small.
-      // Here using simple limit on latest logs for "Quick Add"
+      // 5. Recent Foods
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
-      // Deduplicate by foodName in JS
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
       setRecentFoods(uniqueRecents);
 
@@ -147,7 +144,7 @@ export default function HomeScreen() {
   const handleSaveMetrics = async () => {
       const w = parseFloat(weight);
       const bf = parseFloat(bodyFat);
-      if (isNaN(w)) return Alert.alert(t('error', lang), "Invalid Weight");
+      if (isNaN(w)) return Alert.alert(t('error', lang), t('invalid_input', lang) || "Invalid Input");
       
       try {
           const dateStr = format(currentDate, "yyyy-MM-dd");
@@ -157,13 +154,13 @@ export default function HomeScreen() {
           } else {
               await db.insert(dailyMetrics).values({ date: dateStr, weightKg: w, bodyFatPercentage: isNaN(bf)?null:bf });
           }
-          // Also update profile current weight
+          // 同步更新 Profile
           const p = await db.select().from(userProfiles).limit(1);
           if(p.length > 0) {
               await db.update(userProfiles).set({ currentWeightKg: w, currentBodyFat: isNaN(bf)?null:bf }).where(eq(userProfiles.id, p[0].id));
           }
-          Alert.alert(t('success', lang), t('save', lang));
-          loadData(); // Reload to calc diff
+          Alert.alert(t('success', lang), t('save_success', lang));
+          loadData(); 
       } catch(e) { console.error(e); }
   };
 
@@ -210,12 +207,26 @@ export default function HomeScreen() {
       <View style={{flexDirection:'row', justifyContent:'space-between'}}>
         <View>
             <View style={{flexDirection:'row', alignItems:'center'}}>
-                <TextInput style={[styles.metricInput, {color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="0.0" keyboardType="numeric"/>
+                <TextInput 
+                    style={[styles.metricInput, {color:theme.text}]} 
+                    value={weight} 
+                    onChangeText={setWeight} 
+                    placeholder="--" // [修正] 顯示空值提示
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                />
                 <ThemedText>kg</ThemedText>
                 {renderDiffBadge(diffWeight, 'kg')}
             </View>
             <View style={{flexDirection:'row', alignItems:'center', marginTop:8}}>
-                <TextInput style={[styles.metricInput, {color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="0.0" keyboardType="numeric"/>
+                <TextInput 
+                    style={[styles.metricInput, {color:theme.text}]} 
+                    value={bodyFat} 
+                    onChangeText={setBodyFat} 
+                    placeholder="--" // [修正] 顯示空值提示
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                />
                 <ThemedText>%</ThemedText>
                 {renderDiffBadge(diffFat, '%')}
             </View>
@@ -274,8 +285,7 @@ export default function HomeScreen() {
           </View>
       );
   };
-
-  // [新增] 快速紀錄區塊
+  // 快速紀錄區塊
   const renderQuickAdd = () => (
       <View style={{paddingHorizontal: 16, marginTop: 20}}>
           <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_record', lang)}</ThemedText>
@@ -284,7 +294,7 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     key={idx} 
                     style={[styles.quickChip, {borderColor: theme.icon}]}
-                    // [修正] 傳遞 clone=true, 且傳 logId 讓 editor 讀取資料但不鎖定 ID
+					// 傳遞 clone=true, 且傳 logId 讓 editor 讀取資料但不鎖定 ID
                     onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id, clone: "true" } })} 
                   >
                       <ThemedText>{item.foodName}</ThemedText>

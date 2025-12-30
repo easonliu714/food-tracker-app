@@ -19,7 +19,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db";
 import { foodItems, foodLogs, userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { analyzeFoodImage } from "@/lib/gemini";
+import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini"; // [修正] Import analyzeFoodText
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -46,7 +46,7 @@ export default function FoodEditorScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
   const lang = useLanguage();
-
+  
   // State
   const [logId, setLogId] = useState<number | null>(null);
   const [recordDate, setRecordDate] = useState(new Date());
@@ -77,7 +77,7 @@ export default function FoodEditorScreen() {
 
   const isInitialized = useRef(false);
 
-  // [修正] 自動計算邏輯：當份數或單份重改變時，自動更新總重
+  // 自動計算邏輯：當份數或單份重改變時，自動更新總重
   useEffect(() => {
     if (inputMode === "serving") {
       const s = parseFloat(servings) || 0;
@@ -100,100 +100,84 @@ export default function FoodEditorScreen() {
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
-
     async function init() {
-      try {
-        if (params.logId) {
-          const id = parseInt(params.logId as string);
-          const isClone = params.clone === "true";
-
-          if (!isClone) setLogId(id);
-
-          const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
-          
-          if (logRes.length > 0) {
-            const log = logRes[0];
-            const targetDate = isClone ? new Date() : new Date(log.loggedAt);
-            setRecordDate(targetDate);
-            
-            if (isClone) {
-                updateCategoryByTime(targetDate);
-                setMealManuallyChanged(false);
+        try {
+            if (params.logId) {
+                // ... (Existing Logic)
+                const id = parseInt(params.logId as string);
+                const isClone = params.clone === "true";
+                if (!isClone) setLogId(id);
+                const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
+                if (logRes.length > 0) {
+                    const log = logRes[0];
+                    const targetDate = isClone ? new Date() : new Date(log.loggedAt);
+                    setRecordDate(targetDate);
+                    if (isClone) { updateCategoryByTime(targetDate); setMealManuallyChanged(false); }
+                    else { setSelectedMeal(log.mealTimeCategory); setMealManuallyChanged(true); }
+                    setFoodName(log.foodName);
+                    setInputMode(log.servingType as any || 'weight');
+                    setServings(String(log.servingAmount || "1"));
+                    setUnitWeight(String(log.unitWeightG || "100"));
+                    setTotalWeight(String(log.totalWeightG || "100"));
+                    setDbFoodId(log.foodItemId);
+                    if (log.imageUrl) setImageUri(log.imageUrl);
+                    if (log.foodItemId) {
+                        const itemRes = await db.select().from(foodItems).where(eq(foodItems.id, log.foodItemId));
+                        if (itemRes.length > 0) {
+                            const item = itemRes[0];
+                            const nutrients = mapDbToState(item);
+                            setBaseNutrients(nutrients);
+                            setInitialBaseNutrients(nutrients);
+                        }
+                    }
+                }
             } else {
-                setSelectedMeal(log.mealTimeCategory);
-                setMealManuallyChanged(true);
+                const now = new Date();
+                setRecordDate(now);
+                updateCategoryByTime(now);
+                if (params.barcode) {
+                    setBarcode(params.barcode as string);
+                    await loadFoodByBarcode(params.barcode as string);
+                } else if (params.imageUri) {
+                    setImageUri(params.imageUri as string);
+                    if (params.analyze === "true" && params.imageBase64) {
+                        performAiAnalysis(params.imageBase64 as string, 'image');
+                    }
+                }
             }
-            
-            setFoodName(log.foodName);
-            setInputMode(log.servingType as any || 'weight');
-            setServings(String(log.servingAmount || "1"));
-            setUnitWeight(String(log.unitWeightG || "100"));
-            setTotalWeight(String(log.totalWeightG || "100"));
-            setDbFoodId(log.foodItemId);
-            if (log.imageUrl) setImageUri(log.imageUrl);
-
-            if (log.foodItemId) {
-              const itemRes = await db.select().from(foodItems).where(eq(foodItems.id, log.foodItemId));
-              if (itemRes.length > 0) {
-                const item = itemRes[0];
-                const nutrients = mapDbToState(item);
-                setBaseNutrients(nutrients);
-                setInitialBaseNutrients(nutrients);
-              }
-            }
-          }
-        } else {
-          const now = new Date();
-          setRecordDate(now);
-          updateCategoryByTime(now);
-
-          if (params.barcode) {
-            setBarcode(params.barcode as string);
-            await loadFoodByBarcode(params.barcode as string);
-          } else if (params.imageUri) {
-             setImageUri(params.imageUri as string);
-             if (params.analyze === "true" && params.imageBase64) {
-                performAiAnalysis(params.imageBase64 as string);
-             }
-          }
-        }
-      } catch (e) {
-        console.error("Init Error:", e);
-      } finally {
-        setIsLoading(false);
-      }
+        } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }
     init();
   }, []);
-
   // Helper: DB 數值轉字串，確保無資料時為 "0"
   const safeStr = (val: any) => (val === null || val === undefined || isNaN(val)) ? "0" : String(val);
-
   const mapDbToState = (item: any) => ({
-      calories: safeStr(item.calories), 
-      protein: safeStr(item.proteinG), 
-      fat: safeStr(item.fatG),
-      saturatedFat: safeStr(item.saturatedFatG), 
-      transFat: safeStr(item.transFatG),
-      carbs: safeStr(item.carbsG), 
-      sugar: safeStr(item.sugarG), 
-      fiber: safeStr(item.fiberG),
-      sodium: safeStr(item.sodiumMg), 
-      cholesterol: safeStr(item.cholesterolMg),
-      magnesium: safeStr(item.magnesiumMg), 
-      zinc: safeStr(item.zincMg), 
-      iron: safeStr(item.ironMg)
+      calories: safeStr(item.calories), protein: safeStr(item.proteinG), fat: safeStr(item.fatG),
+      saturatedFat: safeStr(item.saturatedFatG), transFat: safeStr(item.transFatG),
+      carbs: safeStr(item.carbsG), sugar: safeStr(item.sugarG), fiber: safeStr(item.fiberG),
+      sodium: safeStr(item.sodiumMg), cholesterol: safeStr(item.cholesterolMg),
+      magnesium: safeStr(item.magnesiumMg), zinc: safeStr(item.zincMg), iron: safeStr(item.ironMg)
   });
 
-  const performAiAnalysis = async (base64: string) => {
+  // [修正] 通用 AI 分析 (Image or Text)
+  const performAiAnalysis = async (input: string, type: 'image' | 'text') => {
+      if (!input) return;
       setIsAnalyzing(true);
       try {
           const pRes = await db.select().from(userProfiles).limit(1);
           const profile = pRes[0] || {};
-          const result = await analyzeFoodImage(base64, lang, profile);
+          let result;
+          
+          if (type === 'image') {
+              result = await analyzeFoodImage(input, lang, profile);
+          } else {
+              result = await analyzeFoodText(input, lang, profile);
+          }
           
           if (result) {
-              setFoodName(result.foodName || t('ai_analysis', lang));
+              if (type === 'text') setFoodName(result.foodName || input);
+              else setFoodName(result.foodName || t('ai_analysis', lang));
+
               setBaseNutrients({
                   calories: safeStr(result.calories_100g),
                   protein: safeStr(result.protein_100g),
@@ -241,7 +225,6 @@ export default function FoodEditorScreen() {
         setRecordDate(newDate);
     }
   };
-
   const handleTimeChange = (event: any, selectedDate?: Date) => {
     setShowTimePicker(false);
     if (selectedDate) {
@@ -323,6 +306,7 @@ export default function FoodEditorScreen() {
     }
   };
 
+
   const saveToDb = async (forceNew: boolean) => {
       try {
         let currentFoodId = dbFoodId;
@@ -381,10 +365,7 @@ export default function FoodEditorScreen() {
         Alert.alert(t('save', lang), t('success', lang), [{ text: "OK", onPress: () => router.back() }]);
       } catch(e) { console.error(e); Alert.alert(t('error', lang), "Save Failed"); }
   };
-
-  const updateNutrient = (key: keyof typeof baseNutrients, val: string) => {
-      setBaseNutrients(prev => ({ ...prev, [key]: val }));
-  };
+  const updateNutrient = (key: keyof typeof baseNutrients, val: string) => { setBaseNutrients(prev => ({ ...prev, [key]: val })); };
 
   const NutrientRow = ({ label, val, k, update, isMain, unit='g' }: any) => (
     <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
@@ -446,11 +427,29 @@ export default function FoodEditorScreen() {
 
         <ThemedView style={styles.card}>
             <ThemedText type="defaultSemiBold" style={{marginBottom: 8}}>{t('food_name', lang)}</ThemedText>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon }]} value={foodName} onChangeText={setFoodName} placeholder={t('food_name_placeholder', lang)} placeholderTextColor={theme.icon} />
+            <View style={{flexDirection:'row', alignItems:'center'}}>
+                <TextInput 
+                    style={[styles.input, { color: theme.text, borderColor: theme.icon, flex: 1 }]} 
+                    value={foodName} 
+                    onChangeText={setFoodName} 
+                    placeholder={t('food_name_placeholder', lang)} 
+                    placeholderTextColor={theme.icon} 
+                />
+                {/* [修正] 新增 AI 估算按鈕 */}
+                <TouchableOpacity 
+                    onPress={() => performAiAnalysis(foodName, 'text')} 
+                    disabled={isAnalyzing || !foodName}
+                    style={{marginLeft: 8, padding: 8, backgroundColor: (isAnalyzing || !foodName)?'#ccc':theme.tint, borderRadius: 8}}
+                >
+                    {isAnalyzing ? <ActivityIndicator color="#FFF" size="small"/> : <Ionicons name="sparkles" size={20} color="#FFF" />}
+                </TouchableOpacity>
+            </View>
             {barcode && <View style={{flexDirection:'row', marginTop: 8}}><Ionicons name="barcode-outline" size={16} color={theme.icon} /><ThemedText style={{fontSize: 12, color: theme.icon}}>{t('barcode_scanned', lang)} {barcode}</ThemedText></View>}
         </ThemedView>
-
+        
+        {/* ... (Portion Inputs & Nutrient Rows 保持不變) */}
         <ThemedView style={styles.card}>
+            {/* Same Portion Input Code */}
             <View style={styles.rowBetween}>
                 <ThemedText type="defaultSemiBold">{t('portion', lang)}</ThemedText>
                 <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}>
