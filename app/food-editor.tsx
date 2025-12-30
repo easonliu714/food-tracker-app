@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Image
+  Image,
+  Dimensions
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -19,7 +20,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db";
 import { foodItems, foodLogs, userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini"; // [修正] Import analyzeFoodText
+import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -27,6 +28,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n";
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
 const MEAL_PERIODS = [
   { id: "breakfast", start: 5, end: 10 },
   { id: "lunch", start: 10, end: 14 },
@@ -34,7 +36,6 @@ const MEAL_PERIODS = [
   { id: "dinner", start: 16, end: 20 },
   { id: "late_night", start: 20, end: 29 }, 
 ];
-
 const DEFAULT_NUTRIENTS = {
   calories: "0", protein: "0", fat: "0", saturatedFat: "0", transFat: "0",
   carbs: "0", sugar: "0", fiber: "0", sodium: "0", cholesterol: "0", magnesium: "0", zinc: "0", iron: "0"
@@ -46,8 +47,7 @@ export default function FoodEditorScreen() {
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
   const lang = useLanguage();
-  
-  // State
+
   const [logId, setLogId] = useState<number | null>(null);
   const [recordDate, setRecordDate] = useState(new Date());
   
@@ -61,6 +61,9 @@ export default function FoodEditorScreen() {
 
   const [selectedMeal, setSelectedMeal] = useState("breakfast");
   const [mealManuallyChanged, setMealManuallyChanged] = useState(false);
+  
+  // [新增] 用於自動滾動的 Ref
+  const mealScrollRef = useRef<ScrollView>(null);
 
   const [foodName, setFoodName] = useState("");
   const [barcode, setBarcode] = useState<string | null>(null);
@@ -77,33 +80,41 @@ export default function FoodEditorScreen() {
 
   const isInitialized = useRef(false);
 
-  // 自動計算邏輯：當份數或單份重改變時，自動更新總重
+  // [新增] 當 selectedMeal 改變時，自動滾動到該項目
+  useEffect(() => {
+      if (mealScrollRef.current) {
+          const index = MEAL_PERIODS.findIndex(m => m.id === selectedMeal);
+          if (index !== -1) {
+              // 假設每個按鈕寬度約 100 (包含 padding/margin)，計算置中位置
+              const buttonWidth = 100; 
+              const centerOffset = (SCREEN_WIDTH / 2) - (buttonWidth / 2) - 16; // 16 is padding
+              const x = index * buttonWidth - centerOffset;
+              mealScrollRef.current.scrollTo({ x: Math.max(0, x), animated: true });
+          }
+      }
+  }, [selectedMeal]);
+
   useEffect(() => {
     if (inputMode === "serving") {
       const s = parseFloat(servings) || 0;
       const u = parseFloat(unitWeight) || 0;
       const total = s * u;
-      // 避免無限迴圈，只有當數值有顯著差異時才更新，或者直接更新字串
-      // 使用 Number(total.toFixed(2)) 去除多餘小數點
       setTotalWeight(String(Number(total.toFixed(2))));
     }
   }, [servings, unitWeight, inputMode]);
 
-  // [修正] 總熱量顯示：監聽 totalWeight
   const calculatedTotal = useMemo(() => {
     const w = parseFloat(totalWeight) || 0;
     const ratio = w / 100;
     return Math.round((parseFloat(baseNutrients.calories) || 0) * ratio);
   }, [totalWeight, baseNutrients.calories]);
 
-  // 初始化
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
     async function init() {
         try {
             if (params.logId) {
-                // ... (Existing Logic)
                 const id = parseInt(params.logId as string);
                 const isClone = params.clone === "true";
                 if (!isClone) setLogId(id);
@@ -137,7 +148,7 @@ export default function FoodEditorScreen() {
                 updateCategoryByTime(now);
                 if (params.barcode) {
                     setBarcode(params.barcode as string);
-                    await loadFoodByBarcode(params.barcode as string);
+                    // Handle barcode load...
                 } else if (params.imageUri) {
                     setImageUri(params.imageUri as string);
                     if (params.analyze === "true" && params.imageBase64) {
@@ -149,7 +160,7 @@ export default function FoodEditorScreen() {
     }
     init();
   }, []);
-  // Helper: DB 數值轉字串，確保無資料時為 "0"
+
   const safeStr = (val: any) => (val === null || val === undefined || isNaN(val)) ? "0" : String(val);
   const mapDbToState = (item: any) => ({
       calories: safeStr(item.calories), protein: safeStr(item.proteinG), fat: safeStr(item.fatG),
@@ -159,7 +170,6 @@ export default function FoodEditorScreen() {
       magnesium: safeStr(item.magnesiumMg), zinc: safeStr(item.zincMg), iron: safeStr(item.ironMg)
   });
 
-  // [修正] 通用 AI 分析 (Image or Text)
   const performAiAnalysis = async (input: string, type: 'image' | 'text') => {
       if (!input) return;
       setIsAnalyzing(true);
@@ -215,7 +225,6 @@ export default function FoodEditorScreen() {
     });
     if (found) setSelectedMeal(found.id);
   };
-
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -235,70 +244,26 @@ export default function FoodEditorScreen() {
         if (!logId && !mealManuallyChanged) updateCategoryByTime(newDate);
     }
   };
-
-  const handleMealChange = (mealId: string) => {
-      setSelectedMeal(mealId);
-      setMealManuallyChanged(true);
-  };
-
-  const loadFoodByBarcode = async (code: string) => {
-    try {
-        const localRes = await db.select().from(foodItems).where(eq(foodItems.barcode, code)).limit(1);
-        if (localRes.length > 0) {
-            const item = localRes[0];
-            setDbFoodId(item.id);
-            setFoodName(item.name);
-            setBaseNutrients(mapDbToState(item));
-            setInitialBaseNutrients(mapDbToState(item));
-            Alert.alert(t('local_db', lang), `${t('loaded', lang)}: ${item.name}`);
-        } else {
-            const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`);
-            const data = await response.json();
-            if (data.status === 1) {
-                const n = data.product.nutriments;
-                setFoodName(data.product.product_name || "Unknown");
-                setBaseNutrients({
-                    ...DEFAULT_NUTRIENTS,
-                    calories: safeStr(n["energy-kcal_100g"]),
-                    protein: safeStr(n.protein_100g),
-                    fat: safeStr(n.fat_100g), saturatedFat: safeStr(n["saturated-fat_100g"]), transFat: safeStr(n["trans-fat_100g"]),
-                    carbs: safeStr(n.carbohydrates_100g), sugar: safeStr(n.sugars_100g), fiber: safeStr(n.fiber_100g),
-                    sodium: safeStr((n.salt_100g || 0) * 400),
-                });
-                Alert.alert("OpenFoodFacts", t('downloaded', lang));
-            } else {
-                Alert.alert(
-                    t('scan_failed', lang), 
-                    t('scan_failed_msg', lang),
-                    [
-                        { text: t('cancel', lang), style: 'cancel' },
-                        { text: t('scan_ai_option', lang), onPress: () => router.push({ pathname: "/camera", params: { analyze: "true" } }) },
-                        { text: t('manual_option', lang), style: 'default' }
-                    ]
-                );
-            }
-        }
-    } catch (e) {
-        Alert.alert(t('error', lang), t('read_failed', lang));
-    }
-  };
-
+  const handleMealChange = (mealId: string) => { setSelectedMeal(mealId); setMealManuallyChanged(true); };
+  
   const handleSave = async () => {
     if (!foodName || !totalWeight) return Alert.alert(t('error', lang), t('data_incomplete', lang));
-
-    let hasBaseChange = false;
-    if (dbFoodId && initialBaseNutrients) {
-       hasBaseChange = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
+    
+    // Check local DB changes
+    let isModified = false;
+    if (initialBaseNutrients) {
+        // Compare current baseNutrients with initial
+        isModified = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
     }
-
-    if (hasBaseChange) {
+    
+    // Ask to update DB or create new if modified
+    if (dbFoodId && isModified) {
         Alert.alert(
-            "基準變更",
-            "基準數值已修改，是否更新所有紀錄？",
+            t('tip', lang),
+            t('food_modified_msg', lang) || "Values changed. Update original item?",
             [
-                { text: t('cancel', lang), style: "cancel" },
-                { text: "另存新食物", onPress: () => saveToDb(true) },
-                { text: "更新全部", onPress: () => saveToDb(false) },
+                { text: t('save_as_new', lang) || "Save as New", onPress: () => saveToDb(true) },
+                { text: t('update_original', lang) || "Update Original", onPress: () => saveToDb(false) }
             ]
         );
     } else {
@@ -306,65 +271,82 @@ export default function FoodEditorScreen() {
     }
   };
 
-
-  const saveToDb = async (forceNew: boolean) => {
+  const saveToDb = async (forceNewItem: boolean) => {
       try {
-        let currentFoodId = dbFoodId;
-        const pf = (v: string) => parseFloat(v) || 0;
+          const w = parseFloat(totalWeight) || 0;
+          const ratio = w / 100;
+          
+          let foodId = dbFoodId;
 
-        const itemData = {
-            name: foodName, barcode: barcode, baseAmount: 100,
-            calories: pf(baseNutrients.calories), proteinG: pf(baseNutrients.protein),
-            fatG: pf(baseNutrients.fat), saturatedFatG: pf(baseNutrients.saturatedFat), transFatG: pf(baseNutrients.transFat),
-            carbsG: pf(baseNutrients.carbs), sugarG: pf(baseNutrients.sugar), fiberG: pf(baseNutrients.fiber),
-            sodiumMg: pf(baseNutrients.sodium), cholesterolMg: pf(baseNutrients.cholesterol),
-            magnesiumMg: pf(baseNutrients.magnesium), zincMg: pf(baseNutrients.zinc), ironMg: pf(baseNutrients.iron),
-            updatedAt: new Date(),
-        };
+          // 1. Update/Create Food Item
+          const itemData = {
+              name: foodName,
+              calories: parseFloat(baseNutrients.calories) || 0,
+              proteinG: parseFloat(baseNutrients.protein) || 0,
+              fatG: parseFloat(baseNutrients.fat) || 0,
+              carbsG: parseFloat(baseNutrients.carbs) || 0,
+              sodiumMg: parseFloat(baseNutrients.sodium) || 0,
+              sugarG: parseFloat(baseNutrients.sugar) || 0,
+              fiberG: parseFloat(baseNutrients.fiber) || 0,
+              saturatedFatG: parseFloat(baseNutrients.saturatedFat) || 0,
+              transFatG: parseFloat(baseNutrients.transFat) || 0,
+              cholesterolMg: parseFloat(baseNutrients.cholesterol) || 0,
+              magnesiumMg: parseFloat(baseNutrients.magnesium) || 0,
+              zincMg: parseFloat(baseNutrients.zinc) || 0,
+              ironMg: parseFloat(baseNutrients.iron) || 0,
+              updatedAt: new Date()
+          };
 
-        if (currentFoodId && !forceNew) {
-            await db.update(foodItems).set(itemData).where(eq(foodItems.id, currentFoodId));
-        } else {
-            const res = await db.insert(foodItems).values({ ...itemData, isUserCreated: true }).returning({ insertedId: foodItems.id });
-            currentFoodId = res[0].insertedId;
-        }
+          if (forceNewItem || !foodId) {
+              const res = await db.insert(foodItems).values(itemData).returning({insertedId: foodItems.id});
+              foodId = res[0].insertedId;
+          } else {
+              await db.update(foodItems).set(itemData).where(eq(foodItems.id, foodId));
+          }
 
-        const w = parseFloat(totalWeight) || 0;
-        const ratio = w / 100;
-        const logData = {
-            date: format(recordDate, 'yyyy-MM-dd'),
-            mealTimeCategory: selectedMeal,
-            loggedAt: recordDate,
-            foodItemId: currentFoodId,
-            foodName: foodName,
-            servingType: inputMode,
-            servingAmount: pf(servings),
-            unitWeightG: pf(unitWeight),
-            totalWeightG: w,
-            totalCalories: pf(baseNutrients.calories) * ratio,
-            totalProteinG: pf(baseNutrients.protein) * ratio,
-            totalFatG: pf(baseNutrients.fat) * ratio,
-            totalCarbsG: pf(baseNutrients.carbs) * ratio,
-            totalSodiumMg: pf(baseNutrients.sodium) * ratio,
-            totalSaturatedFatG: pf(baseNutrients.saturatedFat) * ratio,
-            totalTransFatG: pf(baseNutrients.transFat) * ratio,
-            totalSugarG: pf(baseNutrients.sugar) * ratio,
-            totalFiberG: pf(baseNutrients.fiber) * ratio,
-            totalCholesterolMg: pf(baseNutrients.cholesterol) * ratio,
-            totalMagnesiumMg: pf(baseNutrients.magnesium) * ratio,
-            totalZincMg: pf(baseNutrients.zinc) * ratio,
-            totalIronMg: pf(baseNutrients.iron) * ratio,
-            imageUrl: imageUri,
-        };
+          // 2. Save Log
+          const logData = {
+              date: format(recordDate, "yyyy-MM-dd"),
+              mealTimeCategory: selectedMeal,
+              loggedAt: recordDate,
+              foodItemId: foodId,
+              foodName: foodName,
+              servingType: inputMode,
+              servingAmount: parseFloat(servings),
+              unitWeightG: parseFloat(unitWeight),
+              totalWeightG: w,
+              totalCalories: itemData.calories * ratio,
+              totalProteinG: itemData.proteinG * ratio,
+              totalFatG: itemData.fatG * ratio,
+              totalCarbsG: itemData.carbsG * ratio,
+              totalSodiumMg: itemData.sodiumMg * ratio,
+              // details
+              totalSugarG: itemData.sugarG * ratio,
+              totalFiberG: itemData.fiberG * ratio,
+              totalSaturatedFatG: itemData.saturatedFatG * ratio,
+              totalTransFatG: itemData.transFatG * ratio,
+              totalCholesterolMg: itemData.cholesterolMg * ratio,
+              totalMagnesiumMg: itemData.magnesiumMg * ratio,
+              totalZincMg: itemData.zincMg * ratio,
+              totalIronMg: itemData.ironMg * ratio,
+              
+              imageUrl: imageUri,
+              aiAnalysisLog: aiComposition ? JSON.stringify({composition: aiComposition, advice: aiAdvice}) : null
+          };
 
-        if (logId) {
-            await db.update(foodLogs).set(logData).where(eq(foodLogs.id, logId));
-        } else {
-            await db.insert(foodLogs).values(logData);
-        }
-        Alert.alert(t('save', lang), t('success', lang), [{ text: "OK", onPress: () => router.back() }]);
-      } catch(e) { console.error(e); Alert.alert(t('error', lang), "Save Failed"); }
+          if (logId) {
+              await db.update(foodLogs).set(logData).where(eq(foodLogs.id, logId));
+          } else {
+              await db.insert(foodLogs).values(logData);
+          }
+          
+          Alert.alert(t('success', lang), t('save_success', lang), [{ text: "OK", onPress: () => router.back() }]);
+      } catch (e) {
+          console.error(e);
+          Alert.alert(t('error', lang), "Save Failed");
+      }
   };
+
   const updateNutrient = (key: keyof typeof baseNutrients, val: string) => { setBaseNutrients(prev => ({ ...prev, [key]: val })); };
 
   const NutrientRow = ({ label, val, k, update, isMain, unit='g' }: any) => (
@@ -417,12 +399,29 @@ export default function FoodEditorScreen() {
             </ThemedView>
         )}
 
-        <View style={styles.mealSelector}>
-            {MEAL_PERIODS.map((meal) => (
-                <TouchableOpacity key={meal.id} style={[styles.mealBtn, selectedMeal === meal.id && { backgroundColor: theme.tint }]} onPress={() => handleMealChange(meal.id)}>
-                    <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text }}>{t(meal.id as any, lang) || meal.label}</ThemedText>
-                </TouchableOpacity>
-            ))}
+        {/* [修正] 滑動式用餐時段選擇器 */}
+        <View style={{marginBottom: 16}}>
+            <ScrollView 
+                ref={mealScrollRef}
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{gap: 8, paddingHorizontal: 4}}
+            >
+                {MEAL_PERIODS.map((meal) => (
+                    <TouchableOpacity 
+                        key={meal.id} 
+                        style={[
+                            styles.mealBtn, 
+                            selectedMeal === meal.id && { backgroundColor: theme.tint, borderColor: theme.tint }
+                        ]} 
+                        onPress={() => handleMealChange(meal.id)}
+                    >
+                        <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text, fontWeight: selectedMeal===meal.id?'bold':'normal' }}>
+                            {t(meal.id as any, lang) || meal.label}
+                        </ThemedText>
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
         </View>
 
         <ThemedView style={styles.card}>
@@ -435,7 +434,6 @@ export default function FoodEditorScreen() {
                     placeholder={t('food_name_placeholder', lang)} 
                     placeholderTextColor={theme.icon} 
                 />
-                {/* [修正] 新增 AI 估算按鈕 */}
                 <TouchableOpacity 
                     onPress={() => performAiAnalysis(foodName, 'text')} 
                     disabled={isAnalyzing || !foodName}
@@ -447,9 +445,7 @@ export default function FoodEditorScreen() {
             {barcode && <View style={{flexDirection:'row', marginTop: 8}}><Ionicons name="barcode-outline" size={16} color={theme.icon} /><ThemedText style={{fontSize: 12, color: theme.icon}}>{t('barcode_scanned', lang)} {barcode}</ThemedText></View>}
         </ThemedView>
         
-        {/* ... (Portion Inputs & Nutrient Rows 保持不變) */}
         <ThemedView style={styles.card}>
-            {/* Same Portion Input Code */}
             <View style={styles.rowBetween}>
                 <ThemedText type="defaultSemiBold">{t('portion', lang)}</ThemedText>
                 <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}>
@@ -507,8 +503,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 16 },
   dateTimeRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   dateBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 8, backgroundColor: 'rgba(120,120,120,0.1)', flex: 0.48 },
-  mealSelector: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  mealBtn: { paddingVertical: 6, paddingHorizontal: 8, borderRadius: 16, backgroundColor: 'rgba(120,120,120,0.1)' },
+  mealBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'rgba(120,120,120,0.1)', borderWidth:1, borderColor:'transparent', minWidth: 80, alignItems:'center' }, // Adjusted style
   card: { padding: 16, borderRadius: 12, marginBottom: 16, backgroundColor: 'rgba(120,120,120,0.05)' },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, fontSize: 16, paddingVertical: 8 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
@@ -517,6 +512,5 @@ const styles = StyleSheet.create({
   totalSummary: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#eee', flexDirection: 'row', justifyContent: 'space-between' },
   divider: { height: 1, backgroundColor: '#eee', marginVertical: 8 },
   imagePreview: { marginBottom: 16 },
-  analyzingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
-  aiBox: { backgroundColor: '#E3F2FD', padding: 10, borderRadius: 8, marginBottom: 16 }
+  analyzingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 }
 });

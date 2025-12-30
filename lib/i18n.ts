@@ -26,7 +26,7 @@ export const TRANSLATIONS = {
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動",
     
     // Actions
-    camera: "相機拍照", gallery: "讀取圖庫", scan_barcode: "掃碼", manual_input: "手輸", 
+    camera: "拍照", gallery: "圖庫", scan_barcode: "掃碼", manual_input: "手輸", 
     scan_hint: "請將條碼對準框內",
     
     // Meals
@@ -80,7 +80,7 @@ export const TRANSLATIONS = {
     val_per_100g: "每100克含量", 
     
     // Activity Editor
-    record_activity: "紀錄運動", select_activity: "選擇運動", custom_activity: "自訂運動", input_activity_name: "輸入運動名稱",
+    record_activity: "紀錄運動", select_activity: "選擇運動", custom_activity: "自訂運動", input_activity_name: "輸入運動名稱", edit_activity: "編輯運動",
     activity_intensity: "運動強度", activity_details: "詳細數據", time_min: "時間 (分鐘)", distance_km: "距離 (km)", steps: "步數",
     floors: "樓層", est_calories: "預估消耗熱量", feeling_notes: "運動感受 & 筆記", enter_notes: "輸入筆記...",
     data_incomplete: "資料不完整", data_incomplete_msg: "請選擇運動項目，並至少輸入一項數據",
@@ -152,7 +152,7 @@ export const TRANSLATIONS = {
     switch_to_weight: "Switch to Total", switch_to_serving: "Switch to Servings",
     val_per_100g: "Per 100g",
 
-    record_activity: "Record Activity", select_activity: "Select Activity", custom_activity: "Custom", input_activity_name: "Enter Activity Name",
+    record_activity: "Record Activity", select_activity: "Select Activity", custom_activity: "Custom", input_activity_name: "Enter Activity Name", edit_activity: "Edit Activity",
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
     floors: "Floors", est_calories: "Est. Calories", feeling_notes: "Notes & Feeling", enter_notes: "Enter notes...",
     data_incomplete: "Incomplete Data", data_incomplete_msg: "Please select activity and enter at least one value.",

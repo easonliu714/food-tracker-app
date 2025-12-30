@@ -87,7 +87,6 @@ export default function HomeScreen() {
         });
         setTargetWeight(p.targetWeightKg || 0);
         setTargetBodyFat(p.targetBodyFat || 0);
-        // [修正] 這裡不設定 currentWeight 到 weight state，避免切換日期時顯示到 Profile 的最新體重
       }
 
       // 2. Metrics (比較今天與昨天)
@@ -95,7 +94,6 @@ export default function HomeScreen() {
       const yestRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, yesterdayStr));
       
       let curW = 0;
-      // [修正] 只有當日有紀錄時，才填入 weight/bodyFat state
       if (metricsRes.length > 0) {
         curW = metricsRes[0].weightKg || 0;
         const curF = metricsRes[0].bodyFatPercentage || 0;
@@ -285,7 +283,7 @@ export default function HomeScreen() {
           </View>
       );
   };
-  // 快速紀錄區塊
+
   const renderQuickAdd = () => (
       <View style={{paddingHorizontal: 16, marginTop: 20}}>
           <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_record', lang)}</ThemedText>
@@ -294,7 +292,6 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     key={idx} 
                     style={[styles.quickChip, {borderColor: theme.icon}]}
-					// 傳遞 clone=true, 且傳 logId 讓 editor 讀取資料但不鎖定 ID
                     onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id, clone: "true" } })} 
                   >
                       <ThemedText>{item.foodName}</ThemedText>
@@ -345,14 +342,18 @@ export default function HomeScreen() {
                     );
                 })}
             </View>
-            {/* Workout Section */}
             <View style={[styles.mealGroup, {marginTop: 20}]}>
                 <View style={styles.mealHeader}>
                     <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
                     <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
                 </View>
                 {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (
-                    <Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={styles.deleteAction} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}>
+                    // [修正] 增加左滑編輯 (renderLeftActions)
+                    <Swipeable 
+                        key={act.id} 
+                        renderRightActions={()=><TouchableOpacity style={styles.deleteAction} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}
+                        renderLeftActions={()=><TouchableOpacity style={styles.editAction} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}
+                    >
                         <View style={[styles.logItem, {backgroundColor: theme.background}]}>
                             <View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View>
                             <ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText>

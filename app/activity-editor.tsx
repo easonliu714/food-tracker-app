@@ -10,13 +10,13 @@ import {
   FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db"; 
 import { activityLogs, userProfiles } from "@/drizzle/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -77,17 +77,19 @@ const FEELING_EMOJIS = ["😫", "😓", "😐", "🙂", "🤩", "💪"];
 
 export default function ActivityEditorScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
   const lang = useLanguage();
 
+  const [logId, setLogId] = useState<number | null>(null);
   const [recordDate, setRecordDate] = useState(new Date());
   const [recordTime, setRecordTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  const [category, setCategory] = useState<any>(null);
-  const [activity, setActivity] = useState<any>(null);
+  const [category, setCategory] = useState<ActivityCategory | null>(null);
+  const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [showSelector, setShowSelector] = useState(false);
   const [customActivityName, setCustomActivityName] = useState("");
 
@@ -101,6 +103,7 @@ export default function ActivityEditorScreen() {
   const [feeling, setFeeling] = useState("🙂");
   const [userWeight, setUserWeight] = useState(70);
 
+  // 1. 載入用戶體重
   useEffect(() => {
     async function loadUserProfile() {
       try {
@@ -112,6 +115,64 @@ export default function ActivityEditorScreen() {
     }
     loadUserProfile();
   }, []);
+
+  // 2. 載入現有紀錄 (編輯模式)
+  useEffect(() => {
+      async function loadLog() {
+          if (params.logId) {
+              const id = parseInt(params.logId as string);
+              setLogId(id);
+              try {
+                  const res = await db.select().from(activityLogs).where(eq(activityLogs.id, id));
+                  if (res.length > 0) {
+                      const log = res[0];
+                      setRecordDate(new Date(log.date));
+                      setRecordTime(new Date(log.loggedAt));
+                      
+                      setDuration(log.durationMinutes?.toString() || "");
+                      setDistance(log.distanceKm?.toString() || "");
+                      setSteps(log.steps?.toString() || "");
+                      setFloors(log.floors?.toString() || "");
+                      setDetails(log.notes || "");
+                      setFeeling(log.feeling || "🙂");
+                      if(log.intensity) setIntensity(log.intensity as any);
+
+                      // 嘗試回填類別與活動
+                      // 策略：比對翻譯後的名稱，若比對不到則歸類為自訂
+                      let found = false;
+                      const logCatName = log.category;
+                      const logActName = log.activityName;
+
+                      for (const cat of ACTIVITY_RAW) {
+                          // 比對類別名稱 (翻譯後)
+                          if (t(cat.id, lang) === logCatName || (cat.id === 'cat_custom' && logCatName === t('cat_custom', lang))) {
+                              if (cat.items.length > 0) {
+                                  const act = cat.items.find(item => t(item.id, lang) === logActName);
+                                  if (act) {
+                                      setCategory(cat);
+                                      setActivity(act);
+                                      found = true;
+                                  }
+                              }
+                              break;
+                          }
+                      }
+
+                      if (!found) {
+                          // 若找不到對應的預設活動，則設為自訂
+                          const customCat = ACTIVITY_RAW.find(c => c.id === 'cat_custom');
+                          setCategory(customCat || null);
+                          setCustomActivityName(logActName);
+                          setActivity(null);
+                      }
+                  }
+              } catch (e) {
+                  console.error("Load log failed:", e);
+              }
+          }
+      }
+      loadLog();
+  }, [params.logId]);
 
   const calculatedCalories = useMemo(() => {
     const timeMins = parseFloat(duration);
@@ -145,11 +206,9 @@ export default function ActivityEditorScreen() {
       logDate.setHours(recordTime.getHours());
       logDate.setMinutes(recordTime.getMinutes());
 
-      // 儲存時，名稱直接存當下翻譯好的，或者存 ID
-      // 這裡示範存 "名稱 (ID)" 或直接存顯示名稱
       const finalName = category?.id === 'cat_custom' ? customActivityName : t(activity.id, lang);
 
-      await db.insert(activityLogs).values({
+      const logData = {
         date: format(logDate, 'yyyy-MM-dd'),
         loggedAt: logDate,
         category: t(category?.id, lang),
@@ -162,7 +221,13 @@ export default function ActivityEditorScreen() {
         caloriesBurned: calculatedCalories,
         feeling: feeling,
         notes: details,
-      });
+      };
+
+      if (logId) {
+          await db.update(activityLogs).set(logData).where(eq(activityLogs.id, logId));
+      } else {
+          await db.insert(activityLogs).values(logData);
+      }
 
       Alert.alert(t('success', lang), "OK", [{ text: "OK", onPress: () => router.back() }]);
     } catch (e) {
@@ -239,7 +304,7 @@ export default function ActivityEditorScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color={theme.text} /></TouchableOpacity>
-        <ThemedText type="subtitle">{t('record_activity', lang)}</ThemedText>
+        <ThemedText type="subtitle">{logId ? t('edit_activity', lang) : t('record_activity', lang)}</ThemedText>
         <TouchableOpacity onPress={handleSave}><Ionicons name="save" size={28} color={theme.tint} /></TouchableOpacity>
       </View>
 
