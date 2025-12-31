@@ -47,7 +47,7 @@ export const TRANSLATIONS = {
     
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", 
-    scan_hint: "請將條碼對準框內",
+    scan_hint: "請將條碼對準框內",allow: "允許",
     
     // Meals
     breakfast: "早餐", lunch: "午餐", dinner: "晚餐", afternoon_tea: "下午茶", late_night: "宵夜", snack: "點心", no_records: "尚無紀錄",
@@ -65,7 +65,7 @@ export const TRANSLATIONS = {
     axis_l: "(左)", axis_r: "(右)",
 
     // Profile & AI
-    ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女", prifile: "個人資料",
+    profile: "個人資料", ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女",
     birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", 
@@ -87,7 +87,9 @@ export const TRANSLATIONS = {
     ai_coach: "AI 教練", ai_hello: "嗨! 我是你的營養師暨訓練員.", remaining_budget: "今日剩餘熱量", generate_plan: "生成計畫",
     recipe_suggestion: "食譜建議", workout_suggestion: "運動建議", ask_ai: "詢問 AI...",
     ask_recipe: "今天有什麼建議菜單？", ask_workout: "今天有什麼建議的訓練？",
-    follow_up_1: "這餐適合運動後吃嗎？", follow_up_2: "如何調整更健康？", follow_up_3: "推薦的搭配飲料？",
+    follow_up_1: "提供接下來幾個正餐的建議", 
+    follow_up_2: "指出3個做得不錯的地方",
+    follow_up_3: "指出3個需要優先調整的問題點",
     
     // Food Editor
     ai_analysis: "AI 分析", analyzing: "AI 分析中...", composition: "食物組成", suggestion: "攝取建議",
@@ -101,6 +103,11 @@ export const TRANSLATIONS = {
     switch_to_weight: "切換為總重輸入", switch_to_serving: "切換為份數輸入",
     val_per_100g: "每100克含量", data_incomplete: "資料不完整", food_modified_msg: "數值已變更，要更新原始項目還是另存新檔？",
     save_as_new: "另存新檔", update_original: "更新原始項目",
+
+    //app/barcode-product.tsx
+    product_not_found: "查無此商品", product_not_found_msg: "您可以選擇以下方式：", unknown_product: "未知商品",
+    product_info: "商品資訊", product_name: "商品名稱", input_serving: "輸入份量", input_gram: "輸入克數",
+    serving_unit: "份量" , barcode: "條碼",
 
     // Activity Editor
     record_activity: "紀錄運動", select_activity: "選擇運動", custom_activity: "自訂運動", input_activity_name: "輸入運動名稱",
@@ -145,7 +152,7 @@ export const TRANSLATIONS = {
     quick_record: "Quick Add", no_recent_foods: "No recent records", exercise: "Exercise",
     
     camera: "Camera", scan_barcode: "Scan Code", manual_input: "Manual", 
-    scan_hint: "Align barcode within frame",
+    scan_hint: "Align barcode within frame",allow: "Allow",
     
     breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", afternoon_tea: "Afternoon Tea", late_night: "Late Night", snack: "Snack", no_records: "No records",
     
@@ -159,7 +166,7 @@ export const TRANSLATIONS = {
     week: "7 Days", month: "30 Days", avg_daily: "Daily Avg",
     axis_l: "(L)", axis_r: "(R)",
     
-    ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female", prifile: "Profile",
+    profile: "Profile", ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female",
     birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
     target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
     api_key_placeholder: "Paste API Key", get_api_key: "Get API Key", how_to_get_key:"How to obtain the API Key？", test_key: "Test Key", test_key_first: "Test Key First", current_model: "Model", language: "Language", version_history: "Version History",
@@ -181,7 +188,9 @@ export const TRANSLATIONS = {
     ai_coach: "AI Coach", ai_hello: "Hi! I am your AI Coach.", remaining_budget: "Remaining", generate_plan: "Generate Plan",
     recipe_suggestion: "Recipe Suggestion", workout_suggestion: "Workout Suggestion", ask_ai: "Ask AI...",
     ask_recipe: "Suggest a meal plan?", ask_workout: "Suggest a workout?",
-    follow_up_1: "Good for post-workout?", follow_up_2: "How to make it healthier?", follow_up_3: "Best drink pairing?",
+    follow_up_1: "Provide suggestions for the next few main meals.",
+    follow_up_2: "Point out 3 things done well.",
+    follow_up_3: "Point out 3 issues that need priority adjustment.",
     
     ai_analysis: "AI Analysis", analyzing: "Analyzing...", composition: "Composition", suggestion: "Suggestion",
     food_name_placeholder: "Enter name", barcode_scanned: "Barcode: ",
@@ -195,6 +204,12 @@ export const TRANSLATIONS = {
     val_per_100g: "Per 100g", data_incomplete: "Incomplete Data", food_modified_msg: "Values changed. Update original item?",
     save_as_new: "Save as New", update_original: "Update Original",
 
+    //app/barcode-product.tsx
+    product_not_found: "Product Not Found", product_not_found_msg: "You can choose:", unknown_product: "Unknown Product",
+    product_info: "Product Info", product_name: "Product Name", input_serving: "Input Serving", input_gram: "Input Gram",
+    serving_unit: "Serving Unit" , barcode: "Barcode",
+
+    // Activity Editor
     record_activity: "Record Activity", select_activity: "Select Activity", custom_activity: "Custom", input_activity_name: "Enter Activity Name",
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
     floors: "Floors", est_calories: "Est. Calories", feeling_notes: "Notes & Feeling", enter_notes: "Enter notes...",
@@ -237,7 +252,7 @@ export const TRANSLATIONS = {
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動",
     
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", 
-    scan_hint: "バーコードを枠に合わせてください",
+    scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
     
     breakfast: "朝食", lunch: "昼食", dinner: "夕食", afternoon_tea: "間食", late_night: "夜食", snack: "スナック", no_records: "記録なし",
     
@@ -251,7 +266,7 @@ export const TRANSLATIONS = {
     week: "7日間", month: "30日間", avg_daily: "日平均",
     axis_l: "(左)", axis_r: "(右)",
 
-    ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性", prifile: "プロフィール",
+    profile: "プロフィール", ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性",
     birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
     target_goals: "目標設定", training_goal: "トレーニング目標", activity_level: "活動レベル", save_settings: "設定を保存",
     api_key_placeholder: "API Keyを入力", how_to_get_key:"API Keyはどうやって取得しますか？",
@@ -268,8 +283,11 @@ export const TRANSLATIONS = {
     ai_coach: "AIコーチ", ai_hello: "こんにちは！AI栄養トレーナーです。", remaining_budget: "残りのカロリー", generate_plan: "プラン作成",
     recipe_suggestion: "レシピ提案", workout_suggestion: "運動提案", ask_ai: "AIに質問...",
     ask_recipe: "おすすめのメニューは？", ask_workout: "おすすめの運動は？",
-    follow_up_1: "運動後に適していますか？", follow_up_2: "より健康的にするには？", follow_up_3: "おすすめの飲み物は？",
+    follow_up_1: "次の数回の食事の提案をしてください。",
+    follow_up_2: "うまくいっている点を3つ挙げてください。",
+    follow_up_3: "優先的に改善すべき点を3つ挙げてください。",
     
+    // Food Editor
     ai_analysis: "AI分析", analyzing: "分析中...", composition: "成分", suggestion: "アドバイス",
     food_name_placeholder: "食品名またはスキャン", barcode_scanned: "バーコード: ",
     local_db: "ローカルDB", loaded: "ロード済み", downloaded: "情報取得済み", read_failed: "読み込み失敗",
@@ -282,6 +300,12 @@ export const TRANSLATIONS = {
     val_per_100g: "100gあたり", data_incomplete: "データ不完全", food_modified_msg: "値が変更されました。更新しますか？",
     save_as_new: "新規保存", update_original: "上書き更新",
 
+    //app/barcode-product.tsx
+    product_not_found: "商品が見つかりません", product_not_found_msg: "以下の方法を選択できます:", unknown_product: "不明な商品",
+    product_info: "商品情報", product_name: "商品名", input_serving: "分量を入力", input_gram: "グラムを入力",
+    serving_unit: "分量単位" , barcode: "バーコード",
+
+    // Activity Editor
     record_activity: "運動を記録", select_activity: "運動を選択", custom_activity: "カスタム", input_activity_name: "運動名を入力",
     activity_intensity: "強度", activity_details: "詳細", time_min: "時間 (分)", distance_km: "距離 (km)", steps: "歩数",
     floors: "階数", est_calories: "推定消費カロリー", feeling_notes: "メモ & 感想", enter_notes: "メモを入力...",
@@ -322,7 +346,7 @@ export const TRANSLATIONS = {
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동",
     
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력", 
-    scan_hint: "바코드를 사각형 안에 맞추세요",
+    scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
     
     breakfast: "아침", lunch: "점심", dinner: "저녁", afternoon_tea: "간식", late_night: "야식", snack: "스낵", no_records: "기록 없음",
     
@@ -336,7 +360,7 @@ export const TRANSLATIONS = {
     week: "7일", month: "30일", avg_daily: "일평균",
     axis_l: "(좌)", axis_r: "(우)",
 
-    ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성", prifile: "프로필",
+    profile: "프로필", ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성",
     birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",
     target_goals: "목표 설정", training_goal: "훈련 목표", activity_level: "활동 수준", save_settings: "설정 저장",
     api_key_placeholder: "API Key 입력", how_to_get_key:"API Key는 어떻게 얻나요?",
@@ -353,8 +377,11 @@ export const TRANSLATIONS = {
     ai_coach: "AI 코치", ai_hello: "안녕하세요! AI 영양 코치입니다.", remaining_budget: "남은 칼로리", generate_plan: "계획 생성",
     recipe_suggestion: "식단 추천", workout_suggestion: "운동 추천", ask_ai: "AI에게 질문...",
     ask_recipe: "추천 메뉴가 있나요?", ask_workout: "추천 운동이 있나요?",
-    follow_up_1: "운동 후에 먹어도 되나요?", follow_up_2: "더 건강하게 먹으려면?", follow_up_3: "어울리는 음료는?",
+    follow_up_1: "다음 몇 끼 식사에 대한 제안을 제공하세요.",
+    follow_up_2: "잘하고 있는 점 3가지를 지적하세요.",
+    follow_up_3: "우선적으로 조정해야 할 문제점 3가지를 지적하세요.",
     
+    // Food Editor
     ai_analysis: "AI 분석", analyzing: "분석 중...", composition: "성분", suggestion: "조언",
     food_name_placeholder: "음식명 또는 바코드", barcode_scanned: "바코드: ",
     local_db: "로컬 DB", loaded: "로드됨", downloaded: "다운로드됨", read_failed: "읽기 실패",
@@ -367,6 +394,12 @@ export const TRANSLATIONS = {
     val_per_100g: "100g 당", data_incomplete: "데이터 불충분", food_modified_msg: "값이 변경되었습니다. 원본을 업데이트할까요?",
     save_as_new: "새로 저장", update_original: "원본 업데이트",
 
+    //app/barcode-product.tsx
+    product_not_found: "상품을 찾을 수 없습니다", product_not_found_msg: "다음 옵션 중 선택할 수 있습니다:", unknown_product: "알 수 없는 상품",
+    product_info: "상품 정보", product_name: "상품명", input_serving: "분량 입력", input_gram: "그램 입력",
+    serving_unit: "분량 단위" , barcode: "바코드",
+
+    // Activity Editor
     record_activity: "운동 기록", select_activity: "운동 선택", custom_activity: "직접 입력", input_activity_name: "운동명 입력",
     activity_intensity: "강도", activity_details: "상세 정보", time_min: "시간 (분)", distance_km: "거리 (km)", steps: "걸음 수",
     floors: "층", est_calories: "예상 칼로리", feeling_notes: "메모 & 느낌", enter_notes: "메모 입력...",

@@ -1,3 +1,4 @@
+// [START OF FILE app/(tabs)/index.tsx]
 import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
@@ -8,6 +9,8 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Modal,
+  Pressable
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -42,7 +45,6 @@ export default function HomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Data State
   const [weight, setWeight] = useState(""); 
   const [bodyFat, setBodyFat] = useState("");
   const [diffWeight, setDiffWeight] = useState<number | null>(null);
@@ -55,8 +57,12 @@ export default function HomeScreen() {
   const [intake, setIntake] = useState({ calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 });
   const [burnedCalories, setBurnedCalories] = useState(0);
   const [dailyLogs, setDailyLogs] = useState<Record<string, any[]>>({});
+  const [allDailyLogs, setAllDailyLogs] = useState<any[]>([]); // 新增：保存所有紀錄以便分析
   const [dailyActivities, setDailyActivities] = useState<any[]>([]);
   const [recentFoods, setRecentFoods] = useState<any[]>([]);
+
+  // [新增] 圓餅圖分析 Modal 狀態
+  const [selectedMacro, setSelectedMacro] = useState<{label: string, key: string, unit: string} | null>(null);
 
   useFocusEffect(
     useCallback(() => { loadData(); }, [currentDate])
@@ -73,7 +79,6 @@ export default function HomeScreen() {
       const dateStr = format(currentDate, "yyyy-MM-dd");
       const yesterdayStr = format(subDays(currentDate, 1), "yyyy-MM-dd");
 
-      // 1. Profile
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -88,7 +93,6 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
-      // 2. Metrics
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       const yestRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, yesterdayStr));
       
@@ -105,8 +109,9 @@ export default function HomeScreen() {
         }
       }
 
-      // 3. Food Logs
       const logsRes = await db.select().from(foodLogs).where(eq(foodLogs.date, dateStr));
+      setAllDailyLogs(logsRes); // 保存原始陣列
+
       const newIntake = { calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 };
       const groupedLogs: Record<string, any[]> = {};
       MEAL_ORDER.forEach(m => groupedLogs[m] = []);
@@ -123,13 +128,11 @@ export default function HomeScreen() {
       setIntake(newIntake);
       setDailyLogs(groupedLogs);
 
-      // 4. Activity Logs
       const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
 
-      // 5. Recent Foods
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
       setRecentFoods(uniqueRecents);
@@ -202,26 +205,12 @@ export default function HomeScreen() {
       <View style={{flexDirection:'row', justifyContent:'space-between'}}>
         <View>
             <View style={{flexDirection:'row', alignItems:'center'}}>
-                <TextInput 
-                    style={[styles.metricInput, {color:theme.text}]} 
-                    value={weight} 
-                    onChangeText={setWeight} 
-                    placeholder="--" 
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
-                />
+                <TextInput style={[styles.metricInput, {color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
                 <ThemedText>kg</ThemedText>
                 {renderDiffBadge(diffWeight, 'kg')}
             </View>
             <View style={{flexDirection:'row', alignItems:'center', marginTop:8}}>
-                <TextInput 
-                    style={[styles.metricInput, {color:theme.text}]} 
-                    value={bodyFat} 
-                    onChangeText={setBodyFat} 
-                    placeholder="--" 
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
-                />
+                <TextInput style={[styles.metricInput, {color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
                 <ThemedText>%</ThemedText>
                 {renderDiffBadge(diffFat, '%')}
             </View>
@@ -260,36 +249,99 @@ export default function HomeScreen() {
             </View>
         </View>
         <View style={{flexDirection:'row', justifyContent:'space-between'}}>
-            {renderMacroRing(t('protein', lang), intake.protein, targets.protein, "#FF3B30")}
-            {renderMacroRing(t('fat', lang), intake.fat, targets.fat, "#FFcc00")}
-            {renderMacroRing(t('carbs', lang), intake.carbs, targets.carbs, "#5856D6")}
-            {renderMacroRing(t('sodium', lang), intake.sodium, targets.sodium, "#AF52DE", "mg")}
+            {renderMacroRing(t('protein', lang), intake.protein, targets.protein, "#FF3B30", "protein")}
+            {renderMacroRing(t('fat', lang), intake.fat, targets.fat, "#FFcc00", "fat")}
+            {renderMacroRing(t('carbs', lang), intake.carbs, targets.carbs, "#5856D6", "carbs")}
+            {renderMacroRing(t('sodium', lang), intake.sodium, targets.sodium, "#AF52DE", "sodium", "mg")}
         </View>
       </View>
     );
   };
 
-  // [修正] 圓餅圖現在顯示真實百分比 (可能超過100%)，但圖形上限鎖定 100
-  const renderMacroRing = (label:string, val:number, target:number, color:string, unit="g") => {
-      const realPct = target > 0 ? (val/target)*100 : 0; // 真實百分比
-      const visualPct = Math.min(realPct, 100); // 視覺上限 100
+  // [修改] 增加點擊事件，傳遞 key 給 Modal
+  const renderMacroRing = (label:string, val:number, target:number, color:string, key: string, unit="g") => {
+      const realPct = target > 0 ? (val/target)*100 : 0; 
+      const visualPct = Math.min(realPct, 100); 
       
       const data = [{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}];
       
       return (
-          <View style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
-              <PieChart 
-                data={data} 
-                donut 
-                radius={32} 
-                innerRadius={24} 
-                centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}
-              />
+          <TouchableOpacity 
+             onPress={() => setSelectedMacro({label, key, unit})}
+             style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}
+          >
+              <View pointerEvents="none">
+                  <PieChart 
+                    data={data} 
+                    donut 
+                    radius={32} 
+                    innerRadius={24} 
+                    centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}
+                  />
+              </View>
               <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText>
               <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText>
-          </View>
+          </TouchableOpacity>
       );
   };
+
+  const renderMacroDetailModal = () => {
+      if (!selectedMacro) return null;
+      
+      const keyMap: Record<string, string> = {
+          'protein': 'totalProteinG',
+          'fat': 'totalFatG',
+          'carbs': 'totalCarbsG',
+          'sodium': 'totalSodiumMg'
+      };
+      
+      const dbKey = keyMap[selectedMacro.key];
+      // 篩選出該營養素大於 0 的紀錄，並由大到小排序
+      const sortedLogs = allDailyLogs
+        .filter(l => (l[dbKey] || 0) > 0)
+        .sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0));
+
+      const totalVal = sortedLogs.reduce((sum, item) => sum + (item[dbKey] || 0), 0);
+
+      return (
+          <Modal visible={!!selectedMacro} transparent animationType="slide" onRequestClose={()=>setSelectedMacro(null)}>
+              <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, {backgroundColor: theme.cardBackground, maxHeight: '60%'}]}>
+                      <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
+                          <ThemedText type="subtitle">{selectedMacro.label} {t('analysis', lang)}</ThemedText>
+                          <TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity>
+                      </View>
+                      <ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>
+                          Total: {Math.round(totalVal)} {selectedMacro.unit}
+                      </ThemedText>
+                      <ScrollView>
+                          {sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : 
+                           sortedLogs.map((log, idx) => {
+                               const val = log[dbKey] || 0;
+                               const pct = totalVal > 0 ? (val / totalVal * 100).toFixed(1) : "0";
+                               return (
+                                   <View key={idx} style={{flexDirection:'row', justifyContent:'space-between', paddingVertical:10, borderBottomWidth:1, borderColor:'#eee'}}>
+                                       <View style={{flex:1}}>
+                                           <ThemedText>{log.foodName}</ThemedText>
+                                           <View style={{width: '100%', height:4, backgroundColor:'#eee', marginTop:4, borderRadius:2}}>
+                                               <View style={{width: `${pct}%`, backgroundColor: theme.tint, height:'100%', borderRadius:2}}/>
+                                           </View>
+                                       </View>
+                                       <View style={{alignItems:'flex-end', marginLeft:10}}>
+                                           <ThemedText style={{fontWeight:'bold'}}>{Math.round(val)} {selectedMacro.unit}</ThemedText>
+                                           <ThemedText style={{fontSize:10, color:'#888'}}>{pct}%</ThemedText>
+                                       </View>
+                                   </View>
+                               );
+                           })
+                          }
+                      </ScrollView>
+                  </View>
+              </View>
+          </Modal>
+      );
+  };
+
 
   const renderQuickAdd = () => (
       <View style={{paddingHorizontal: 16, marginTop: 20}}>
@@ -349,7 +401,8 @@ export default function HomeScreen() {
                     );
                 })}
             </View>
-            <View style={[styles.mealGroup, {marginTop: 20}]}>
+            {/* Exercise Log... omitted */}
+             <View style={[styles.mealGroup, {marginTop: 20}]}>
                 <View style={styles.mealHeader}>
                     <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
                     <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
@@ -368,6 +421,7 @@ export default function HomeScreen() {
                 ))}
             </View>
         </View>
+        {renderMacroDetailModal()}
       </ScrollView>
       }
     </SafeAreaView>
@@ -405,5 +459,8 @@ const styles = StyleSheet.create({
   deleteAction: { backgroundColor: '#FF3B30', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
   editAction: { backgroundColor: '#34C759', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
   separator: { borderBottomWidth: 1, borderColor: '#f0f0f0' },
-  quickChip: { padding: 8, borderRadius: 20, borderWidth: 1, marginRight: 8 }
+  quickChip: { padding: 8, borderRadius: 20, borderWidth: 1, marginRight: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
+  modalContent: { padding: 20, borderRadius: 16 }
 });
+// [END OF FILE app/(tabs)/index.tsx]

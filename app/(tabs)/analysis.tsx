@@ -1,3 +1,4 @@
+// [START OF FILE app/(tabs)/analysis.tsx]
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, ScrollView, StyleSheet, Dimensions, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,8 +14,8 @@ import { format, subDays, eachDayOfInterval } from "date-fns";
 import { t, useLanguage } from "@/lib/i18n";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const PADDING_H = 16;
-const VISIBLE_WIDTH = SCREEN_WIDTH - (PADDING_H * 2) - 10; 
+// [FIX] 明確定義可視寬度
+const VISIBLE_WIDTH = SCREEN_WIDTH - 32; 
 
 export default function AnalysisScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
@@ -29,25 +30,25 @@ export default function AnalysisScreen() {
   const barChartRef = useRef<any>(null);
   const lineChartRef = useRef<any>(null);
 
-  // [參數對齊]
   const config = period === 30 
-    ? { barWidth: 12, spacing: 8 }
-    : { barWidth: 16, spacing: 24 };
+    ? { barWidth: 12, spacing: 8, initialSpacing: 10, endSpacing: 50 }
+    : { barWidth: 16, spacing: 24, initialSpacing: 20, endSpacing: 20 };
 
   const lineSpacing = config.barWidth + config.spacing;
-  const lineInitialSpacing = config.spacing + (config.barWidth / 2); 
+  const lineInitialSpacing = config.initialSpacing; 
 
   useFocusEffect(
     useCallback(() => { loadAnalysis(period); }, [period])
   );
 
-  // [自動聚焦] 資料載入後延遲觸發捲動
+  // [FIX] 增加延遲時間確保 Layout 完成後再捲動
   useEffect(() => {
       if (calData.length > 0) {
-          setTimeout(() => {
+          const timer = setTimeout(() => {
               if (barChartRef.current) barChartRef.current.scrollToEnd({ animated: true });
               if (lineChartRef.current) lineChartRef.current.scrollToEnd({ animated: true });
-          }, 300);
+          }, 500); 
+          return () => clearTimeout(timer);
       }
   }, [calData, dataSet]);
 
@@ -102,7 +103,7 @@ export default function AnalysisScreen() {
               }
           });
 
-          const chartArr = Array.from(dataMap.values());
+          const chartArr = Array.from(dataMap.values()).sort((a:any, b:any) => a.dateStr.localeCompare(b.dateStr));
 
           // 1. Calorie Chart
           const stackData = chartArr.map((d, idx) => ({
@@ -245,13 +246,15 @@ export default function AnalysisScreen() {
 
           <View style={[styles.card, {marginTop: 16}]}>
               <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_cal', lang)}</ThemedText>
+              {/* @ts-ignore */}
               <BarChart 
                 ref={barChartRef}
                 data={calData} 
                 stackData={calData}
                 barWidth={config.barWidth} 
                 spacing={config.spacing}
-                initialSpacing={config.spacing}
+                initialSpacing={config.initialSpacing}
+                endSpacing={config.endSpacing || 0}
                 noOfSections={3} 
                 barBorderRadius={4} 
                 yAxisThickness={0} 
@@ -261,7 +264,6 @@ export default function AnalysisScreen() {
                 width={VISIBLE_WIDTH} 
                 isAnimated={false} 
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                // [修正] Y軸字體大小
                 yAxisTextStyle={{ fontSize: 10, color: '#888' }}
                 focusBarOnPress={true}
                 renderTooltip={renderCalTooltip}
@@ -274,6 +276,7 @@ export default function AnalysisScreen() {
                   <ThemedText style={{color:'#FF9500', fontSize:12, marginRight:10}}>━ {t('weight', lang)}</ThemedText>
                   <ThemedText style={{color:'#007AFF', fontSize:12}}>━ {t('body_fat', lang)}</ThemedText>
               </View>
+              {/* @ts-ignore */}
               <LineChart 
                 ref={lineChartRef}
                 dataSet={dataSet}
@@ -282,12 +285,14 @@ export default function AnalysisScreen() {
                 width={VISIBLE_WIDTH} 
                 spacing={lineSpacing} 
                 initialSpacing={lineInitialSpacing} 
+                endSpacing={config.endSpacing || 20}
                 curved
                 isAnimated={false} 
                 yAxisThickness={0}
+                // [FIX] 增加 X 軸可見性設定
                 xAxisThickness={1}
+                xAxisColor="lightgray"
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                // [修正] Y軸字體大小與上圖一致
                 yAxisTextStyle={{ fontSize: 10, color: '#888' }}
                 pointerConfig={{
                     pointerStripUptoDataPoint: true,
@@ -296,7 +301,6 @@ export default function AnalysisScreen() {
                     strokeDashArray: [2, 5],
                     pointerLabelComponent: (items: any) => renderLineTooltip(items[0]),
                 }}
-                // @ts-ignore
                 scrollable={true} 
               />
           </View>
@@ -331,3 +335,4 @@ const styles = StyleSheet.create({
     tooltipTitle: { color: 'white', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
     tooltipText: { color: 'white', fontSize: 12, lineHeight: 16 }
 });
+// [END OF FILE app/(tabs)/analysis.tsx]

@@ -1,3 +1,4 @@
+// [START OF FILE app/(tabs)/profile.tsx]
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Platform } from "react-native";
@@ -24,7 +25,7 @@ const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sug
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated } = useAuth();
   const lang = useLanguage();
   
   const [apiKey, setApiKey] = useState("");
@@ -61,83 +62,65 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // 取得 DB 路徑 (不檢查存在與否，僅回傳路徑字串)
-  const getPossibleDbPath = () => {
-      const docDir = FileSystem.documentDirectory;
-      if (!docDir) return null;
-      return docDir + 'SQLite/food_tracker.db';
-  };
-
+  // [DEBUG] 在組件載入時檢查路徑
   useEffect(() => {
-    async function load() {
-      try {
-        const s = await getSettings();
-        if(s.apiKey) setApiKey(s.apiKey);
-        if(s.model) setSelectedModel(s.model);
-        
-        const result = await db.select().from(userProfiles).limit(1);
-        if(result.length > 0) {
-          const p = result[0];
-          setProfileId(p.id);
-          setGender((p.gender as "male"|"female") || "male");
-          
-          if (p.birthDate) {
-            const d = new Date(p.birthDate);
-            if (isValid(d)) setBirthDate(d);
-          }
+    console.log("[Profile] DocDir:", FileSystem.documentDirectory);
+    console.log("[Profile] CacheDir:", FileSystem.cacheDirectory);
+  }, []);
 
-          if (p.targetDate) {
-              const td = new Date(p.targetDate);
-              if (isValid(td)) setTargetDate(td);
-          }
-          
-          setHeightCm(p.heightCm?.toString() || "");
-          setCurrentWeight(p.currentWeightKg?.toString() || "");
-          setBodyFat(p.currentBodyFat?.toString() || "");
-          setTargetWeight(p.targetWeightKg?.toString() || "");
-          setTargetBodyFat(p.targetBodyFat?.toString() || "");
-          setActivityLevel(p.activityLevel || "sedentary");
-          setTrainingGoal(p.goal || "maintain");
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [isAuthenticated]);
-
-  // 備份資料庫
   const handleBackup = async () => {
-      const dbPath = getPossibleDbPath();
+      // 1. 檢查環境支援
+      if (Platform.OS === 'web') {
+          return Alert.alert(t('error', lang), "Backup not supported on Web");
+      }
       
-      // 1. 若 Native Module 未初始化 (通常是未重啟 App 導致)
-      if (!dbPath) {
-          return Alert.alert(
-              t('error', lang), 
-              "System Error: FileSystem is not ready.\nPlease completely close and restart the App."
-          );
+      const docDir = FileSystem.documentDirectory;
+      const cacheDir = FileSystem.cacheDirectory;
+
+      if (!docDir || !cacheDir) {
+          console.error("FileSystem Paths missing:", { docDir, cacheDir });
+          return Alert.alert(t('error', lang), `FileSystem Error: docDir=${docDir}, cacheDir=${cacheDir}`);
       }
 
+      const dbPath = docDir + 'SQLite/food_tracker.db';
+      const backupPath = cacheDir + 'food_tracker_backup.db';
+
       try {
-          // 2. 直接嘗試分享 (移除 getInfoAsync 以避免棄用警告)
-          // 若檔案不存在，shareAsync 會拋出錯誤，我們在 catch 處理
-          await Sharing.shareAsync(dbPath, {
+          const fileInfo = await FileSystem.getInfoAsync(dbPath);
+          if (!fileInfo.exists) {
+              Alert.alert(t('error', lang), "Database file not found. Please use the app to generate data first.");
+              return;
+          }
+
+          // 複製到 Cache
+          await FileSystem.copyAsync({ from: dbPath, to: backupPath });
+
+          // 分享
+          if (!(await Sharing.isAvailableAsync())) {
+              return Alert.alert(t('error', lang), "Sharing is not available on this device");
+          }
+
+          await Sharing.shareAsync(backupPath, {
               mimeType: 'application/x-sqlite3',
               dialogTitle: t('backup_db', lang),
               UTI: 'public.database'
           });
       } catch (e: any) {
           console.error("Backup Error:", e);
-          Alert.alert(t('error', lang), "Backup failed. Database file may not exist yet.");
+          Alert.alert(t('error', lang), "Backup failed: " + e.message);
       }
   };
 
-  // 還原資料庫
   const handleRestore = async () => {
-      const dbPath = getPossibleDbPath();
-      if (!dbPath) return Alert.alert(t('error', lang), "System Error: Restart App");
+      if (Platform.OS === 'web') return Alert.alert("Error", "Not supported on Web");
+
+      const docDir = FileSystem.documentDirectory;
+      if (!docDir) {
+          return Alert.alert(t('error', lang), "FileSystem.documentDirectory is null");
+      }
+
+      const dbPath = docDir + 'SQLite/food_tracker.db';
+      const dbFolder = docDir + 'SQLite';
 
       Alert.alert(
           t('restore_confirm_title', lang),
@@ -155,20 +138,22 @@ export default function ProfileScreen() {
                           });
 
                           if (result.canceled) return;
-
                           const sourceUri = result.assets[0].uri;
                           
                           // 確保資料夾存在
-                          const folder = dbPath.substring(0, dbPath.lastIndexOf('/'));
-                          await FileSystem.makeDirectoryAsync(folder, { intermediates: true }).catch(()=>{});
+                          const folderInfo = await FileSystem.getInfoAsync(dbFolder);
+                          if (!folderInfo.exists) {
+                              await FileSystem.makeDirectoryAsync(dbFolder, { intermediates: true });
+                          }
 
-                          // 覆蓋檔案
-                          await FileSystem.copyAsync({
-                              from: sourceUri,
-                              to: dbPath
-                          });
+                          // 複製覆蓋
+                          await FileSystem.copyAsync({ from: sourceUri, to: dbPath });
 
-                          Alert.alert(t('success', lang), t('restore_success_msg', lang));
+                          Alert.alert(t('success', lang), t('restore_success_msg', lang), [
+                              { text: "OK", onPress: () => {
+                                  // 理想情況下應重新載入 App，這裡簡單提示成功
+                              }}
+                          ]);
                       } catch (e: any) {
                           console.error("Restore Error:", e);
                           Alert.alert(t('error', lang), "Restore failed: " + e.message);
@@ -178,6 +163,39 @@ export default function ProfileScreen() {
           ]
       );
   };
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const s = await getSettings();
+        if(s.apiKey) setApiKey(s.apiKey);
+        if(s.model) setSelectedModel(s.model);
+        
+        const result = await db.select().from(userProfiles).limit(1);
+        if(result.length > 0) {
+          const p = result[0];
+          setProfileId(p.id);
+          setGender((p.gender as "male"|"female") || "male");
+          if (p.birthDate) {
+            const d = new Date(p.birthDate);
+            if (isValid(d)) setBirthDate(d);
+          }
+          if (p.targetDate) {
+              const td = new Date(p.targetDate);
+              if (isValid(td)) setTargetDate(td);
+          }
+          setHeightCm(p.heightCm?.toString() || "");
+          setCurrentWeight(p.currentWeightKg?.toString() || "");
+          setBodyFat(p.currentBodyFat?.toString() || "");
+          setTargetWeight(p.targetWeightKg?.toString() || "");
+          setTargetBodyFat(p.targetBodyFat?.toString() || "");
+          setActivityLevel(p.activityLevel || "sedentary");
+          setTrainingGoal(p.goal || "maintain");
+        }
+      } catch (e) { console.error(e); } finally { setLoading(false); }
+    }
+    load();
+  }, [isAuthenticated]);
 
   const handleTestKey = async () => {
     if (!apiKey) return Alert.alert(t('error', lang), t('api_key_placeholder', lang));
@@ -205,9 +223,7 @@ export default function ProfileScreen() {
         const today = new Date();
         let age = today.getFullYear() - safeBirth.getFullYear();
         const m = today.getMonth() - safeBirth.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) {
-            age--;
-        }
+        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) age--;
         
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         const activityMap: Record<string, number> = {
@@ -215,7 +231,6 @@ export default function ProfileScreen() {
             'very_active': 1.725, 'extra_active': 1.9
         };
         const tdee = bmr * (activityMap[activityLevel] || 1.2);
-        
         let targetCal = tdee;
         if (trainingGoal === 'lose_weight') targetCal -= 500;
         else if (trainingGoal === 'gain_weight') targetCal += 300;
@@ -235,11 +250,9 @@ export default function ProfileScreen() {
             updatedAt: new Date()
         };
 
-        if (profileId) {
-            await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
-        } else {
-            await db.insert(userProfiles).values(profileData);
-        }
+        if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
+        else await db.insert(userProfiles).values(profileData);
+        
         Alert.alert(t('save_settings', lang), t('success', lang));
     } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
@@ -249,7 +262,6 @@ export default function ProfileScreen() {
       setShowDatePicker(false);
       if (selectedDate) setBirthDate(selectedDate);
   };
-
   const onTargetDateChange = (event: any, selectedDate?: Date) => {
       setShowTargetDatePicker(false);
       if (selectedDate) setTargetDate(selectedDate);
@@ -378,7 +390,7 @@ export default function ProfileScreen() {
                     />
                 )}
             </View>
-            
+
             <View style={{marginTop:12}}>
                <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('training_goal', lang)}</ThemedText>
                <View style={{gap: 8}}>
@@ -420,7 +432,6 @@ export default function ProfileScreen() {
          </Pressable>
       </ScrollView>
 
-      {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -435,7 +446,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* API Help Modal */}
       <Modal visible={showApiHelpModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '60%'}]}>
@@ -455,7 +465,6 @@ export default function ProfileScreen() {
           </View>
       </Modal>
 
-      {/* Version History Modal */}
       <Modal visible={showVersionModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '80%'}]}>
@@ -478,7 +487,6 @@ export default function ProfileScreen() {
           </View>
       </Modal>
 
-      {/* Model Modal */}
       <Modal visible={showModelPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -511,3 +519,4 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
   modalContent: { padding: 20, borderRadius: 16 }
 });
+// [END OF FILE app/(tabs)/profile.tsx]
