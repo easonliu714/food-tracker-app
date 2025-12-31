@@ -14,7 +14,7 @@ import { format, subDays, eachDayOfInterval } from "date-fns";
 import { t, useLanguage } from "@/lib/i18n";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-// [FIX] 明確定義可視寬度
+// [FIX] 明確定義圖表的可視寬度，扣除左右 padding (16*2)
 const VISIBLE_WIDTH = SCREEN_WIDTH - 32; 
 
 export default function AnalysisScreen() {
@@ -41,13 +41,13 @@ export default function AnalysisScreen() {
     useCallback(() => { loadAnalysis(period); }, [period])
   );
 
-  // [FIX] 增加延遲時間確保 Layout 完成後再捲動
+  // [FIX] 增加 500ms 延遲，確保 Layout 渲染完成後再捲動
   useEffect(() => {
       if (calData.length > 0) {
           const timer = setTimeout(() => {
               if (barChartRef.current) barChartRef.current.scrollToEnd({ animated: true });
               if (lineChartRef.current) lineChartRef.current.scrollToEnd({ animated: true });
-          }, 500); 
+          }, 500);
           return () => clearTimeout(timer);
       }
   }, [calData, dataSet]);
@@ -282,6 +282,7 @@ export default function AnalysisScreen() {
                 dataSet={dataSet}
                 hideRules
                 height={180}
+                // [FIX] 明確設定寬度，確保 X 軸不消失
                 width={VISIBLE_WIDTH} 
                 spacing={lineSpacing} 
                 initialSpacing={lineInitialSpacing} 
@@ -289,7 +290,7 @@ export default function AnalysisScreen() {
                 curved
                 isAnimated={false} 
                 yAxisThickness={0}
-                // [FIX] 增加 X 軸可見性設定
+                // [FIX] 明確設定 X 軸樣式
                 xAxisThickness={1}
                 xAxisColor="lightgray"
                 xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}

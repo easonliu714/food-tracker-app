@@ -62,16 +62,18 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [DEBUG] 在組件載入時檢查路徑
+  // [DEBUG] 檢查路徑狀態
   useEffect(() => {
-    console.log("[Profile] DocDir:", FileSystem.documentDirectory);
-    console.log("[Profile] CacheDir:", FileSystem.cacheDirectory);
+    if (Platform.OS !== 'web') {
+        // 嘗試讀取，若 undefined 代表模組載入異常
+        console.log("[Profile] DocDir Check:", FileSystem.documentDirectory); 
+    }
   }, []);
 
   const handleBackup = async () => {
-      // 1. 檢查環境支援
+      // 1. 環境檢查
       if (Platform.OS === 'web') {
-          return Alert.alert(t('error', lang), "Backup not supported on Web");
+          return Alert.alert(t('error', lang), "Backup feature is not available on Web.");
       }
       
       const docDir = FileSystem.documentDirectory;
@@ -79,7 +81,7 @@ export default function ProfileScreen() {
 
       if (!docDir || !cacheDir) {
           console.error("FileSystem Paths missing:", { docDir, cacheDir });
-          return Alert.alert(t('error', lang), `FileSystem Error: docDir=${docDir}, cacheDir=${cacheDir}`);
+          return Alert.alert(t('error', lang), `FileSystem not ready. (docDir=${docDir})`);
       }
 
       const dbPath = docDir + 'SQLite/food_tracker.db';
@@ -88,11 +90,11 @@ export default function ProfileScreen() {
       try {
           const fileInfo = await FileSystem.getInfoAsync(dbPath);
           if (!fileInfo.exists) {
-              Alert.alert(t('error', lang), "Database file not found. Please use the app to generate data first.");
+              Alert.alert(t('error', lang), "Database file not found. Please add some data first.");
               return;
           }
 
-          // 複製到 Cache
+          // 複製到暫存區
           await FileSystem.copyAsync({ from: dbPath, to: backupPath });
 
           // 分享
@@ -116,7 +118,7 @@ export default function ProfileScreen() {
 
       const docDir = FileSystem.documentDirectory;
       if (!docDir) {
-          return Alert.alert(t('error', lang), "FileSystem.documentDirectory is null");
+          return Alert.alert(t('error', lang), "FileSystem.documentDirectory is null/undefined");
       }
 
       const dbPath = docDir + 'SQLite/food_tracker.db';
@@ -151,7 +153,7 @@ export default function ProfileScreen() {
 
                           Alert.alert(t('success', lang), t('restore_success_msg', lang), [
                               { text: "OK", onPress: () => {
-                                  // 理想情況下應重新載入 App，這裡簡單提示成功
+                                  // 建議重啟 App 以重置 DB 連線
                               }}
                           ]);
                       } catch (e: any) {
@@ -176,14 +178,17 @@ export default function ProfileScreen() {
           const p = result[0];
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
+          
           if (p.birthDate) {
             const d = new Date(p.birthDate);
             if (isValid(d)) setBirthDate(d);
           }
+
           if (p.targetDate) {
               const td = new Date(p.targetDate);
               if (isValid(td)) setTargetDate(td);
           }
+          
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
@@ -192,7 +197,11 @@ export default function ProfileScreen() {
           setActivityLevel(p.activityLevel || "sedentary");
           setTrainingGoal(p.goal || "maintain");
         }
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [isAuthenticated]);
@@ -223,7 +232,9 @@ export default function ProfileScreen() {
         const today = new Date();
         let age = today.getFullYear() - safeBirth.getFullYear();
         const m = today.getMonth() - safeBirth.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) age--;
+        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) {
+            age--;
+        }
         
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         const activityMap: Record<string, number> = {
@@ -231,6 +242,7 @@ export default function ProfileScreen() {
             'very_active': 1.725, 'extra_active': 1.9
         };
         const tdee = bmr * (activityMap[activityLevel] || 1.2);
+        
         let targetCal = tdee;
         if (trainingGoal === 'lose_weight') targetCal -= 500;
         else if (trainingGoal === 'gain_weight') targetCal += 300;
@@ -250,9 +262,11 @@ export default function ProfileScreen() {
             updatedAt: new Date()
         };
 
-        if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
-        else await db.insert(userProfiles).values(profileData);
-        
+        if (profileId) {
+            await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
+        } else {
+            await db.insert(userProfiles).values(profileData);
+        }
         Alert.alert(t('save_settings', lang), t('success', lang));
     } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
@@ -262,6 +276,7 @@ export default function ProfileScreen() {
       setShowDatePicker(false);
       if (selectedDate) setBirthDate(selectedDate);
   };
+
   const onTargetDateChange = (event: any, selectedDate?: Date) => {
       setShowTargetDatePicker(false);
       if (selectedDate) setTargetDate(selectedDate);
@@ -390,7 +405,7 @@ export default function ProfileScreen() {
                     />
                 )}
             </View>
-
+            
             <View style={{marginTop:12}}>
                <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('training_goal', lang)}</ThemedText>
                <View style={{gap: 8}}>
@@ -432,6 +447,7 @@ export default function ProfileScreen() {
          </Pressable>
       </ScrollView>
 
+      {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
@@ -446,6 +462,7 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* API Help Modal */}
       <Modal visible={showApiHelpModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '60%'}]}>
@@ -465,6 +482,7 @@ export default function ProfileScreen() {
           </View>
       </Modal>
 
+      {/* Version History Modal */}
       <Modal visible={showVersionModal} transparent animationType="slide">
           <View style={styles.modalOverlay}>
               <View style={[styles.modalContent, {backgroundColor: cardBackground, maxHeight: '80%'}]}>
@@ -487,6 +505,7 @@ export default function ProfileScreen() {
           </View>
       </Modal>
 
+      {/* Model Modal */}
       <Modal visible={showModelPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>

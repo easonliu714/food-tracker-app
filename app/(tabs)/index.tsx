@@ -57,11 +57,12 @@ export default function HomeScreen() {
   const [intake, setIntake] = useState({ calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 });
   const [burnedCalories, setBurnedCalories] = useState(0);
   const [dailyLogs, setDailyLogs] = useState<Record<string, any[]>>({});
-  const [allDailyLogs, setAllDailyLogs] = useState<any[]>([]); // 新增：保存所有紀錄以便分析
+  // [NEW] 儲存所有紀錄以便詳細分析
+  const [allDailyLogs, setAllDailyLogs] = useState<any[]>([]);
   const [dailyActivities, setDailyActivities] = useState<any[]>([]);
   const [recentFoods, setRecentFoods] = useState<any[]>([]);
 
-  // [新增] 圓餅圖分析 Modal 狀態
+  // [NEW] 營養素詳細分析彈窗狀態
   const [selectedMacro, setSelectedMacro] = useState<{label: string, key: string, unit: string} | null>(null);
 
   useFocusEffect(
@@ -285,6 +286,7 @@ export default function HomeScreen() {
       );
   };
 
+  // [NEW] 營養素詳細分析彈窗
   const renderMacroDetailModal = () => {
       if (!selectedMacro) return null;
       
@@ -312,7 +314,7 @@ export default function HomeScreen() {
                           <TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity>
                       </View>
                       <ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>
-                          Total: {Math.round(totalVal)} {selectedMacro.unit}
+                          {t('total', lang)}: {Math.round(totalVal)} {selectedMacro.unit}
                       </ThemedText>
                       <ScrollView>
                           {sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : 
@@ -341,7 +343,6 @@ export default function HomeScreen() {
           </Modal>
       );
   };
-
 
   const renderQuickAdd = () => (
       <View style={{paddingHorizontal: 16, marginTop: 20}}>
@@ -401,8 +402,7 @@ export default function HomeScreen() {
                     );
                 })}
             </View>
-            {/* Exercise Log... omitted */}
-             <View style={[styles.mealGroup, {marginTop: 20}]}>
+            <View style={[styles.mealGroup, {marginTop: 20}]}>
                 <View style={styles.mealHeader}>
                     <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
                     <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>

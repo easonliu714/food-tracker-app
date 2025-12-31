@@ -46,7 +46,7 @@ export const TRANSLATIONS = {
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動",
     
     // Actions
-    camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", 
+    camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
     scan_hint: "請將條碼對準框內",allow: "允許",
     
     // Meals
@@ -62,7 +62,7 @@ export const TRANSLATIONS = {
     chart_title_cal: "熱量收支趨勢",
     chart_title_body: "體重與體脂趨勢",
     week: "近7天", month: "近30天", avg_daily: "日均數值",
-    axis_l: "(左)", axis_r: "(右)",
+    axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "總計",
 
     // Profile & AI
     profile: "個人資料", ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女",
@@ -151,7 +151,7 @@ export const TRANSLATIONS = {
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target", 
     quick_record: "Quick Add", no_recent_foods: "No recent records", exercise: "Exercise",
     
-    camera: "Camera", scan_barcode: "Scan Code", manual_input: "Manual", 
+    camera: "Camera", scan_barcode: "Scan Code", manual_input: "Manual", gallery: "Gallery",
     scan_hint: "Align barcode within frame",allow: "Allow",
     
     breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", afternoon_tea: "Afternoon Tea", late_night: "Late Night", snack: "Snack", no_records: "No records",
@@ -164,7 +164,7 @@ export const TRANSLATIONS = {
     chart_title_cal: "Calories Trend",
     chart_title_body: "Body Metrics Trend",
     week: "7 Days", month: "30 Days", avg_daily: "Daily Avg",
-    axis_l: "(L)", axis_r: "(R)",
+    axis_l: "(L)", axis_r: "(R)", analysis: "Analysis", total: "Total",
     
     profile: "Profile", ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female",
     birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
@@ -251,7 +251,7 @@ export const TRANSLATIONS = {
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動",
     
-    camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", 
+    camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
     scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
     
     breakfast: "朝食", lunch: "昼食", dinner: "夕食", afternoon_tea: "間食", late_night: "夜食", snack: "スナック", no_records: "記録なし",
@@ -264,7 +264,7 @@ export const TRANSLATIONS = {
     chart_title_cal: "カロリー収支",
     chart_title_body: "体重と体脂肪率",
     week: "7日間", month: "30日間", avg_daily: "日平均",
-    axis_l: "(左)", axis_r: "(右)",
+    axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "合計",
 
     profile: "プロフィール", ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性",
     birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
@@ -345,7 +345,7 @@ export const TRANSLATIONS = {
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동",
     
-    camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력", 
+    camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
     
     breakfast: "아침", lunch: "점심", dinner: "저녁", afternoon_tea: "간식", late_night: "야식", snack: "스낵", no_records: "기록 없음",
@@ -358,7 +358,7 @@ export const TRANSLATIONS = {
     chart_title_cal: "칼로리 추세",
     chart_title_body: "체중 및 체지방 추세",
     week: "7일", month: "30일", avg_daily: "일평균",
-    axis_l: "(좌)", axis_r: "(우)",
+    axis_l: "(좌)", axis_r: "(우)", analysis: "분석", total: "합계",
 
     profile: "프로필", ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성",
     birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",
