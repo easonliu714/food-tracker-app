@@ -66,7 +66,7 @@ export const TRANSLATIONS = {
 
     // Profile & AI
     profile: "個人資料", ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女",
-    birth_date: "出生日期", height: "身高", weight: "體重(kg)", body_fat: "體脂率(%)",
+    birth_date: "出生日期", height: "身高", weight: "體重", body_fat: "體脂率",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", 
     
