@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
 import { differenceInDays } from "date-fns";
+import * as FileSystem from 'expo-file-system'; // 確保有 import FileSystem
 
 async function getModel() {
   const { apiKey, model } = await getSettings();
@@ -20,7 +21,7 @@ export async function validateApiKey(apiKey: string) {
   }
 }
 
-// [新增] 輔助函式：產生包含年齡與期限的上下文
+// 輔助函式：產生包含年齡與期限的上下文
 const getProfileContext = (profile: any) => {
     // 1. 計算年齡
     let age = 30;
@@ -44,27 +45,42 @@ const getProfileContext = (profile: any) => {
     return `User Profile: Age ${age}, Gender: ${profile?.gender || 'N/A'}, Goal: ${profile?.goal || "Maintain"}${deadlineInfo}`;
 };
 
-// 圖像分析
+// [修改] 圖像分析 - 支援份量估算與完整營養素
 export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
   try {
     const model = await getModel();
     const context = getProfileContext(profile);
 
     const prompt = `
-      You are a professional nutritionist. Analyze this food image.
-      Output ONLY valid JSON.
+      You are a professional nutritionist and food analyst. 
+      Analyze the provided image, which could be a photo of a plated meal OR a nutrition facts label.
+
+      Task:
+      1. Identify the food item(s).
+      2. ESTIMATE the serving size (weight in grams or volume in ml). 
+         - If it's a plated meal, estimate based on visual portion size (assume standard plate/bowl size if no reference).
+         - If it's a nutrition label, EXTRACT the "Serving Size" value.
+         - DO NOT default to 100g. Make an educated guess (e.g., a burger is ~250g, a bowl of rice is ~200g).
+      3. Analyze nutrition facts.
+      4. Provide a composition analysis and advice.
+
       Language: ${lang}.
       ${context}.
 
-      Required JSON Structure:
+      Output ONLY valid JSON. Structure:
       {
-        "foodName": "Short Name",
-        "calories_100g": 0, "protein_100g": 0, "fat_100g": 0, "carbs_100g": 0, "sodium_100g": 0,
-        "sugar_100g": 0, "fiber_100g": 0, "saturated_fat_100g": 0, "trans_fat_100g": 0, "cholesterol_100g": 0,
-        "zinc_100g": 0, "magnesium_100g": 0, "iron_100g": 0,
-        "composition": "Ingredients list...",
-        "suggestion": "Advice based on user goal and remaining days..."
+        "foodName": "Short descriptive name",
+        "brand": "Brand name if visible, else null",
+        "estimated_weight_g": 200, 
+        "serving_unit": "g", 
+        "calories": 0, "protein": 0, "fat": 0, "carbs": 0, "sodium": 0,
+        "sugar": 0, "fiber": 0, "saturated_fat": 0, "trans_fat": 0, "cholesterol": 0,
+        "zinc": 0, "magnesium": 0, "iron": 0,
+        "composition": "List of main ingredients...",
+        "suggestion": "Health advice based on user goal..."
       }
+      
+      Note: The nutrition values (calories, protein, etc.) should be for the ESTIMATED WEIGHT, not per 100g.
     `;
 
     const result = await model.generateContent([
@@ -80,7 +96,7 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
   }
 }
 
-// 純文字食物分析
+// [修改] 純文字食物分析 - 包含微量營養素
 export async function analyzeFoodText(foodName: string, lang: string, profile?: any) {
     try {
       const model = await getModel();
@@ -88,16 +104,18 @@ export async function analyzeFoodText(foodName: string, lang: string, profile?: 
   
       const prompt = `
         You are a professional nutritionist. Estimate nutrition for: "${foodName}".
-        Output ONLY valid JSON.
+        Assume a standard serving size for this food.
+        
         Language: ${lang}.
         ${context}.
   
-        Required JSON Structure:
+        Output ONLY valid JSON:
         {
           "foodName": "${foodName}",
-          "calories_100g": 0, "protein_100g": 0, "fat_100g": 0, "carbs_100g": 0, "sodium_100g": 0,
-          "sugar_100g": 0, "fiber_100g": 0, "saturated_fat_100g": 0, "trans_fat_100g": 0, "cholesterol_100g": 0,
-          "zinc_100g": 0, "magnesium_100g": 0, "iron_100g": 0,
+          "estimated_weight_g": 100,
+          "calories": 0, "protein": 0, "fat": 0, "carbs": 0, "sodium": 0,
+          "sugar": 0, "fiber": 0, "saturated_fat": 0, "trans_fat": 0, "cholesterol": 0,
+          "zinc": 0, "magnesium": 0, "iron": 0,
           "composition": "Estimated ingredients...",
           "suggestion": "Advice based on user goal..."
         }

@@ -13,187 +13,199 @@ export const expoDb = openDatabaseSync("food_tracker.db");
 // 初始化 Drizzle ORM
 export const db = drizzle(expoDb, { schema });
 
+// 定義目前資料庫版本，當 Schema 變更時需增加此數字
+const CURRENT_DB_VERSION = 1;
+
 // 初始化資料庫 (建立資料表與欄位遷移)
 export async function initDatabase() {
   try {
     // 啟用 WAL 模式以提升效能
     await expoDb.execAsync("PRAGMA journal_mode = WAL;");
     
-    // 1. 建立資料表 (SQL 保持您原本提供的內容，確保結構完整)
-    await expoDb.execAsync(`
-      CREATE TABLE IF NOT EXISTS user_profiles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        gender TEXT,
-        birth_date TEXT,
-        height_cm REAL,
-        current_weight_kg REAL,
-        current_body_fat REAL,
-        target_weight_kg REAL,
-        target_body_fat REAL, 
-        target_date TEXT,
-        activity_level TEXT,
-        goal TEXT,
-        daily_calorie_target INTEGER,
-        protein_percentage INTEGER DEFAULT 30,
-        carbs_percentage INTEGER DEFAULT 40,
-        fat_percentage INTEGER DEFAULT 30,
-        sodium_target_mg INTEGER DEFAULT 2300,
-        created_at INTEGER,
-        updated_at INTEGER
-      );
+    // 檢查當前資料庫版本
+    const result = await expoDb.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
+    const currentVersion = result?.user_version ?? 0;
+    console.log(`[DB] Current Version: ${currentVersion}, Target: ${CURRENT_DB_VERSION}`);
 
-      CREATE TABLE IF NOT EXISTS daily_metrics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        weight_kg REAL,
-        body_fat_percentage REAL,
-        note TEXT,
-        created_at INTEGER
-      );
+    // 若是全新安裝或版本為 0，建立所有資料表
+    if (currentVersion < 1) {
+      console.log("[DB] Creating tables for version 1...");
+      await expoDb.execAsync(`
+        CREATE TABLE IF NOT EXISTS user_profiles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT,
+          gender TEXT,
+          birth_date TEXT,
+          height_cm REAL,
+          current_weight_kg REAL,
+          current_body_fat REAL,
+          target_weight_kg REAL,
+          target_body_fat REAL, 
+          target_date TEXT,
+          activity_level TEXT,
+          goal TEXT,
+          daily_calorie_target INTEGER,
+          protein_percentage INTEGER DEFAULT 30,
+          carbs_percentage INTEGER DEFAULT 40,
+          fat_percentage INTEGER DEFAULT 30,
+          sodium_target_mg INTEGER DEFAULT 2300,
+          created_at INTEGER,
+          updated_at INTEGER
+        );
 
-      CREATE TABLE IF NOT EXISTS food_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        brand TEXT,
-        barcode TEXT,
-        base_amount REAL DEFAULT 100,
-        base_unit TEXT DEFAULT 'g',
-        calories REAL NOT NULL,
-        protein_g REAL DEFAULT 0,
-        fat_g REAL DEFAULT 0,
-        carbs_g REAL DEFAULT 0,
-        sodium_mg REAL DEFAULT 0, 
-        saturated_fat_g REAL DEFAULT 0, 
-        trans_fat_g REAL DEFAULT 0, 
-        sugar_g REAL DEFAULT 0, 
-        fiber_g REAL DEFAULT 0, 
-        cholesterol_mg REAL DEFAULT 0, 
-        magnesium_mg REAL DEFAULT 0, 
-        zinc_mg REAL DEFAULT 0, 
-        iron_mg REAL DEFAULT 0, 
-        is_user_created INTEGER DEFAULT 1,
-        source TEXT DEFAULT 'manual',
-        updated_at INTEGER
-      );
+        CREATE TABLE IF NOT EXISTS daily_metrics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          weight_kg REAL,
+          body_fat_percentage REAL,
+          note TEXT,
+          created_at INTEGER
+        );
 
-      CREATE TABLE IF NOT EXISTS food_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        meal_time_category TEXT NOT NULL,
-        logged_at INTEGER NOT NULL,
-        food_item_id INTEGER,
-        food_name TEXT NOT NULL,
-        serving_type TEXT DEFAULT 'weight',
-        serving_amount REAL,
-        unit_weight_g REAL,
-        total_weight_g REAL,
-        total_calories REAL,
-        total_protein_g REAL,
-        total_fat_g REAL,
-        total_carbs_g REAL,
-        total_sodium_mg REAL, 
-        total_saturated_fat_g REAL DEFAULT 0, 
-        total_trans_fat_g REAL DEFAULT 0, 
-        total_sugar_g REAL DEFAULT 0, 
-        total_fiber_g REAL DEFAULT 0, 
-        total_cholesterol_mg REAL DEFAULT 0, 
-        total_magnesium_mg REAL DEFAULT 0, 
-        total_zinc_mg REAL DEFAULT 0, 
-        total_iron_mg REAL DEFAULT 0, 
-        image_url TEXT,
-        ai_analysis_log TEXT
-      );
+        CREATE TABLE IF NOT EXISTS food_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          brand TEXT,
+          barcode TEXT,
+          base_amount REAL DEFAULT 100,
+          base_unit TEXT DEFAULT 'g',
+          ai_summary TEXT, -- [新增] 儲存 AI 分析的組成與建議
+          calories REAL NOT NULL,
+          protein_g REAL DEFAULT 0,
+          fat_g REAL DEFAULT 0,
+          carbs_g REAL DEFAULT 0,
+          sodium_mg REAL DEFAULT 0, 
+          saturated_fat_g REAL DEFAULT 0, 
+          trans_fat_g REAL DEFAULT 0, 
+          sugar_g REAL DEFAULT 0, 
+          fiber_g REAL DEFAULT 0, 
+          cholesterol_mg REAL DEFAULT 0, 
+          magnesium_mg REAL DEFAULT 0, 
+          zinc_mg REAL DEFAULT 0, 
+          iron_mg REAL DEFAULT 0, 
+          is_user_created INTEGER DEFAULT 1,
+          source TEXT DEFAULT 'manual',
+          updated_at INTEGER
+        );
 
-      CREATE TABLE IF NOT EXISTS activity_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        logged_at INTEGER NOT NULL,
-        category TEXT,
-        activity_name TEXT NOT NULL,
-        intensity TEXT,
-        duration_minutes INTEGER,
-        calories_burned REAL,
-        steps INTEGER,
-        distance_km REAL,
-        floors INTEGER,
-        feeling TEXT,
-        notes TEXT
-      );
-      
-      CREATE TABLE IF NOT EXISTS recipes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        description TEXT,
-        image_url TEXT,
-        prep_time_minutes INTEGER,
-        cook_time_minutes INTEGER,
-        servings INTEGER DEFAULT 1,
-        total_calories REAL,
-        total_protein_g REAL,
-        total_carbs_g REAL,
-        total_fat_g REAL,
-        meal_type TEXT,
-        dietary_preference TEXT,
-        ingredients TEXT,
-        instructions TEXT,
-        created_at INTEGER
-      );
+        CREATE TABLE IF NOT EXISTS food_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          meal_time_category TEXT NOT NULL,
+          logged_at INTEGER NOT NULL,
+          food_item_id INTEGER,
+          food_name TEXT NOT NULL,
+          serving_type TEXT DEFAULT 'weight',
+          serving_amount REAL,
+          unit_weight_g REAL,
+          total_weight_g REAL,
+          total_calories REAL,
+          total_protein_g REAL,
+          total_fat_g REAL,
+          total_carbs_g REAL,
+          total_sodium_mg REAL, 
+          total_saturated_fat_g REAL DEFAULT 0, 
+          total_trans_fat_g REAL DEFAULT 0, 
+          total_sugar_g REAL DEFAULT 0, 
+          total_fiber_g REAL DEFAULT 0, 
+          total_cholesterol_mg REAL DEFAULT 0, 
+          total_magnesium_mg REAL DEFAULT 0, 
+          total_zinc_mg REAL DEFAULT 0, 
+          total_iron_mg REAL DEFAULT 0, 
+          image_url TEXT,
+          ai_analysis_log TEXT
+        );
 
-      CREATE TABLE IF NOT EXISTS reminder_settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        breakfast_reminder_enabled INTEGER DEFAULT 0,
-        breakfast_reminder_time TEXT,
-        lunch_reminder_enabled INTEGER DEFAULT 0,
-        lunch_reminder_time TEXT,
-        dinner_reminder_enabled INTEGER DEFAULT 0,
-        dinner_reminder_time TEXT,
-        water_reminder_enabled INTEGER DEFAULT 0,
-        water_reminder_interval_minutes INTEGER DEFAULT 60
-      );
-    `);
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          logged_at INTEGER NOT NULL,
+          category TEXT,
+          activity_name TEXT NOT NULL,
+          intensity TEXT,
+          duration_minutes INTEGER,
+          calories_burned REAL,
+          steps INTEGER,
+          distance_km REAL,
+          floors INTEGER,
+          feeling TEXT,
+          notes TEXT
+        );
+        
+        CREATE TABLE IF NOT EXISTS recipes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          image_url TEXT,
+          prep_time_minutes INTEGER,
+          cook_time_minutes INTEGER,
+          servings INTEGER DEFAULT 1,
+          total_calories REAL,
+          total_protein_g REAL,
+          total_carbs_g REAL,
+          total_fat_g REAL,
+          meal_type TEXT,
+          dietary_preference TEXT,
+          ingredients TEXT,
+          instructions TEXT,
+          created_at INTEGER
+        );
 
-    // 2. Migration 邏輯 (保持不變，略過錯誤)
+        CREATE TABLE IF NOT EXISTS reminder_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          breakfast_reminder_enabled INTEGER DEFAULT 0,
+          breakfast_reminder_time TEXT,
+          lunch_reminder_enabled INTEGER DEFAULT 0,
+          lunch_reminder_time TEXT,
+          dinner_reminder_enabled INTEGER DEFAULT 0,
+          dinner_reminder_time TEXT,
+          water_reminder_enabled INTEGER DEFAULT 0,
+          water_reminder_interval_minutes INTEGER DEFAULT 60
+        );
+      `);
+    }
+
+    // 處理手動遷移：確保舊版本用戶也有新欄位
+    // 使用 try-catch 忽略 "duplicate column" 錯誤
     const addColumn = async (table: string, columnDef: string) => {
       try { await expoDb.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`); } catch (e) {}
     };
     
-    // 確保所有擴充欄位都存在
+    await addColumn("food_items", "ai_summary TEXT");
+    await addColumn("food_items", "barcode TEXT");
     await addColumn("user_profiles", "birth_date TEXT");
     await addColumn("user_profiles", "target_date TEXT");
-    await addColumn("food_items", "saturated_fat_g REAL DEFAULT 0");
-    await addColumn("food_items", "trans_fat_g REAL DEFAULT 0");
-    await addColumn("food_items", "sugar_g REAL DEFAULT 0");
-    await addColumn("food_items", "fiber_g REAL DEFAULT 0");
-    await addColumn("food_items", "cholesterol_mg REAL DEFAULT 0");
-    await addColumn("food_items", "magnesium_mg REAL DEFAULT 0");
-    await addColumn("food_items", "zinc_mg REAL DEFAULT 0");
-    await addColumn("food_items", "iron_mg REAL DEFAULT 0");
-    await addColumn("food_logs", "total_saturated_fat_g REAL DEFAULT 0");
-    await addColumn("food_logs", "total_trans_fat_g REAL DEFAULT 0");
-    await addColumn("food_logs", "total_sugar_g REAL DEFAULT 0");
-    await addColumn("food_logs", "total_fiber_g REAL DEFAULT 0");
-    await addColumn("food_logs", "total_cholesterol_mg REAL DEFAULT 0");
-    await addColumn("food_logs", "total_magnesium_mg REAL DEFAULT 0");
-    await addColumn("food_logs", "total_zinc_mg REAL DEFAULT 0");
-    await addColumn("food_logs", "total_iron_mg REAL DEFAULT 0");
+    
+    // 詳細營養素欄位補全
+    const nutrients = [
+      "saturated_fat_g REAL DEFAULT 0", "trans_fat_g REAL DEFAULT 0", 
+      "sugar_g REAL DEFAULT 0", "fiber_g REAL DEFAULT 0", 
+      "cholesterol_mg REAL DEFAULT 0", "magnesium_mg REAL DEFAULT 0", 
+      "zinc_mg REAL DEFAULT 0", "iron_mg REAL DEFAULT 0"
+    ];
 
-    console.log("Database initialized and migrated successfully");
+    for (const nut of nutrients) {
+      await addColumn("food_items", nut);
+      await addColumn("food_logs", "total_" + nut);
+    }
+
+    // 更新版本號
+    await expoDb.execAsync(`PRAGMA user_version = ${CURRENT_DB_VERSION}`);
+    console.log("[DB] Initialization and migration completed successfully");
+
   } catch (e) {
-    console.error("Database initialization failed:", e);
+    console.error("[DB] Initialization failed:", e);
   }
 }
 
 // =========================================================
-//  以下為從 server/db.ts 移植過來的 Helper Functions
-//  這些函式可以直接在 APP 的前端頁面或 Hooks 中呼叫
+//  Helper Functions
 // =========================================================
 
 // --- User Profile ---
 
 export async function getUserProfile() {
-  // 單機版通常只有一個用戶，取第一個，若無則建立預設
   let result = await db.select().from(userProfiles).limit(1);
   if (result.length === 0) {
       await db.insert(userProfiles).values({ 
@@ -214,6 +226,16 @@ export async function updateUserProfile(data: Partial<typeof userProfiles.$infer
     .where(eq(userProfiles.id, profile.id));
 }
 
+// [新增] 取得最近的兩筆身體數值 (用於比較差異)
+export async function getLatestTwoDailyMetrics() {
+  const result = await db
+    .select()
+    .from(dailyMetrics)
+    .orderBy(desc(dailyMetrics.date))
+    .limit(2);
+  return result; // result[0] 為最新, result[1] 為前一筆
+}
+
 // --- Food Items ---
 
 export async function getFoodItemById(id: number) {
@@ -231,6 +253,12 @@ export async function createFoodItem(data: typeof foodItems.$inferInsert) {
   return result[0].insertedId;
 }
 
+export async function updateFoodItem(id: number, data: Partial<typeof foodItems.$inferInsert>) {
+  await db.update(foodItems)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(foodItems.id, id));
+}
+
 export async function searchFoodItems(query: string, limit = 20) {
   return db
     .select()
@@ -242,7 +270,6 @@ export async function searchFoodItems(query: string, limit = 20) {
 // --- Food Logs ---
 
 export async function getFoodLogsByDate(date: Date) {
-  // SQLite 儲存日期格式為 YYYY-MM-DD
   const dateStr = date.toISOString().split('T')[0];
   return db
     .select()
@@ -253,6 +280,27 @@ export async function getFoodLogsByDate(date: Date) {
 
 export async function createFoodLog(data: typeof foodLogs.$inferInsert) {
   const result = await db.insert(foodLogs).values(data).returning({ insertedId: foodLogs.id });
+  return result[0].insertedId;
+}
+
+// [新增] 複製飲食紀錄 (產生一筆內容相同但時間為現在的新紀錄)
+export async function duplicateFoodLog(originalLogId: number) {
+  const originalLog = await db.select().from(foodLogs).where(eq(foodLogs.id, originalLogId)).limit(1);
+  if (!originalLog || originalLog.length === 0) return null;
+
+  const log = originalLog[0];
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+
+  // 移除 ID 與 時間，建立新物件
+  const { id, loggedAt, date, ...rest } = log;
+  
+  const result = await db.insert(foodLogs).values({
+    ...rest,
+    date: dateStr,
+    loggedAt: now,
+  }).returning({ insertedId: foodLogs.id });
+  
   return result[0].insertedId;
 }
 

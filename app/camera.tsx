@@ -1,64 +1,65 @@
 import { useState } from "react";
 import { StyleSheet, View, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { t, useLanguage } from "@/lib/i18n"; // 引入 i18n
+import { t, useLanguage } from "@/lib/i18n";
 
 export default function CameraScreen() {
   const router = useRouter();
+  // 接收上一個頁面 (Scanner) 傳來的 barcode，以便稍後綁定
+  const { barcode, mode } = useLocalSearchParams(); 
+
   const colorScheme = useColorScheme() ?? "light";
   const theme = Colors[colorScheme];
-  const lang = useLanguage(); // 取得當前語言
+  const lang = useLanguage(); 
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleImageSelection = async (mode: 'camera' | 'gallery') => {
+  const handleImageSelection = async (source: 'camera' | 'gallery') => {
     setIsLoading(true);
     try {
       let result;
-      // [修正] 移除 aspect 選項，允許自由裁切
       const options: ImagePicker.ImagePickerOptions = {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true, // 開啟系統圖框
-        // aspect: undefined, // 預設就是 undefined (自由比例)
+        allowsEditing: true, // 開啟裁切
         quality: 0.8,
         base64: true,
       };
 
-      if (mode === 'camera') {
+      if (source === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) {
-          Alert.alert(t('camera', lang), "需要權限");
+          Alert.alert(t('error', lang), "Camera permission needed");
           setIsLoading(false);
           return;
         }
         result = await ImagePicker.launchCameraAsync(options);
       } else {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert(t('gallery', lang), "需要權限");
-          setIsLoading(false);
-          return;
-        }
         result = await ImagePicker.launchImageLibraryAsync(options);
       }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        
+        // [修正] 拍攝後直接跳轉到 food-editor (統一介面)
+        // 帶入 analyze: "true" 參數，讓編輯器知道要自動觸發 Gemini
         router.push({
           pathname: "/food-editor",
-          params: { 
-            imageUri: result.assets[0].uri,
-            imageBase64: result.assets[0].base64,
-            analyze: "true" 
-          } 
+          params: {
+            imageUri: asset.uri,
+            imageBase64: asset.base64, // 傳遞 base64 給 AI 分析
+            analyze: "true",           // 標記需要自動分析
+            barcode: barcode           // 傳遞條碼以建立關聯
+          }
         });
       }
     } catch (e) {
       console.error(e);
+      Alert.alert(t('error', lang), "Failed to pick image");
     } finally {
       setIsLoading(false);
     }
@@ -70,22 +71,20 @@ export default function CameraScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
           <Ionicons name="close" size={30} color={theme.text} />
         </TouchableOpacity>
-        <ThemedText type="subtitle">{t('ai_analysis', lang)}</ThemedText>
+        <ThemedText type="subtitle">{t('camera', lang)}</ThemedText>
         <View style={{ width: 30 }} />
       </View>
 
       <View style={styles.content}>
-        <View style={styles.illustration}>
-           <Ionicons name="scan-outline" size={100} color={theme.icon} />
-           <ThemedText style={{marginTop: 20, textAlign:'center', color: theme.icon}}>
-             {t('camera', lang)} / {t('gallery', lang)}
-           </ThemedText>
-        </View>
-
         {isLoading ? (
           <ActivityIndicator size="large" color={theme.tint} style={{marginTop: 50}} />
         ) : (
           <View style={styles.actionContainer}>
+            <View style={{alignItems:'center', marginBottom: 40}}>
+                <Ionicons name="scan-outline" size={80} color={theme.text} style={{opacity:0.2}}/>
+                {barcode && <ThemedText style={{marginTop:10, color:theme.tint}}>Linked Barcode: {barcode}</ThemedText>}
+            </View>
+
             <TouchableOpacity style={[styles.btn, { backgroundColor: theme.tint }]} onPress={() => handleImageSelection('camera')}>
               <Ionicons name="camera" size={24} color="#FFF" style={{marginRight: 10}}/>
               <ThemedText style={styles.btnText}>{t('camera', lang)}</ThemedText>
@@ -107,8 +106,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   closeBtn: { padding: 5 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 30 },
-  illustration: { alignItems: 'center', marginBottom: 60 },
   actionContainer: { gap: 20 },
-  btn: { flexDirection: 'row', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', elevation: 2 },
-  btnText: { fontSize: 18, fontWeight: '600', color: '#FFF' }
+  btn: { flexDirection: 'row', padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  btnText: { fontSize: 16, fontWeight: 'bold', color: '#FFF' }
 });

@@ -1,4 +1,3 @@
-// [START OF FILE app/food-editor.tsx]
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   StyleSheet,
@@ -42,10 +41,10 @@ const DEFAULT_NUTRIENTS = {
   carbs: "0", sugar: "0", fiber: "0", sodium: "0", cholesterol: "0", magnesium: "0", zinc: "0", iron: "0"
 };
 
-// [FIX] 將 NutrientRow 移至主元件外部，解決鍵盤自動關閉問題
-// 定義 Props 介面
+// [UI] 帶有 Emoji 的營養素輸入列
 interface NutrientRowProps {
     label: string;
+    emoji: string; // [NEW] Emoji support
     val: string;
     k: string;
     update: (k: any, v: string) => void;
@@ -54,13 +53,16 @@ interface NutrientRowProps {
     theme: any;
 }
 
-const NutrientRow = ({ label, val, k, update, isMain, unit='g', theme }: NutrientRowProps) => (
-    <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 8}}>
-        <ThemedText style={{fontSize: isMain?14:13, fontWeight: isMain?'600':'400', color: theme.text}}>
-            {label} <ThemedText style={{fontSize:10, color:'#888'}}>({unit})</ThemedText>
-        </ThemedText>
+const NutrientRow = ({ label, emoji, val, k, update, isMain, unit='g', theme }: NutrientRowProps) => (
+    <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 12}}>
+        <View style={{flexDirection:'row', alignItems:'center'}}>
+            <ThemedText style={{marginRight: 6, fontSize: isMain?16:14}}>{emoji}</ThemedText>
+            <ThemedText style={{fontSize: isMain?14:13, fontWeight: isMain?'600':'400', color: theme.text}}>
+                {label} <ThemedText style={{fontSize:10, color:'#888'}}>({unit})</ThemedText>
+            </ThemedText>
+        </View>
         <TextInput
-            style={[styles.input, {width: 80, paddingVertical: 4, height: 32, textAlign:'center', color:theme.text, borderColor: theme.icon}]}
+            style={[styles.input, {width: 90, paddingVertical: 6, textAlign:'center', color:theme.text, borderColor: theme.icon}]}
             value={val}
             onChangeText={(v) => update(k, v)}
             keyboardType="numeric"
@@ -101,15 +103,15 @@ export default function FoodEditorScreen() {
   
   const [inputMode, setInputMode] = useState<"serving" | "weight">("serving");
   const [servings, setServings] = useState("1");
-  const [unitWeight, setUnitWeight] = useState("100");
+  const [unitWeight, setUnitWeight] = useState("100"); 
   const [totalWeight, setTotalWeight] = useState("100");
 
   const [baseNutrients, setBaseNutrients] = useState(DEFAULT_NUTRIENTS);
   const [initialBaseNutrients, setInitialBaseNutrients] = useState<typeof DEFAULT_NUTRIENTS | null>(null);
+  const [initialUnitWeight, setInitialUnitWeight] = useState("100");
 
   const isInitialized = useRef(false);
 
-  // Meal Scroll Logic
   useEffect(() => {
       if (mealScrollRef.current) {
           const index = MEAL_PERIODS.findIndex(m => m.id === selectedMeal);
@@ -133,7 +135,7 @@ export default function FoodEditorScreen() {
 
   const calculatedTotal = useMemo(() => {
     const w = parseFloat(totalWeight) || 0;
-    const ratio = w / 100;
+    const ratio = w / 100; 
     return Math.round((parseFloat(baseNutrients.calories) || 0) * ratio);
   }, [totalWeight, baseNutrients.calories]);
 
@@ -149,18 +151,20 @@ export default function FoodEditorScreen() {
   useEffect(() => {
     if (isInitialized.current) return;
     isInitialized.current = true;
+    
     async function init() {
         try {
-            // Case 1: 編輯現有紀錄
             if (params.logId) {
                 const id = parseInt(params.logId as string);
-                const isClone = params.clone === "true";
+                const isClone = params.clone === "true"; 
                 if (!isClone) setLogId(id);
+
                 const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
                 if (logRes.length > 0) {
                     const log = logRes[0];
                     const targetDate = isClone ? new Date() : new Date(log.loggedAt);
                     setRecordDate(targetDate);
+                    
                     if (isClone) { updateCategoryByTime(targetDate); setMealManuallyChanged(false); }
                     else { setSelectedMeal(log.mealTimeCategory); setMealManuallyChanged(true); }
                     
@@ -171,11 +175,23 @@ export default function FoodEditorScreen() {
                     setTotalWeight(String(log.totalWeightG || "100"));
                     setDbFoodId(log.foodItemId);
                     if (log.imageUrl) setImageUri(log.imageUrl);
+                    
                     if (log.foodItemId) {
                         const itemRes = await db.select().from(foodItems).where(eq(foodItems.id, log.foodItemId));
                         if (itemRes.length > 0) {
                             const item = itemRes[0];
                             setBrand(item.brand || "");
+                            setBarcode(item.barcode); 
+                            setUnitWeight(String(item.baseAmount || "100")); 
+                            setInitialUnitWeight(String(item.baseAmount || "100"));
+
+                            if (item.aiSummary) {
+                                try {
+                                    const parsed = JSON.parse(item.aiSummary);
+                                    setAiComposition(parsed.composition || "");
+                                    setAiAdvice(parsed.suggestion || "");
+                                } catch(e){}
+                            }
                             const nutrients = mapDbToState(item);
                             setBaseNutrients(nutrients);
                             setInitialBaseNutrients(nutrients);
@@ -183,45 +199,46 @@ export default function FoodEditorScreen() {
                     }
                 }
             } 
-            // Case 2: 新增紀錄 (從 Scanner 傳來的資料)
             else {
                 const now = new Date();
                 setRecordDate(now);
                 updateCategoryByTime(now);
 
-                if (params.barcode) {
-                    setBarcode(params.barcode as string);
-                }
+                if (params.barcode) setBarcode(params.barcode as string);
 
                 if (params.productData) {
                     try {
                         const prod = JSON.parse(params.productData as string);
                         setFoodName(prod.name || "");
                         setBrand(prod.brand || "");
-                        if (prod.stdWeight) setUnitWeight(String(prod.stdWeight));
-                        
+                        if (prod.stdWeight) {
+                            setUnitWeight(String(prod.stdWeight));
+                            setInitialUnitWeight(String(prod.stdWeight));
+                        }
+                        if (prod.aiSummary) {
+                            try {
+                                const parsed = JSON.parse(prod.aiSummary);
+                                setAiComposition(parsed.composition || "");
+                                setAiAdvice(parsed.suggestion || "");
+                            } catch(e){}
+                        }
                         const nutrients = {
                             ...DEFAULT_NUTRIENTS,
-                            calories: safeStr(prod.cal),
-                            protein: safeStr(prod.pro),
-                            fat: safeStr(prod.fat),
-                            carbs: safeStr(prod.carb),
-                            sodium: safeStr(prod.sod),
-                            sugar: safeStr(prod.sugar),
-                            fiber: safeStr(prod.fiber),
-                            saturatedFat: safeStr(prod.saturatedFat),
-                            transFat: safeStr(prod.transFat),
+                            calories: safeStr(prod.cal), protein: safeStr(prod.pro), fat: safeStr(prod.fat),
+                            carbs: safeStr(prod.carb), sodium: safeStr(prod.sod), sugar: safeStr(prod.sugar),
+                            fiber: safeStr(prod.fiber), saturatedFat: safeStr(prod.saturatedFat), transFat: safeStr(prod.transFat),
                         };
                         setBaseNutrients(nutrients);
-                        if (prod.id) setDbFoodId(prod.id);
-                        
-                    } catch (e) {
-                        console.error("Error parsing productData", e);
-                    }
+                        if (prod.source === 'local' && prod.id) {
+                             setDbFoodId(prod.id);
+                             setInitialBaseNutrients(nutrients);
+                        }
+                    } catch (e) { console.error(e); }
                 }
 
                 if (params.imageUri) {
                     setImageUri(params.imageUri as string);
+                    // [修正] 自動觸發 AI 分析
                     if (params.analyze === "true" && params.imageBase64) {
                         performAiAnalysis(params.imageBase64 as string, 'image');
                     }
@@ -250,24 +267,33 @@ export default function FoodEditorScreen() {
               if (type === 'text') setFoodName(result.foodName || input);
               else setFoodName(result.foodName || t('ai_analysis', lang));
 
+              if (result.estimated_weight_g) {
+                  setUnitWeight(String(result.estimated_weight_g));
+                  setInputMode('serving');
+                  setServings('1');
+              }
+
+              const w = result.estimated_weight_g || 100;
+              const factor = (w > 0 && w !== 100) ? (100 / w) : 1;
+              
               setBaseNutrients({
-                  calories: safeStr(result.calories_100g),
-                  protein: safeStr(result.protein_100g),
-                  fat: safeStr(result.fat_100g),
-                  carbs: safeStr(result.carbs_100g),
-                  sodium: safeStr(result.sodium_100g),
-                  sugar: safeStr(result.sugar_100g),
-                  fiber: safeStr(result.fiber_100g),
-                  saturatedFat: safeStr(result.saturated_fat_100g),
-                  transFat: safeStr(result.trans_fat_100g),
-                  cholesterol: safeStr(result.cholesterol_100g),
-                  zinc: safeStr(result.zinc_100g),
-                  magnesium: safeStr(result.magnesium_100g),
-                  iron: safeStr(result.iron_100g),
+                  calories: (parseFloat(safeStr(result.calories)) * factor).toFixed(1),
+                  protein: (parseFloat(safeStr(result.protein)) * factor).toFixed(1),
+                  fat: (parseFloat(safeStr(result.fat)) * factor).toFixed(1),
+                  carbs: (parseFloat(safeStr(result.carbs)) * factor).toFixed(1),
+                  sodium: (parseFloat(safeStr(result.sodium)) * factor).toFixed(1),
+                  sugar: (parseFloat(safeStr(result.sugar)) * factor).toFixed(1),
+                  fiber: (parseFloat(safeStr(result.fiber)) * factor).toFixed(1),
+                  saturatedFat: (parseFloat(safeStr(result.saturated_fat)) * factor).toFixed(1),
+                  transFat: (parseFloat(safeStr(result.trans_fat)) * factor).toFixed(1),
+                  cholesterol: (parseFloat(safeStr(result.cholesterol)) * factor).toFixed(1),
+                  zinc: (parseFloat(safeStr(result.zinc)) * factor).toFixed(1),
+                  magnesium: (parseFloat(safeStr(result.magnesium)) * factor).toFixed(1),
+                  iron: (parseFloat(safeStr(result.iron)) * factor).toFixed(1),
               });
+
               setAiComposition(result.composition || "");
               setAiAdvice(result.suggestion || "");
-              Alert.alert(t('ai_analysis', lang), t('loaded', lang));
           } else {
               Alert.alert(t('error', lang), t('read_failed', lang));
           }
@@ -287,6 +313,7 @@ export default function FoodEditorScreen() {
     });
     if (found) setSelectedMeal(found.id);
   };
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -306,23 +333,24 @@ export default function FoodEditorScreen() {
         if (!logId && !mealManuallyChanged) updateCategoryByTime(newDate);
     }
   };
-  const handleMealChange = (mealId: string) => { setSelectedMeal(mealId); setMealManuallyChanged(true); };
   
   const handleSave = async () => {
     if (!foodName || !totalWeight) return Alert.alert(t('error', lang), t('data_incomplete', lang));
     
     let isModified = false;
-    if (initialBaseNutrients) {
-        isModified = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
+    if (initialBaseNutrients && dbFoodId) {
+        const nutrientChanged = JSON.stringify(baseNutrients) !== JSON.stringify(initialBaseNutrients);
+        const weightChanged = unitWeight !== initialUnitWeight;
+        if (nutrientChanged || weightChanged) isModified = true;
     }
     
     if (dbFoodId && isModified) {
         Alert.alert(
             t('tip', lang),
-            t('food_modified_msg', lang),
+            t('food_modified_msg', lang) || "Product details changed. Update original database item?",
             [
-                { text: t('save_as_new', lang), onPress: () => saveToDb(true) },
-                { text: t('update_original', lang), onPress: () => saveToDb(false) }
+                { text: t('save_as_new', lang) || "Create New", onPress: () => saveToDb(true) },
+                { text: t('update_original', lang) || "Overwrite", onPress: () => saveToDb(false) }
             ]
         );
     } else {
@@ -337,11 +365,13 @@ export default function FoodEditorScreen() {
           
           let foodId = dbFoodId;
 
-          // 1. Update/Create Food Item
           const itemData = {
               name: foodName,
               brand: brand,
-              barcode: barcode, 
+              barcode: barcode,
+              baseAmount: parseFloat(unitWeight) || 100,
+              aiSummary: JSON.stringify({composition: aiComposition, suggestion: aiAdvice}),
+              
               calories: parseFloat(baseNutrients.calories) || 0,
               proteinG: parseFloat(baseNutrients.protein) || 0,
               fatG: parseFloat(baseNutrients.fat) || 0,
@@ -365,7 +395,6 @@ export default function FoodEditorScreen() {
               await db.update(foodItems).set(itemData).where(eq(foodItems.id, foodId));
           }
           
-          // 2. Save Log
           const logData = {
               date: format(recordDate, "yyyy-MM-dd"),
               mealTimeCategory: selectedMeal,
@@ -376,6 +405,7 @@ export default function FoodEditorScreen() {
               servingAmount: parseFloat(servings),
               unitWeightG: parseFloat(unitWeight),
               totalWeightG: w,
+              
               totalCalories: itemData.calories * ratio,
               totalProteinG: itemData.proteinG * ratio,
               totalFatG: itemData.fatG * ratio,
@@ -391,23 +421,17 @@ export default function FoodEditorScreen() {
               totalIronMg: itemData.ironMg * ratio,
               
               imageUrl: imageUri,
-              aiAnalysisLog: aiComposition ? JSON.stringify({composition: aiComposition, advice: aiAdvice}) : null
+              aiAnalysisLog: itemData.aiSummary
           };
 
-          if (logId) {
-              await db.update(foodLogs).set(logData).where(eq(foodLogs.id, logId));
-          } else {
-              await db.insert(foodLogs).values(logData);
-          }
+          if (logId) await db.update(foodLogs).set(logData).where(eq(foodLogs.id, logId));
+          else await db.insert(foodLogs).values(logData);
           
           Alert.alert(t('success', lang), t('save_success', lang), [{ text: "OK", onPress: () => {
              if (router.canDismiss()) router.dismissAll();
              router.replace("/(tabs)");
           }}]);
-      } catch (e) {
-          console.error(e);
-          Alert.alert(t('error', lang), "Save Failed");
-      }
+      } catch (e) { console.error(e); Alert.alert(t('error', lang), "Save Failed"); }
   };
 
   const updateNutrient = (key: keyof typeof baseNutrients, val: string) => { setBaseNutrients(prev => ({ ...prev, [key]: val })); };
@@ -417,7 +441,7 @@ export default function FoodEditorScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex:1}}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color={theme.text} /></TouchableOpacity>
-        <ThemedText type="subtitle">{logId ? t('settings', lang) : (barcode ? t('product_info', lang) : t('ai_analysis', lang))}</ThemedText>
+        <ThemedText type="subtitle">{logId ? t('edit', lang) : (barcode ? t('product_info', lang) : t('ai_analysis', lang))}</ThemedText>
         <TouchableOpacity onPress={handleSave}><Ionicons name="save" size={28} color={theme.tint} /></TouchableOpacity>
       </View>
 
@@ -447,65 +471,29 @@ export default function FoodEditorScreen() {
         )}
 
         <View style={{marginBottom: 16}}>
-            <ScrollView 
-                ref={mealScrollRef}
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{gap: 8, paddingHorizontal: 4}}
-            >
+            <ScrollView ref={mealScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8, paddingHorizontal: 4}}>
                 {MEAL_PERIODS.map((meal) => (
-                    <TouchableOpacity 
-                        key={meal.id} 
-                        style={[
-                            styles.mealBtn, 
-                            selectedMeal === meal.id && { backgroundColor: theme.tint, borderColor: theme.tint }
-                        ]} 
-                        onPress={() => handleMealChange(meal.id)}
-                    >
-                        <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text, fontWeight: selectedMeal===meal.id?'bold':'normal' }}>
-                            {t(meal.id as any, lang) || meal.label}
-                        </ThemedText>
+                    <TouchableOpacity key={meal.id} style={[styles.mealBtn, selectedMeal === meal.id && { backgroundColor: theme.tint, borderColor: theme.tint }]} onPress={() => {setSelectedMeal(meal.id); setMealManuallyChanged(true);}}>
+                        <ThemedText style={{ color: selectedMeal === meal.id ? '#FFF' : theme.text, fontWeight: selectedMeal===meal.id?'bold':'normal' }}>{t(meal.id as any, lang) || meal.label}</ThemedText>
                     </TouchableOpacity>
                 ))}
             </ScrollView>
         </View>
 
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 8}}>{t('food_name', lang)}</ThemedText>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 8}}>📦 {t('food_name', lang)}</ThemedText>
             <View style={{flexDirection:'row', alignItems:'center'}}>
-                <TextInput 
-                    style={[styles.input, { color: theme.text, borderColor: theme.icon, flex: 1 }]} 
-                    value={foodName} 
-                    onChangeText={setFoodName} 
-                    placeholder={t('food_name_placeholder', lang)} 
-                    placeholderTextColor={theme.icon} 
-                />
-                <TouchableOpacity 
-                    onPress={() => performAiAnalysis(foodName, 'text')} 
-                    disabled={isAnalyzing || !foodName}
-                    style={{marginLeft: 8, padding: 8, backgroundColor: (isAnalyzing || !foodName)?'#ccc':theme.tint, borderRadius: 8}}
-                >
+                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.icon, flex: 1 }]} value={foodName} onChangeText={setFoodName} placeholder={t('food_name_placeholder', lang)} placeholderTextColor={theme.icon} />
+                <TouchableOpacity onPress={() => performAiAnalysis(foodName, 'text')} disabled={isAnalyzing || !foodName} style={{marginLeft: 8, padding: 8, backgroundColor: (isAnalyzing || !foodName)?'#ccc':theme.tint, borderRadius: 8}}>
                     {isAnalyzing ? <ActivityIndicator color="#FFF" size="small"/> : <Ionicons name="sparkles" size={20} color="#FFF" />}
                 </TouchableOpacity>
             </View>
-            
-            <View style={{marginTop: 12}}>
-                <ThemedText style={{fontSize:12, color:'#888', marginBottom:4}}>{t('brand', lang)}</ThemedText>
-                <TextInput 
-                    style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
-                    value={brand} 
-                    onChangeText={setBrand} 
-                    placeholder={t('brand_placeholder', lang)}  
-                    placeholderTextColor={theme.icon} 
-                />
-            </View>
-
             {barcode && <View style={{flexDirection:'row', marginTop: 8}}><Ionicons name="barcode-outline" size={16} color={theme.icon} /><ThemedText style={{fontSize: 12, color: theme.icon}}>{t('barcode_scanned', lang)} {barcode}</ThemedText></View>}
         </ThemedView>
         
         <ThemedView style={styles.card}>
             <View style={styles.rowBetween}>
-                <ThemedText type="defaultSemiBold">{t('portion', lang)}</ThemedText>
+                <ThemedText type="defaultSemiBold">⚖️ {t('portion', lang)}</ThemedText>
                 <TouchableOpacity onPress={() => setInputMode(prev => prev === 'serving' ? 'weight' : 'serving')}>
                     <ThemedText style={{color: theme.tint, fontSize: 14}}>⇄ {inputMode === 'serving' ? t('switch_to_weight', lang) : t('switch_to_serving', lang)}</ThemedText>
                 </TouchableOpacity>
@@ -513,7 +501,7 @@ export default function FoodEditorScreen() {
             {inputMode === 'serving' ? (
                 <View style={styles.rowInputs}>
                     <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>{t('portion_count', lang)}</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={servings} onChangeText={setServings} keyboardType="numeric"/></View>
-                    <ThemedText style={{alignSelf: 'flex-end', marginBottom: 12}}>X</ThemedText>
+                    <ThemedText style={{alignSelf: 'flex-end', marginBottom: 12, marginHorizontal: 8}}>X</ThemedText>
                     <View style={{flex: 1}}><ThemedText style={styles.labelSmall}>{t('unit_weight', lang)}(g)</ThemedText><TextInput style={[styles.input, {color:theme.text, borderColor:theme.icon}]} value={unitWeight} onChangeText={setUnitWeight} keyboardType="numeric"/></View>
                 </View>
             ) : (
@@ -523,30 +511,30 @@ export default function FoodEditorScreen() {
         </ThemedView>
 
         <ThemedView style={styles.card}>
-            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>{t('val_per_100g', lang)}</ThemedText>
-            {/* [FIX] 使用外部定義的 NutrientRow，並傳入 theme */}
-            <NutrientRow label={t('calories', lang)} val={baseNutrients.calories} k="calories" update={updateNutrient} isMain unit="kcal" theme={theme}/>
+            <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>📊 {t('val_per_100g', lang)}</ThemedText>
+            {/* 使用帶 Emoji 的組件 */}
+            <NutrientRow label={t('calories', lang)} emoji="🔥" val={baseNutrients.calories} k="calories" update={updateNutrient} isMain unit="kcal" theme={theme}/>
             <View style={styles.divider}/>
-            <NutrientRow label={t('protein', lang)} val={baseNutrients.protein} k="protein" update={updateNutrient} isMain theme={theme}/>
+            <NutrientRow label={t('protein', lang)} emoji="🥩" val={baseNutrients.protein} k="protein" update={updateNutrient} isMain theme={theme}/>
             <View style={styles.divider}/>
-            <NutrientRow label={t('fat', lang)} val={baseNutrients.fat} k="fat" update={updateNutrient} isMain theme={theme}/>
+            <NutrientRow label={t('fat', lang)} emoji="🥑" val={baseNutrients.fat} k="fat" update={updateNutrient} isMain theme={theme}/>
             <View style={{paddingLeft: 16}}>
-                <NutrientRow label={t('saturated_fat', lang)} val={baseNutrients.saturatedFat} k="saturatedFat" update={updateNutrient} theme={theme}/>
-                <NutrientRow label={t('trans_fat', lang)} val={baseNutrients.transFat} k="transFat" update={updateNutrient} theme={theme}/>
-                <NutrientRow label={t('cholesterol', lang)} val={baseNutrients.cholesterol} k="cholesterol" update={updateNutrient} unit="mg" theme={theme}/>
+                <NutrientRow label={t('saturated_fat', lang)} emoji="🥥" val={baseNutrients.saturatedFat} k="saturatedFat" update={updateNutrient} theme={theme}/>
+                <NutrientRow label={t('trans_fat', lang)} emoji="🍟" val={baseNutrients.transFat} k="transFat" update={updateNutrient} theme={theme}/>
+                <NutrientRow label={t('cholesterol', lang)} emoji="🥚" val={baseNutrients.cholesterol} k="cholesterol" update={updateNutrient} unit="mg" theme={theme}/>
             </View>
             <View style={styles.divider}/>
-            <NutrientRow label={t('carbs', lang)} val={baseNutrients.carbs} k="carbs" update={updateNutrient} isMain theme={theme}/>
+            <NutrientRow label={t('carbs', lang)} emoji="🍚" val={baseNutrients.carbs} k="carbs" update={updateNutrient} isMain theme={theme}/>
             <View style={{paddingLeft: 16}}>
-                <NutrientRow label={t('sugar', lang)} val={baseNutrients.sugar} k="sugar" update={updateNutrient} theme={theme}/>
-                <NutrientRow label={t('fiber', lang)} val={baseNutrients.fiber} k="fiber" update={updateNutrient} theme={theme}/>
+                <NutrientRow label={t('sugar', lang)} emoji="🍬" val={baseNutrients.sugar} k="sugar" update={updateNutrient} theme={theme}/>
+                <NutrientRow label={t('fiber', lang)} emoji="🥦" val={baseNutrients.fiber} k="fiber" update={updateNutrient} theme={theme}/>
             </View>
             <View style={styles.divider}/>
-            <NutrientRow label={t('sodium', lang)} val={baseNutrients.sodium} k="sodium" update={updateNutrient} isMain unit="mg" theme={theme}/>
+            <NutrientRow label={t('sodium', lang)} emoji="🧂" val={baseNutrients.sodium} k="sodium" update={updateNutrient} isMain unit="mg" theme={theme}/>
             <View style={{paddingLeft: 16}}>
-                <NutrientRow label={t('zinc', lang)} val={baseNutrients.zinc} k="zinc" update={updateNutrient} unit="mg" theme={theme}/>
-                <NutrientRow label={t('magnesium', lang)} val={baseNutrients.magnesium} k="magnesium" update={updateNutrient} unit="mg" theme={theme}/>
-                <NutrientRow label={t('iron', lang)} val={baseNutrients.iron} k="iron" update={updateNutrient} unit="mg" theme={theme}/>
+                <NutrientRow label={t('zinc', lang)} emoji="🔩" val={baseNutrients.zinc} k="zinc" update={updateNutrient} unit="mg" theme={theme}/>
+                <NutrientRow label={t('magnesium', lang)} emoji="🥬" val={baseNutrients.magnesium} k="magnesium" update={updateNutrient} unit="mg" theme={theme}/>
+                <NutrientRow label={t('iron', lang)} emoji="🩸" val={baseNutrients.iron} k="iron" update={updateNutrient} unit="mg" theme={theme}/>
             </View>
         </ThemedView>
       </ScrollView>
@@ -573,4 +561,3 @@ const styles = StyleSheet.create({
   imagePreview: { marginBottom: 16 },
   analyzingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderRadius: 12 }
 });
-// [END OF FILE app/food-editor.tsx]

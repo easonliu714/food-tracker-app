@@ -1,4 +1,3 @@
-// [START OF FILE app/(tabs)/index.tsx]
 import React, { useState, useCallback } from "react";
 import {
   StyleSheet,
@@ -10,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  Pressable
+  RefreshControl
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -28,7 +27,8 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n"; 
 
-import { db } from "@/lib/db";
+// [FIX] 引入新增的 DB 函式
+import { db, getLatestTwoDailyMetrics, duplicateFoodLog } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -44,6 +44,7 @@ export default function HomeScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // [NEW] 下拉刷新
   
   const [weight, setWeight] = useState(""); 
   const [bodyFat, setBodyFat] = useState("");
@@ -57,12 +58,10 @@ export default function HomeScreen() {
   const [intake, setIntake] = useState({ calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 });
   const [burnedCalories, setBurnedCalories] = useState(0);
   const [dailyLogs, setDailyLogs] = useState<Record<string, any[]>>({});
-  // [NEW] 儲存所有紀錄以便詳細分析
   const [allDailyLogs, setAllDailyLogs] = useState<any[]>([]);
   const [dailyActivities, setDailyActivities] = useState<any[]>([]);
   const [recentFoods, setRecentFoods] = useState<any[]>([]);
 
-  // [NEW] 營養素詳細分析彈窗狀態
   const [selectedMacro, setSelectedMacro] = useState<{label: string, key: string, unit: string} | null>(null);
 
   useFocusEffect(
@@ -78,8 +77,8 @@ export default function HomeScreen() {
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
-      const yesterdayStr = format(subDays(currentDate, 1), "yyyy-MM-dd");
 
+      // 1. 載入個人目標
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -94,24 +93,36 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
+      // 2. [FIX] 身體數值比較邏輯優化
+      // 先抓取當日的數值
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
-      const yestRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, yesterdayStr));
-      
-      let curW = 0;
       if (metricsRes.length > 0) {
-        curW = metricsRes[0].weightKg || 0;
+        const curW = metricsRes[0].weightKg || 0;
         const curF = metricsRes[0].bodyFatPercentage || 0;
         setWeight(curW > 0 ? String(curW) : "");
         setBodyFat(curF > 0 ? String(curF) : "");
-        
-        if (yestRes.length > 0 && curW > 0) {
-            setDiffWeight(parseFloat((curW - (yestRes[0].weightKg || 0)).toFixed(1)));
-            setDiffFat(parseFloat((curF - (yestRes[0].bodyFatPercentage || 0)).toFixed(1)));
-        }
       }
 
+      // 再抓取「最新兩筆」來計算差異 (不限於昨天)
+      const latestTwo = await getLatestTwoDailyMetrics();
+      if (latestTwo.length >= 2) {
+          // latestTwo[0] 是最新, latestTwo[1] 是次新
+          // 我們需要確認 latestTwo[0] 是否就是「今天」顯示的數值
+          // 如果今天是最新，那就跟次新比；如果今天還沒量，那就顯示最新兩筆的差異作為參考
+          const latest = latestTwo[0];
+          const previous = latestTwo[1];
+          
+          if (latest.date === dateStr && latest.weightKg && previous.weightKg) {
+             setDiffWeight(parseFloat((latest.weightKg - previous.weightKg).toFixed(1)));
+          }
+          if (latest.date === dateStr && latest.bodyFatPercentage && previous.bodyFatPercentage) {
+             setDiffFat(parseFloat((latest.bodyFatPercentage - previous.bodyFatPercentage).toFixed(1)));
+          }
+      }
+
+      // 3. 載入飲食紀錄
       const logsRes = await db.select().from(foodLogs).where(eq(foodLogs.date, dateStr));
-      setAllDailyLogs(logsRes); // 保存原始陣列
+      setAllDailyLogs(logsRes);
 
       const newIntake = { calories: 0, protein: 0, fat: 0, carbs: 0, sodium: 0 };
       const groupedLogs: Record<string, any[]> = {};
@@ -129,6 +140,7 @@ export default function HomeScreen() {
       setIntake(newIntake);
       setDailyLogs(groupedLogs);
 
+      // 4. 載入運動與最近紀錄
       const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
@@ -138,7 +150,12 @@ export default function HomeScreen() {
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
       setRecentFoods(uniqueRecents);
 
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    } catch (e) { console.error(e); } finally { setIsLoading(false); setRefreshing(false); }
+  };
+
+  const onRefresh = () => {
+      setRefreshing(true);
+      loadData();
   };
 
   const handleSaveMetrics = async () => {
@@ -161,6 +178,17 @@ export default function HomeScreen() {
           Alert.alert(t('success', lang), t('save_success', lang));
           loadData(); 
       } catch(e) { console.error(e); }
+  };
+
+  // [FIX] 新增複製功能
+  const handleDuplicate = async (id: number) => {
+      try {
+          await duplicateFoodLog(id);
+          Alert.alert(t('success', lang), t('save_success', lang)); // 或者使用 Toast
+          loadData();
+      } catch (e) {
+          Alert.alert(t('error', lang), "Copy failed");
+      }
   };
 
   const deleteLog = (id: number) => {
@@ -259,12 +287,9 @@ export default function HomeScreen() {
     );
   };
 
-  // [修改] 增加點擊事件，傳遞 key 給 Modal
   const renderMacroRing = (label:string, val:number, target:number, color:string, key: string, unit="g") => {
       const realPct = target > 0 ? (val/target)*100 : 0; 
       const visualPct = Math.min(realPct, 100); 
-      
-      const data = [{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}];
       
       return (
           <TouchableOpacity 
@@ -273,7 +298,7 @@ export default function HomeScreen() {
           >
               <View pointerEvents="none">
                   <PieChart 
-                    data={data} 
+                    data={[{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}]} 
                     donut 
                     radius={32} 
                     innerRadius={24} 
@@ -286,7 +311,6 @@ export default function HomeScreen() {
       );
   };
 
-  // [NEW] 營養素詳細分析彈窗
   const renderMacroDetailModal = () => {
       if (!selectedMacro) return null;
       
@@ -298,7 +322,6 @@ export default function HomeScreen() {
       };
       
       const dbKey = keyMap[selectedMacro.key];
-      // 篩選出該營養素大於 0 的紀錄，並由大到小排序
       const sortedLogs = allDailyLogs
         .filter(l => (l[dbKey] || 0) > 0)
         .sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0));
@@ -361,9 +384,25 @@ export default function HomeScreen() {
       </View>
   );
 
+  // [FIX] 新增複製按鈕的 Swipeable Log
   const renderSwipeableLog = (log: any) => (
-      <Swipeable renderRightActions={()=><TouchableOpacity style={styles.deleteAction} onPress={() => deleteLog(log.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} 
-                 renderLeftActions={()=><TouchableOpacity style={styles.editAction} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}>
+      <Swipeable 
+        renderRightActions={()=>(
+            <View style={{flexDirection: 'row', width: 140}}>
+                <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF9500'}]} onPress={() => handleDuplicate(log.id)}>
+                    <Ionicons name="copy" size={24} color="white"/>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30'}]} onPress={() => deleteLog(log.id)}>
+                    <Ionicons name="trash" size={24} color="white"/>
+                </TouchableOpacity>
+            </View>
+        )} 
+        renderLeftActions={()=>(
+            <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}>
+                <Ionicons name="create" size={24} color="white"/>
+            </TouchableOpacity>
+        )}
+      >
           <View style={[styles.logItem, {backgroundColor: theme.background}]}>
               <View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':t('portion', lang)}</ThemedText></View>
               <ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText>
@@ -374,8 +413,10 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      {isLoading ? <ActivityIndicator size="large" style={{marginTop:50}}/> :
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {renderHeader()}
         {renderBodyMetricsCard()}
         {renderEnergySection()}
@@ -410,8 +451,8 @@ export default function HomeScreen() {
                 {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (
                     <Swipeable 
                         key={act.id} 
-                        renderRightActions={()=><TouchableOpacity style={styles.deleteAction} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}
-                        renderLeftActions={()=><TouchableOpacity style={styles.editAction} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}
+                        renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}
+                        renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}
                     >
                         <View style={[styles.logItem, {backgroundColor: theme.background}]}>
                             <View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View>
@@ -423,7 +464,6 @@ export default function HomeScreen() {
         </View>
         {renderMacroDetailModal()}
       </ScrollView>
-      }
     </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -456,11 +496,9 @@ const styles = StyleSheet.create({
   mealHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#E5E5EA", marginBottom: 8 },
   emptyLogPlaceholder: { paddingVertical: 12, alignItems: 'center', borderStyle: 'dashed', borderWidth: 1, borderColor: '#C7C7CC', borderRadius: 8 },
   logItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
-  deleteAction: { backgroundColor: '#FF3B30', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
-  editAction: { backgroundColor: '#34C759', justifyContent: 'center', alignItems: 'center', width: 80, height: '100%' },
+  actionBtnBase: { justifyContent: 'center', alignItems: 'center', width: 70, height: '100%' },
   separator: { borderBottomWidth: 1, borderColor: '#f0f0f0' },
   quickChip: { padding: 8, borderRadius: 20, borderWidth: 1, marginRight: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
   modalContent: { padding: 20, borderRadius: 16 }
 });
-// [END OF FILE app/(tabs)/index.tsx]

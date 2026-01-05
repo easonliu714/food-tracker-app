@@ -1,11 +1,10 @@
-// [START OF FILE app/(tabs)/analysis.tsx]
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Dimensions, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Dimensions, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { BarChart, LineChart } from "react-native-gifted-charts";
+import { BarChart } from "react-native-gifted-charts"; 
 import { useFocusEffect } from "expo-router";
 import { db } from "@/lib/db";
 import { foodLogs, dailyMetrics, activityLogs } from "@/drizzle/schema";
@@ -14,8 +13,7 @@ import { format, subDays, eachDayOfInterval } from "date-fns";
 import { t, useLanguage } from "@/lib/i18n";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-// [FIX] 明確定義圖表的可視寬度，扣除左右 padding (16*2)
-const VISIBLE_WIDTH = SCREEN_WIDTH - 32; 
+const VISIBLE_WIDTH = SCREEN_WIDTH - 48; 
 
 export default function AnalysisScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
@@ -23,34 +21,37 @@ export default function AnalysisScreen() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<7 | 30>(7);
   
-  const [calData, setCalData] = useState<any[]>([]);
-  const [dataSet, setDataSet] = useState<any[]>([]); 
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [lineData, setLineData] = useState<any[]>([]);     
+  const [lineData2, setLineData2] = useState<any[]>([]);   
   const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
+  
+  // [NEW] 用於處理雙軸縮放的參數
+  const [axisConfig, setAxisConfig] = useState({
+      maxCal: 2500,
+      maxWeight: 100,
+      scaleFactor: 1, // 用於將體重映射到熱量軸的比例
+      yAxisLabelTexts: ['0', '25', '50', '75', '100'] // 右側軸的顯示標籤
+  });
 
-  const barChartRef = useRef<any>(null);
-  const lineChartRef = useRef<any>(null);
+  const chartRef = useRef<any>(null);
 
-  const config = period === 30 
-    ? { barWidth: 12, spacing: 8, initialSpacing: 10, endSpacing: 50 }
-    : { barWidth: 16, spacing: 24, initialSpacing: 20, endSpacing: 20 };
-
-  const lineSpacing = config.barWidth + config.spacing;
-  const lineInitialSpacing = config.initialSpacing; 
+  const barConfig = period === 30 
+    ? { barWidth: 8, spacing: 12, initialSpacing: 10 }
+    : { barWidth: 20, spacing: 24, initialSpacing: 20 };
 
   useFocusEffect(
     useCallback(() => { loadAnalysis(period); }, [period])
   );
 
-  // [FIX] 增加 500ms 延遲，確保 Layout 渲染完成後再捲動
+  // [FIX] 確保資料載入後捲動到最右側 (最新日期)
   useEffect(() => {
-      if (calData.length > 0) {
-          const timer = setTimeout(() => {
-              if (barChartRef.current) barChartRef.current.scrollToEnd({ animated: true });
-              if (lineChartRef.current) lineChartRef.current.scrollToEnd({ animated: true });
-          }, 500);
-          return () => clearTimeout(timer);
+      if (chartData.length > 0 && chartRef.current) {
+          setTimeout(() => {
+              chartRef.current.scrollToEnd({ animated: false }); 
+          }, 300); // 延遲確保渲染完成
       }
-  }, [calData, dataSet]);
+  }, [chartData]);
 
   const loadAnalysis = async (days: number) => {
       setLoading(true);
@@ -73,9 +74,13 @@ export default function AnalysisScreen() {
               });
           });
 
+          // Fetch Data
           const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
           const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
           const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart));
+
+          let maxCalVal = 2000; 
+          let maxWeightVal = 80;
 
           logs.forEach(l => {
               if (dataMap.has(l.date)) {
@@ -86,6 +91,7 @@ export default function AnalysisScreen() {
                   d.carb += l.totalCarbsG || 0;
                   d.sod += l.totalSodiumMg || 0;
                   d.hasData = true;
+                  if (d.in > maxCalVal) maxCalVal = d.in;
               }
           });
           acts.forEach(a => {
@@ -93,40 +99,66 @@ export default function AnalysisScreen() {
                   const d = dataMap.get(a.date);
                   d.out += a.caloriesBurned || 0; 
                   d.hasData = true;
+                  if (d.out > maxCalVal) maxCalVal = d.out; // 消耗也納入最大值考量
               }
           });
           metrics.forEach(m => {
               if (dataMap.has(m.date)) {
                   const d = dataMap.get(m.date);
-                  if (m.weightKg && m.weightKg > 0) d.w = m.weightKg; 
-                  if (m.bodyFatPercentage && m.bodyFatPercentage > 0) d.bf = m.bodyFatPercentage; 
+                  if (m.weightKg && m.weightKg > 0) {
+                      d.w = m.weightKg;
+                      if (d.w > maxWeightVal) maxWeightVal = d.w;
+                  }
+                  if (m.bodyFatPercentage && m.bodyFatPercentage > 0) d.bf = m.bodyFatPercentage;
               }
           });
 
-          const chartArr = Array.from(dataMap.values()).sort((a:any, b:any) => a.dateStr.localeCompare(b.dateStr));
+          // [FIX] 計算雙軸縮放參數
+          // 1. 熱量軸最大值 (取 500 的倍數)
+          const finalMaxCal = Math.ceil(maxCalVal / 500) * 500;
+          // 2. 體重軸最大值 (取 10 的倍數)
+          const finalMaxWeight = Math.ceil((maxWeightVal + 10) / 10) * 10;
+          // 3. 縮放比例 (讓體重數值能 mapping 到熱量軸的高度)
+          const factor = finalMaxCal / finalMaxWeight;
 
-          // 1. Calorie Chart
-          const stackData = chartArr.map((d, idx) => ({
+          // 產生右側軸的標籤文字 (0, 20%, 40%, 60%, 80%, 100% of maxWeight)
+          const yAxisLabels = [
+              '0', 
+              Math.round(finalMaxWeight * 0.25).toString(),
+              Math.round(finalMaxWeight * 0.5).toString(),
+              Math.round(finalMaxWeight * 0.75).toString(),
+              Math.round(finalMaxWeight).toString()
+          ];
+
+          setAxisConfig({
+              maxCal: finalMaxCal,
+              maxWeight: finalMaxWeight,
+              scaleFactor: factor,
+              yAxisLabelTexts: yAxisLabels
+          });
+
+          const sortedArr = Array.from(dataMap.values()).sort((a:any, b:any) => a.dateStr.localeCompare(b.dateStr));
+
+          // 構建 Bar Data
+          const bars = sortedArr.map((d, idx) => ({
               label: d.label,
               labelTextStyle: { fontSize: 10, color: '#888', width: 40, textAlign: 'center' },
               stacks: [
-                  { value: d.in, color: '#34C759', marginBottom: 2 },
-                  { value: -(d.out), color: '#FF9500' }, 
+                  { value: d.in, color: '#34C759', marginBottom: 1 }, 
+                  { value: -d.out, color: '#FF9500' }, 
               ],
-              frontColor: 'transparent',
-              customData: { ...d, index: idx, total: chartArr.length } 
+              customData: { ...d, index: idx } 
           }));
-          setCalData(stackData);
 
-          // 2. Weight Line Chart
+          // 構建 Line Data (使用縮放後的值繪圖，Tooltip 顯示真實值)
           const interpolate = (arr: any[], key: string) => {
              const knownIndices = arr.map((item, i) => item[key] !== null ? i : -1).filter(i => i !== -1);
              return arr.map((item, i) => {
                  if (item[key] !== null) {
                      return { 
-                         value: item[key], 
-                         dataPointText: item[key].toString(),
-                         customData: { ...item, type: 'real' }
+                         value: item[key] * factor, // [Scaling] 放大數值以配合左軸高度
+                         dataPointText: String(item[key]),
+                         customData: { type: 'real', dateStr: item.dateStr, name: key==='w'?'Weight':'BodyFat', realVal: item[key] }
                      };
                  }
                  const prevIdx = knownIndices.filter(idx => idx < i).pop();
@@ -140,45 +172,22 @@ export default function AnalysisScreen() {
                  else if (nextIdx !== undefined) val = arr[nextIdx][key]; 
                  
                  return { 
-                     value: Number(val.toFixed(1)), 
+                     value: (val > 0 ? val : 0) * factor, // [Scaling]
                      hideDataPoint: true, 
-                     customData: { ...item, type: 'interpolated' }
+                     customData: { type: 'interpolated', dateStr: item.dateStr, realVal: Number(val.toFixed(1)) }
                  };
              });
           };
 
-          const wArr = interpolate(chartArr, 'w');
-          const bfArr = interpolate(chartArr, 'bf');
-          
-          const enrich = (arr: any[], name: string) => arr.map((item, idx) => ({
-             ...item,
-             label: item.label || ' ', 
-             customData: { ...item.customData, index: idx, total: arr.length, name }
-          }));
+          setChartData(bars);
+          setLineData(interpolate(sortedArr, 'w'));
+          setLineData2(interpolate(sortedArr, 'bf'));
 
-          setDataSet([
-              {
-                  data: enrich(wArr, t('weight', lang)),
-                  color: '#FF9500',
-                  dataPointsColor: '#FF9500',
-                  thickness: 3,
-                  curved: true,
-                  hideDataPoints: false
-              },
-              {
-                  data: enrich(bfArr, t('body_fat', lang)),
-                  color: '#007AFF',
-                  dataPointsColor: '#007AFF',
-                  thickness: 3,
-                  curved: true,
-                  hideDataPoints: false
-              }
-          ]);
-
-          const validInDays = chartArr.filter(d => d.in > 0).length || 1;
-          const validOutDays = chartArr.filter(d => d.out > 0).length || 1;
-          const validMacroDays = chartArr.filter(d => d.hasData).length || 1;
-          const sum = chartArr.reduce((acc, cur) => ({
+          // 計算平均值
+          const validInDays = sortedArr.filter(d => d.in > 0).length || 1;
+          const validOutDays = sortedArr.filter(d => d.out > 0).length || 1;
+          const validMacroDays = sortedArr.filter(d => d.hasData).length || 1;
+          const sum = sortedArr.reduce((acc, cur) => ({
               avgIn: acc.avgIn + cur.in, avgOut: acc.avgOut + cur.out,
               avgPro: acc.avgPro + cur.pro, avgFat: acc.avgFat + cur.fat,
               avgCarb: acc.avgCarb + cur.carb, avgSod: acc.avgSod + cur.sod
@@ -196,27 +205,17 @@ export default function AnalysisScreen() {
       } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const renderCalTooltip = (item: any) => {
+  const renderTooltip = (item: any) => {
       if (!item.customData) return null;
-      const { index, total } = item.customData;
-      const isRightSide = index > total / 2;
+      const isRightSide = item.customData.index > (chartData.length / 2);
+      
       return (
           <View style={[styles.tooltip, { left: isRightSide ? -110 : 10, top: 0 }]}>
               <ThemedText style={styles.tooltipTitle}>{item.customData.dateStr}</ThemedText>
-              <ThemedText style={styles.tooltipText}>{t('intake', lang)}: {Math.round(item.customData.in)}</ThemedText>
-              <ThemedText style={styles.tooltipText}>{t('burned', lang)}: {Math.round(item.customData.out)}</ThemedText>
-          </View>
-      );
-  };
-
-  const renderLineTooltip = (item: any) => {
-      if (item.customData?.type === 'interpolated') return null;
-      const { index, total, name } = item.customData || {};
-      const isRightSide = index > (total || 1) / 2;
-      return (
-          <View style={[styles.tooltip, { left: isRightSide ? -90 : 10, top: 0 }]}>
-              <ThemedText style={styles.tooltipTitle}>{item.customData?.dateStr}</ThemedText>
-              <ThemedText style={styles.tooltipText}>{name}: {item.value}</ThemedText>
+              <ThemedText style={styles.tooltipText}>➕ {t('intake', lang)}: {Math.round(item.customData.in)}</ThemedText>
+              <ThemedText style={styles.tooltipText}>➖ {t('burned', lang)}: {Math.round(item.customData.out)}</ThemedText>
+              {item.customData.w && <ThemedText style={styles.tooltipText}>⚖️ {t('weight', lang)}: {item.customData.w} kg</ThemedText>}
+              {item.customData.bf && <ThemedText style={styles.tooltipText}>💧 {t('body_fat', lang)}: {item.customData.bf} %</ThemedText>}
           </View>
       );
   };
@@ -244,66 +243,78 @@ export default function AnalysisScreen() {
               </View>
           </View>
 
-          <View style={[styles.card, {marginTop: 16}]}>
-              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_cal', lang)}</ThemedText>
-              {/* @ts-ignore */}
-              <BarChart 
-                ref={barChartRef}
-                data={calData} 
-                stackData={calData}
-                barWidth={config.barWidth} 
-                spacing={config.spacing}
-                initialSpacing={config.initialSpacing}
-                endSpacing={config.endSpacing || 0}
-                noOfSections={3} 
-                barBorderRadius={4} 
-                yAxisThickness={0} 
-                xAxisThickness={1}
-                hideRules
-                height={180}
-                width={VISIBLE_WIDTH} 
-                isAnimated={false} 
-                xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                yAxisTextStyle={{ fontSize: 10, color: '#888' }}
-                focusBarOnPress={true}
-                renderTooltip={renderCalTooltip}
-              />
-          </View>
-
           <View style={[styles.card, {marginTop: 16, marginBottom: 40}]}>
-              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('chart_title_body', lang)}</ThemedText>
-              <View style={{flexDirection:'row', justifyContent:'center', marginBottom:10}}>
-                  <ThemedText style={{color:'#FF9500', fontSize:12, marginRight:10}}>━ {t('weight', lang)}</ThemedText>
-                  <ThemedText style={{color:'#007AFF', fontSize:12}}>━ {t('body_fat', lang)}</ThemedText>
+              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('calories_and_weight', lang)}</ThemedText>
+              
+              <View style={{flexDirection:'row', justifyContent:'center', marginBottom:10, gap: 16, flexWrap: 'wrap'}}>
+                  <LegendItem color="#34C759" label={`${t('intake', lang)}`} />
+                  <LegendItem color="#FF9500" label={`${t('burned', lang)}`} />
+                  <LegendItem color="#007AFF" label={`${t('weight', lang)}`} isLine />
+                  <LegendItem color="#AF52DE" label={`${t('body_fat', lang)}`} isLine />
               </View>
-              {/* @ts-ignore */}
-              <LineChart 
-                ref={lineChartRef}
-                dataSet={dataSet}
-                hideRules
-                height={180}
-                // [FIX] 明確設定寬度，確保 X 軸不消失
-                width={VISIBLE_WIDTH} 
-                spacing={lineSpacing} 
-                initialSpacing={lineInitialSpacing} 
-                endSpacing={config.endSpacing || 20}
-                curved
-                isAnimated={false} 
-                yAxisThickness={0}
-                // [FIX] 明確設定 X 軸樣式
-                xAxisThickness={1}
-                xAxisColor="lightgray"
-                xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
-                yAxisTextStyle={{ fontSize: 10, color: '#888' }}
-                pointerConfig={{
-                    pointerStripUptoDataPoint: true,
-                    pointerStripColor: 'lightgray',
-                    pointerStripWidth: 2,
-                    strokeDashArray: [2, 5],
-                    pointerLabelComponent: (items: any) => renderLineTooltip(items[0]),
-                }}
-                scrollable={true} 
-              />
+
+              {loading ? <ActivityIndicator size="large" color={theme.tint}/> : (
+                  <BarChart 
+                    ref={chartRef}
+                    data={chartData} 
+                    stackData={chartData} 
+                    barWidth={barConfig.barWidth} 
+                    spacing={barConfig.spacing}
+                    initialSpacing={barConfig.initialSpacing}
+                    noOfSections={4} 
+                    maxValue={axisConfig.maxCal} // 左軸最大值
+                    barBorderRadius={4} 
+                    xAxisThickness={1}
+                    xAxisColor={theme.icon}
+                    yAxisThickness={0}
+                    yAxisTextStyle={{ fontSize: 10, color: '#34C759' }}
+                    hideRules
+                    height={220}
+                    width={VISIBLE_WIDTH} 
+                    isAnimated={false} 
+                    xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
+                    renderTooltip={renderTooltip}
+                    
+                    // [FIX] 啟用右側 Y 軸並手動設定標籤
+                    showSecondaryYAxis
+                    secondaryYAxisConfig={{
+                        noOfSections: 4,
+                        maxValue: axisConfig.maxCal, // 這裡必須設為跟主軸一樣，才能對齊 grid
+                        showYAxisIndices: true,
+                        yAxisLabelTexts: axisConfig.yAxisLabelTexts, // 顯示真實體重數值
+                        yAxisTextStyle: { color: '#007AFF', fontSize: 10 },
+                    }}
+
+                    showLine
+                    lineData={lineData} 
+                    lineConfig={{
+                        color: '#007AFF',
+                        thickness: 3,
+                        curved: true,
+                        hideDataPoints: false,
+                        dataPointsColor: '#007AFF',
+                        dataPointsRadius: 3,
+                        textShiftY: -10,
+                        textFontSize: 9,
+                        textColor: '#007AFF',
+                        zIndex: 100
+                    }}
+                    
+                    lineData2={lineData2} 
+                    lineConfig2={{
+                        color: '#AF52DE',
+                        thickness: 3,
+                        curved: true,
+                        hideDataPoints: false,
+                        dataPointsColor: '#AF52DE',
+                        dataPointsRadius: 3,
+                        textShiftY: 10,
+                        textFontSize: 9,
+                        textColor: '#AF52DE',
+                        zIndex: 100
+                    }}
+                  />
+              )}
           </View>
        </ScrollView>
     </SafeAreaView>
@@ -314,6 +325,13 @@ const StatBox = ({ label, val, unit, color }: any) => (
     <View style={{width:'33%', marginBottom: 12}}>
         <ThemedText style={{fontSize:11, color:'#888'}}>{label}</ThemedText>
         <ThemedText style={{fontSize:16, fontWeight:'bold', color: color || undefined}}>{val} <ThemedText style={{fontSize:10, fontWeight:'normal'}}>{unit}</ThemedText></ThemedText>
+    </View>
+);
+
+const LegendItem = ({color, label, isLine}: any) => (
+    <View style={{flexDirection:'row', alignItems:'center'}}>
+        <View style={{width:12, height: isLine?3:12, backgroundColor:color, marginRight:4}}/>
+        <ThemedText style={{fontSize:10}}>{label}</ThemedText>
     </View>
 );
 
@@ -328,7 +346,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.85)',
         padding: 10,
         borderRadius: 8,
-        minWidth: 100,
+        minWidth: 120,
         zIndex: 9999, 
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)'
@@ -336,4 +354,3 @@ const styles = StyleSheet.create({
     tooltipTitle: { color: 'white', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
     tooltipText: { color: 'white', fontSize: 12, lineHeight: 16 }
 });
-// [END OF FILE app/(tabs)/analysis.tsx]

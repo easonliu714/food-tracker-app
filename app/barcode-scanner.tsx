@@ -1,4 +1,3 @@
-// [START OF FILE app/barcode-scanner.tsx]
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View, Dimensions, ActivityIndicator, Alert } from "react-native";
@@ -6,7 +5,6 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { t, useLanguage } from "@/lib/i18n";
-// [FIX] 改用 SQLite 相關引用，而非 storage.ts
 import { db } from "@/lib/db";
 import { foodItems } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -41,18 +39,16 @@ export default function BarcodeScannerScreen() {
     setIsLoading(true);
 
     try {
-        // 1. [FIX] 優先查詢 SQLite 本機資料庫
-        // 這確保了使用者剛編輯儲存的資料能被立刻叫出來
+        // 1. 優先查詢 SQLite 本機資料庫
         const localItems = await db.select().from(foodItems).where(eq(foodItems.barcode, data)).limit(1);
         
         if (localItems.length > 0) {
             const localProd = localItems[0];
-            // 整理格式 (Mapping DB schema to ProductData)
             const productData = {
-                id: localProd.id, // 帶入 ID 以便編輯時更新同一筆
+                id: localProd.id,
                 name: localProd.name || "",
                 brand: localProd.brand || "",
-                stdWeight: "100", // DB 預設儲存每 100g 數值，所以基準為 100
+                stdWeight: String(localProd.baseAmount || "100"), 
                 cal: String(localProd.calories || 0),
                 pro: String(localProd.proteinG || 0),
                 carb: String(localProd.carbsG || 0),
@@ -62,13 +58,14 @@ export default function BarcodeScannerScreen() {
                 fiber: String(localProd.fiberG || 0),
                 saturatedFat: String(localProd.saturatedFatG || 0),
                 transFat: String(localProd.transFatG || 0),
+                aiSummary: localProd.aiSummary, 
                 source: "local"
             };
             goToEditor(data, productData);
             return;
         }
 
-        // 2. 若本機無資料，查詢 OpenFoodFacts (網路)
+        // 2. 若本機無資料，查詢 OpenFoodFacts
         const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${data}.json`);
         const result = await res.json();
 
@@ -83,12 +80,11 @@ export default function BarcodeScannerScreen() {
                 name: p.product_name || t('unknown_product', lang),
                 brand: p.brands || "",
                 stdWeight: String(w),
-                // OFF 回傳的是每 100g 數值
                 cal: (n["energy-kcal_100g"] || 0).toString(),
                 pro: (n.proteins_100g || 0).toString(),
                 carb: (n.carbohydrates_100g || 0).toString(),
                 fat: (n.fat_100g || 0).toString(),
-                sod: ((n.sodium_100g || 0) * 1000).toString(), // g to mg
+                sod: ((n.sodium_100g || 0) * 1000).toString(), 
                 sugar: (n.sugars_100g || 0).toString(),
                 fiber: (n.fiber_100g || 0).toString(),
                 source: "off"
@@ -97,7 +93,7 @@ export default function BarcodeScannerScreen() {
             return;
         }
 
-        // 3. 查無資料 -> 跳出選項
+        // 3. 查無資料
         showNotFoundAlert(data);
 
     } catch (e) {
@@ -131,13 +127,17 @@ export default function BarcodeScannerScreen() {
               { 
                   text: t('ai_analysis', lang) || "AI Scan", 
                   onPress: () => {
-                      router.replace({ pathname: "/camera", params: { mode: "ai_food" } });
+                      // [FIX] 關鍵修正：將 barcode 傳遞給 Camera，讓後續流程能綁定
+                      // 注意：Camera 頁面需要接收此 barcode 並在拍攝後傳給 FoodRecognition
+                      router.replace({ 
+                          pathname: "/camera", 
+                          params: { mode: "ai_food", barcode: barcode } 
+                      });
                   } 
               },
               { 
                   text: t('manual_input', lang) || "Manual Input", 
                   onPress: () => {
-                      // 跳轉到編輯器，只帶 barcode，不帶 productData (讓用戶自己填)
                       router.replace({ pathname: "/food-editor", params: { barcode: barcode } });
                   } 
               }
@@ -191,4 +191,3 @@ const styles = StyleSheet.create({
   hintText: { color: 'white', marginTop: 20, fontSize: 16, fontWeight: 'bold', textShadowColor: 'black', textShadowRadius: 5 },
   loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 10 }
 });
-// [END OF FILE app/barcode-scanner.tsx]

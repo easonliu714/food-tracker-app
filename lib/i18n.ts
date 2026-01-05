@@ -60,7 +60,7 @@ export const TRANSLATIONS = {
     // Analysis
     trend_analysis: "數據分析",
     chart_title_cal: "熱量收支趨勢",
-    chart_title_body: "體重與體脂趨勢",
+    chart_title_body: "體重與體脂趨勢", calories_and_weight: "熱量收支與體重體脂趨勢",
     week: "近7天", month: "近30天", avg_daily: "日均數值",
     axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "總計",
 
@@ -84,12 +84,19 @@ export const TRANSLATIONS = {
     target_date: "預計完成日",
     days_remaining: "剩餘天數",
 
-    ai_coach: "AI 教練", ai_hello: "嗨! 我是你的營養師暨訓練員.", remaining_budget: "今日剩餘熱量", generate_plan: "生成計畫",
-    recipe_suggestion: "食譜建議", workout_suggestion: "運動建議", ask_ai: "詢問 AI...",
-    ask_recipe: "今天有什麼建議菜單？", ask_workout: "今天有什麼建議的訓練？",
-    follow_up_1: "提供接下來幾個正餐的建議", 
-    follow_up_2: "指出3個做得不錯的地方",
-    follow_up_3: "指出3個需要優先調整的問題點",
+    // AI Coach UI
+    ai_coach: "AI 教練", ai_welcome_msg: "你好！我是你的專屬營養與健身助手。\n請點擊下方按鈕，或直接輸入問題。",
+    ask_ai_placeholder: "輸入訊息...",
+    meal_suggestions: "飲食建議", workout_suggestions: "運動建議",
+    cook_meal: "自備食材", store_meal: "便利商店",
+    home_workout: "居家無器材", gym_workout: "健身房/器材",
+    remaining: "剩餘額度", daily_calorie_target: "目標",
+    
+    // AI Coach Prompts (Dynamic)
+    coach_prompt_cook: "身為營養師，請提供一份適合我目前剩餘熱量的「自備食材烹飪」菜單。請包含：1.食材清單 2.詳細烹飪步驟 3. 推薦的 YouTube 料理教學關鍵字或連結。請考量我的個人目標。",
+    coach_prompt_store: "身為營養師，請提供一份適合我目前剩餘熱量的「便利商店」外食組合（如 7-11 或全家）。請列出具體商品名稱與預估熱量。請考量我的個人目標。",
+    coach_prompt_home_workout: "身為健身教練，請提供一份適合我今日狀態的「居家無器材」運動課表。請包含：1.動作名稱 2.次數/組數 3.動作要點 4. 推薦的 YouTube 動作教學連結。",
+    coach_prompt_gym_workout: "身為健身教練，請提供一份適合我今日狀態的「健身房/器材輔助」運動課表。請包含：1.器材名稱 2.重量/組數建議 3.注意事項 4. 推薦的 YouTube 教學連結。",
     
     // Food Editor
     ai_analysis: "AI 分析", analyzing: "AI 分析中...", composition: "食物組成", suggestion: "攝取建議",
@@ -185,12 +192,19 @@ export const TRANSLATIONS = {
     target_date: "Target Date",
     days_remaining: "Days Remaining",
 
-    ai_coach: "AI Coach", ai_hello: "Hi! I am your AI Coach.", remaining_budget: "Remaining", generate_plan: "Generate Plan",
-    recipe_suggestion: "Recipe Suggestion", workout_suggestion: "Workout Suggestion", ask_ai: "Ask AI...",
-    ask_recipe: "Suggest a meal plan?", ask_workout: "Suggest a workout?",
-    follow_up_1: "Provide suggestions for the next few main meals.",
-    follow_up_2: "Point out 3 things done well.",
-    follow_up_3: "Point out 3 issues that need priority adjustment.",
+    // AI Coach UI
+    ai_coach: "AI Coach", ai_welcome_msg:"Hello! I'm your personal nutrition and fitness assistant. \nPlease click the button below, or enter your question directly.",
+    ask_ai_placeholder: "Enter message...",
+    meal_suggestions: "Meal Suggestions", workout_suggestions: "Workout Suggestions",
+    cook_meal: "Cook Meal", store_meal: "Store Meal",
+    home_workout: "Home Workout", gym_workout: "Gym Workout",
+    remaining: "Remaining", daily_calorie_target: "Daily Calorie Target",
+    
+    // AI Coach Prompts (Dynamic)
+    coach_prompt_cook: "As a nutritionist, please provide a 'home-cooked' menu suitable for my current remaining calorie intake. Please include: 1. Ingredient list 2. Detailed cooking steps 3. Recommended YouTube cooking tutorial keywords or links. Please consider my personal goals.",
+    coach_prompt_store: "As a nutritionist, please provide a 'convenience store' meal plan (such as 7-Eleven or FamilyMart) suitable for my current remaining calorie intake. Please list specific product names and estimated calories. Please consider my personal goals.",
+    coach_prompt_home_workout: "As a fitness coach, please provide a 'home workout without equipment' schedule suitable for my current condition. Please include: 1. Exercise name 2. Repetitions/sets 3. Key points of the exercise 4. Recommended YouTube exercise tutorial links.",
+    coach_prompt_gym_workout: "As a fitness coach, please provide a 'gym/equipment-assisted' workout schedule suitable for my current condition. Please include: 1. Equipment name; 2. Weight/set recommendations; 3. Precautions; 4. Recommended YouTube tutorial link.",
     
     ai_analysis: "AI Analysis", analyzing: "Analyzing...", composition: "Composition", suggestion: "Suggestion",
     food_name_placeholder: "Enter name", barcode_scanned: "Barcode: ",
@@ -283,9 +297,9 @@ export const TRANSLATIONS = {
     ai_coach: "AIコーチ", ai_hello: "こんにちは！AI栄養トレーナーです。", remaining_budget: "残りのカロリー", generate_plan: "プラン作成",
     recipe_suggestion: "レシピ提案", workout_suggestion: "運動提案", ask_ai: "AIに質問...",
     ask_recipe: "おすすめのメニューは？", ask_workout: "おすすめの運動は？",
-    follow_up_1: "次の数回の食事の提案をしてください。",
-    follow_up_2: "うまくいっている点を3つ挙げてください。",
-    follow_up_3: "優先的に改善すべき点を3つ挙げてください。",
+    follow_up_1: "栄養士として、本日の栄養摂取量と運動量に基づき、残りの食事についてアドバイスをお願いします。",
+    follow_up_2: "栄養士として、本日の栄養摂取量と運動量に基づき、私がうまくできた点を3つ挙げてください。",
+    follow_up_3: "栄養士として、本日の栄養摂取量と運動量に基づき、優先的に調整が必要な点を3つ挙げてください。",
     
     // Food Editor
     ai_analysis: "AI分析", analyzing: "分析中...", composition: "成分", suggestion: "アドバイス",
@@ -377,9 +391,9 @@ export const TRANSLATIONS = {
     ai_coach: "AI 코치", ai_hello: "안녕하세요! AI 영양 코치입니다.", remaining_budget: "남은 칼로리", generate_plan: "계획 생성",
     recipe_suggestion: "식단 추천", workout_suggestion: "운동 추천", ask_ai: "AI에게 질문...",
     ask_recipe: "추천 메뉴가 있나요?", ask_workout: "추천 운동이 있나요?",
-    follow_up_1: "다음 몇 끼 식사에 대한 제안을 제공하세요.",
-    follow_up_2: "잘하고 있는 점 3가지를 지적하세요.",
-    follow_up_3: "우선적으로 조정해야 할 문제점 3가지를 지적하세요.",
+    follow_up_1: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 남은 식사에 대한 조언을 부탁드립니다.",
+    follow_up_2: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 제가 잘한 부분 세 가지를 지적해 주십시오.",
+    follow_up_3: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 우선적으로 조정해야 할 부분 세 가지를 지적해 주십시오.",
     
     // Food Editor
     ai_analysis: "AI 분석", analyzing: "분석 중...", composition: "성분", suggestion: "조언",
@@ -450,6 +464,11 @@ export const setAppLanguage = (lang: string) => {
 
 const LOGS_ZH = [
   {
+    version: "V1.0.11",
+    date: "2026-01-05",
+    content: "[新增] 數據備份與還原功能 (JSON 格式，支援跨裝置)。\n[優化] 分析圖表升級：雙軸顯示體重與熱量，自動聚焦最新日期。\n[優化] AI 教練：新增剩餘熱量儀表板，提供分類明確的菜單與運動建議 (附影片連結)。\n[修正] 統一食品編輯介面，修復掃碼流程中斷問題。"
+  },
+  {
     version: "V1.0.9.14",
     date: "2025-12-30",
     content: "[新增] 資料庫備份與還原功能 (支援 Google Drive)。\n[修正] 分析圖表完全對齊，修復切換週期不聚焦問題。\n[修正] 首頁圓餅圖可顯示超過 100% 之數值。"
@@ -475,6 +494,11 @@ const LOGS_ZH = [
 ];
 
 const LOGS_EN = [
+  {
+    version: "V1.0.11",
+    date: "2026-01-05",
+    content: "[New] Backup & Restore via JSON (Cross-device support).\n[Imp] Analysis Chart: Dual-axis for weight/calories, auto-scroll to latest date.\n[Imp] AI Coach: Added calorie dashboard and categorized suggestions with video links.\n[Fix] Unified food editor interface and fixed barcode flow issues."
+  },
   {
     version: "V1.0.9.14",
     date: "2025-12-30",

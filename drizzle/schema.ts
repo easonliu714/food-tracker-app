@@ -42,10 +42,14 @@ export const foodItems = sqliteTable("food_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   brand: text("brand"),
-  barcode: text("barcode"),
+  barcode: text("barcode"), // 解決第1, 5點：確保 Barcode 關聯
   
+  // 解決第2, 3點：記錄單份重量
   baseAmount: real("base_amount").default(100), 
   baseUnit: text("base_unit").default("g"),
+
+  // 解決第4點：儲存 AI 分析結果 (組成與建議) 於產品庫
+  aiSummary: text("ai_summary"), 
 
   // 基礎營養素
   calories: real("calories").notNull(),

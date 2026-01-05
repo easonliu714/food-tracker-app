@@ -1,180 +1,238 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { View, ScrollView, ActivityIndicator, Pressable, StyleSheet, Alert, TextInput, KeyboardAvoidingView, Platform, Linking } from "react-native";
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import React, { useState, useRef, useEffect } from "react";
+import { View, ScrollView, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useThemeColor } from "@/hooks/use-theme-color";
+import { chatWithAI } from "@/lib/gemini"; 
 import { t, useLanguage } from "@/lib/i18n";
-import { Ionicons } from "@expo/vector-icons";
-import { chatWithAI, suggestRecipe, suggestWorkout } from "@/lib/gemini"; 
-import { db } from "@/lib/db";
-import { userProfiles, foodLogs, activityLogs } from "@/drizzle/schema";
+import { db } from "@/lib/db"; 
+import { foodLogs, activityLogs, userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { format } from "date-fns";
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import { useFocusEffect } from "expo-router";
 
-export default function AICoachScreen() {
-  const insets = useSafeAreaInsets();
-  const backgroundColor = useThemeColor({}, "background");
-  const cardBackground = useThemeColor({}, "cardBackground");
-  const tintColor = useThemeColor({}, "tint");
-  const textColor = useThemeColor({}, "text");
-  const lang = useLanguage(); 
+interface Message {
+    id: string;
+    role: 'user' | 'model';
+    text: string;
+}
 
-  const [messages, setMessages] = useState<any[]>([]);
+export default function RecipesScreen() {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
-  const [remaining, setRemaining] = useState(0);
-  const [currentResult, setCurrentResult] = useState<any>(null); // For Rich Card
-  const [activeTab, setActiveTab] = useState<'RECIPE' | 'WORKOUT'>('RECIPE'); // For legacy PDF compatibility
-
+  
+  // 頂部資訊卡狀態
+  const [status, setStatus] = useState({ target: 2000, intake: 0, burned: 0, remaining: 2000 });
+  
   const scrollViewRef = useRef<ScrollView>(null);
+  const lang = useLanguage();
 
-  useFocusEffect(useCallback(() => {
-    async function syncData() {
-        try {
-            const today = format(new Date(), 'yyyy-MM-dd');
-            const pRes = await db.select().from(userProfiles).limit(1);
-            const p = pRes[0] || null;
-            const fRes = await db.select().from(foodLogs).where(eq(foodLogs.date, today));
-            const consumed = fRes.reduce((sum, i) => sum + (i.totalCalories || 0), 0);
-            const aRes = await db.select().from(activityLogs).where(eq(activityLogs.date, today));
-            const burned = aRes.reduce((sum, i) => sum + (i.caloriesBurned || 0), 0);
-            const target = p?.dailyCalorieTarget || 2000;
-            setProfile(p);
-            setRemaining(Math.round(target - consumed + burned));
-        } catch (e) { console.error(e); }
-    }
-    syncData();
-  }, []));
+  const backgroundColor = useThemeColor({}, "background");
+  const tintColor = useThemeColor({}, "tint");
+  const inputBg = useThemeColor({}, "cardBackground");
+  const textColor = useThemeColor({}, "text");
 
-  const handleSend = async (msg: string) => {
-      if (!msg.trim()) return;
-      const userText = msg.trim();
-      
-      // Intercept special commands
-      if (userText === t('ask_recipe', lang)) {
-          handleGenerate(true);
-          return;
-      }
-      if (userText === t('ask_workout', lang)) {
-          handleGenerate(false);
-          return;
-      }
+  // 更新剩餘熱量
+  useFocusEffect(
+      React.useCallback(() => {
+          fetchContextData();
+      }, [])
+  );
 
-      const newHistory = [...messages, { role: 'user', parts: [{ text: userText }] }];
-      setMessages(newHistory);
-      setInputText("");
-      setLoading(true);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+  const fetchContextData = async () => {
+      try {
+          const today = format(new Date(), 'yyyy-MM-dd');
+          const profile = await db.select().from(userProfiles).limit(1);
+          const p = profile[0] || {};
+          const target = p.dailyCalorieTarget || 2000;
 
-      const response = await chatWithAI(newHistory, userText, { ...profile, remaining }, lang);
-      
-      setMessages([...newHistory, { role: 'model', parts: [{ text: response }] }]);
-      setLoading(false);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+          const foods = await db.select().from(foodLogs).where(eq(foodLogs.date, today));
+          const intake = foods.reduce((sum, f) => sum + (f.totalCalories||0), 0);
+
+          const acts = await db.select().from(activityLogs).where(eq(activityLogs.date, today));
+          const burned = acts.reduce((sum, a) => sum + (a.caloriesBurned||0), 0);
+
+          setStatus({ target, intake, burned, remaining: Math.round(target - intake + burned) });
+      } catch(e) { console.error(e); }
   };
 
-  const handleGenerate = async (isRecipe: boolean) => {
+  // [FIX] 使用 i18n 翻譯的提示詞
+  const suggestionGroups = [
+      {
+          title: t('meal_suggestions', lang),
+          items: [
+              { 
+                  label: "🍳 " + t('cook_meal', lang), 
+                  prompt: t('coach_prompt_cook', lang) 
+              },
+              { 
+                  label: "🏪 " + t('store_meal', lang), 
+                  prompt: t('coach_prompt_store', lang) 
+              }
+          ]
+      },
+      {
+          title: t('workout_suggestions', lang),
+          items: [
+              { 
+                  label: "🏠 " + t('home_workout', lang), 
+                  prompt: t('coach_prompt_home_workout', lang) 
+              },
+              { 
+                  label: "🏋️ " + t('gym_workout', lang), 
+                  prompt: t('coach_prompt_gym_workout', lang) 
+              }
+          ]
+      }
+  ];
+
+  const getSystemContext = async () => {
+      await fetchContextData(); 
+      return `
+        [User Context]
+        Target Calories: ${status.target} kcal
+        Today's Intake: ${Math.round(status.intake)} kcal
+        Today's Burned: ${Math.round(status.burned)} kcal
+        Remaining Budget: ${status.remaining} kcal
+        (Please adjust recommendations strictly based on this remaining budget)
+      `;
+  };
+
+  const handleSend = async (text: string, isSystemPrompt = false) => {
+      if (!text.trim()) return;
+
+      const userMsg: Message = { id: Date.now().toString(), role: 'user', text };
+      setMessages(prev => [...prev, userMsg]);
+      setInputText("");
       setLoading(true);
-      setActiveTab(isRecipe ? 'RECIPE' : 'WORKOUT');
+
       try {
-          let res;
-          if (isRecipe) {
-              res = await suggestRecipe(remaining, 'STORE', lang, profile);
-          } else {
-              res = await suggestWorkout(profile, remaining, lang);
-          }
-          if (res) {
-              setCurrentResult(res);
-              // Add system message indicating success
-              const sysMsg = { role: 'model', parts: [{ text: isRecipe ? t('recipe_suggestion', lang) : t('workout_suggestion', lang) }] };
-              setMessages([...messages, { role: 'user', parts: [{ text: isRecipe ? t('ask_recipe', lang) : t('ask_workout', lang) }] }, sysMsg]);
-          }
-      } catch(e) { /* */ } 
-      finally { setLoading(false); setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100); }
+          const context = await getSystemContext();
+          const finalPrompt = `${context}\n\nUser Request: ${text}`;
+
+          const history = messages.map(m => ({
+              role: m.role === 'user' ? 'user' : 'model',
+              parts: [{ text: m.text }]
+          }));
+
+          const responseText = await chatWithAI(history, finalPrompt, null, lang);
+          const botMsg: Message = { id: (Date.now()+1).toString(), role: 'model', text: responseText };
+          setMessages(prev => [...prev, botMsg]);
+
+      } catch (e) {
+          Alert.alert(t('error', lang), "AI Service Unavailable");
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleExportPDF = async () => {
-      // (保留原有的 handleExportPDF 邏輯，需確保 currentResult 存在)
-      if (!currentResult) return;
-      const htmlContent = `<h1>${currentResult.title || currentResult.activity}</h1><p>${currentResult.reason}</p>`; 
-      // ... 簡化展示，請將原版詳細 PDF 生成代碼放回此處 ...
+      if (messages.length === 0) return Alert.alert(t('tip', lang), "No conversation to export.");
       try {
-        const { uri } = await Print.printToFileAsync({ html: htmlContent });
-        await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-      } catch (e) { Alert.alert("Error", "Export Failed"); }
+          const html = `
+            <html><body><h1>AI Coach Session</h1>
+            ${messages.map(m => `<p><b>${m.role}:</b> ${m.text}</p>`).join('')}
+            </body></html>`;
+          const { uri } = await Print.printToFileAsync({ html });
+          await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      } catch (e) { Alert.alert("Error", "Export failed"); }
   };
 
-  const openVideo = () => { if (currentResult?.video_url) Linking.openURL(currentResult.video_url); };
+  useEffect(() => {
+    if(scrollViewRef.current) scrollViewRef.current.scrollToEnd({ animated: true });
+  }, [messages]);
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.container, { backgroundColor }]}>
-       <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <View style={styles.header}>
           <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
-          {currentResult && <Pressable onPress={handleExportPDF}><Ionicons name="share-outline" size={24} color={tintColor}/></Pressable>}
-       </View>
-       
-       <View style={[styles.summaryCard, {backgroundColor: cardBackground}]}>
-           <ThemedText style={{fontSize: 12, color: '#888'}}>{t('remaining_budget', lang)}</ThemedText>
-           <ThemedText style={{fontSize: 24, fontWeight: 'bold', color: remaining < 0 ? 'red' : tintColor}}>{remaining} kcal</ThemedText>
-       </View>
+          <View style={{flexDirection:'row', gap: 16}}>
+              <TouchableOpacity onPress={handleExportPDF}><Ionicons name="document-text-outline" size={24} color={textColor}/></TouchableOpacity>
+              <TouchableOpacity onPress={() => setMessages([])}><Ionicons name="trash-outline" size={24} color={textColor}/></TouchableOpacity>
+          </View>
+      </View>
 
-       <ScrollView ref={scrollViewRef} style={{flex: 1, paddingHorizontal: 16}} contentContainerStyle={{paddingBottom: 20}}>
-          {messages.length === 0 && (
-              <View style={{marginTop: 40, alignItems: 'center'}}>
-                  <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
-                  <ThemedText style={{color:'#888', marginTop:10}}>{t('ai_hello', lang)}</ThemedText>
-              </View>
-          )}
+      {/* 剩餘熱量儀表板 */}
+      <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
+          <View style={styles.statusItem}>
+              <ThemedText style={{fontSize:10, color:'#888'}}>{t('daily_calorie_target', lang)}</ThemedText>
+              <ThemedText style={{fontWeight:'bold'}}>{status.target}</ThemedText>
+          </View>
+          <View style={styles.statusItem}>
+              <ThemedText style={{fontSize:10, color:'#888'}}>{t('intake', lang)}</ThemedText>
+              <ThemedText style={{fontWeight:'bold', color:'#34C759'}}>{Math.round(status.intake)}</ThemedText>
+          </View>
+          <View style={styles.statusItem}>
+              <ThemedText style={{fontSize:10, color:'#888'}}>{t('burned', lang)}</ThemedText>
+              <ThemedText style={{fontWeight:'bold', color:'#FF9500'}}>{Math.round(status.burned)}</ThemedText>
+          </View>
+          <View style={[styles.statusItem, {borderLeftWidth:1, borderColor:'#ccc', paddingLeft:10}]}>
+              <ThemedText style={{fontSize:10, color:tintColor}}>{t('remaining', lang)}</ThemedText>
+              <ThemedText type="subtitle" style={{color:tintColor}}>{status.remaining}</ThemedText>
+          </View>
+      </View>
 
-          {messages.map((m, i) => (
-              <View key={i} style={[styles.msgBubble, m.role === 'user' ? { alignSelf: 'flex-end', backgroundColor: tintColor } : { alignSelf: 'flex-start', backgroundColor: '#E5E5EA' }]}>
-                  <ThemedText style={{color: m.role==='user'?'#FFF':'#000'}}>{m.parts[0].text}</ThemedText>
-              </View>
-          ))}
-          
-          {loading && <ActivityIndicator style={{marginTop:10}} />}
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
+          {messages.length === 0 ? (
+              <View style={{marginTop: 10}}>
+                  <View style={{alignItems:'center', marginBottom: 20, opacity: 0.6}}>
+                      <Ionicons name="chatbubbles-outline" size={48} color={tintColor} />
+                      <ThemedText style={{marginTop:8, fontSize:12, textAlign:'center', maxWidth: '80%'}}>
+                          {t('ai_welcome_msg', lang)}
+                      </ThemedText>
+                  </View>
 
-          {/* Rich Card Display */}
-          {currentResult && (
-             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 10}]}>
-                <ThemedText type="title" style={{fontSize:18}}>{activeTab==='RECIPE' ? currentResult.title : currentResult.activity}</ThemedText>
-                {activeTab === 'WORKOUT' && currentResult.video_url && <Pressable onPress={openVideo}><ThemedText style={{color: '#2196F3', textDecorationLine: 'underline'}}>📺 {t('watch_video', lang)}</ThemedText></Pressable>}
-                <ThemedText style={{marginTop: 8}}>{activeTab==='RECIPE' ? `🔥 ${currentResult.calories} kcal` : `⏱️ ${currentResult.duration_minutes} min`}</ThemedText>
-                <ThemedText style={{marginTop: 8, fontStyle:'italic'}}>{currentResult.reason}</ThemedText>
-             </View>
-          )}
-
-          {/* Preset Buttons */}
-          {!loading && (
-              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 8, marginTop: 20}}>
-                  <Pressable onPress={() => handleSend(t('ask_recipe', lang))} style={[styles.chip, {backgroundColor: tintColor}]}><ThemedText style={{fontSize: 12, color: 'white'}}>{t('ask_recipe', lang)}</ThemedText></Pressable>
-                  <Pressable onPress={() => handleSend(t('ask_workout', lang))} style={[styles.chip, {backgroundColor: tintColor}]}><ThemedText style={{fontSize: 12, color: 'white'}}>{t('ask_workout', lang)}</ThemedText></Pressable>
-                  {[t('follow_up_1', lang), t('follow_up_2', lang), t('follow_up_3', lang)].map((q, i) => (
-                      <Pressable key={i} onPress={() => handleSend(q)} style={[styles.chip, {borderColor: tintColor, borderWidth:1}]}><ThemedText style={{fontSize: 12, color: tintColor}}>{q}</ThemedText></Pressable>
+                  {suggestionGroups.map((group, idx) => (
+                      <View key={idx} style={{marginBottom: 20}}>
+                          <ThemedText type="defaultSemiBold" style={{marginBottom: 8, fontSize: 14}}>{group.title}</ThemedText>
+                          <View style={{flexDirection: 'row', gap: 10}}>
+                              {group.items.map((item, i) => (
+                                  <TouchableOpacity 
+                                    key={i} 
+                                    style={[styles.chip, {borderColor: tintColor, backgroundColor: backgroundColor}]} 
+                                    onPress={() => handleSend(item.prompt, true)}
+                                  >
+                                      <ThemedText style={{fontSize: 13, color: tintColor}}>{item.label}</ThemedText>
+                                  </TouchableOpacity>
+                              ))}
+                          </View>
+                      </View>
                   ))}
               </View>
+          ) : (
+              messages.map(msg => (
+                  <View key={msg.id} style={[styles.bubble, msg.role === 'user' ? { alignSelf: 'flex-end', backgroundColor: tintColor } : { alignSelf: 'flex-start', backgroundColor: inputBg }]}>
+                      <ThemedText style={{color: msg.role==='user'?'white':textColor}}>{msg.text}</ThemedText>
+                  </View>
+              ))
           )}
-       </ScrollView>
+          {loading && <ActivityIndicator style={{marginTop: 10}} size="small" color={tintColor}/>}
+      </ScrollView>
 
-       <View style={[styles.inputArea, {backgroundColor: cardBackground, paddingBottom: Math.max(insets.bottom, 10)}]}>
-           <TextInput style={[styles.input, {color: textColor, borderColor: '#ddd'}]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai', lang)} placeholderTextColor="#999" />
-           <Pressable onPress={() => handleSend(inputText)} style={{padding: 10}}><Ionicons name="send" size={24} color={tintColor} /></Pressable>
-       </View>
-    </KeyboardAvoidingView>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
+          <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
+              <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
+              <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>
+                  <Ionicons name="send" size={24} color={inputText.trim() ? tintColor : '#ccc'} />
+              </TouchableOpacity>
+          </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 20, flexDirection:'row', justifyContent:'space-between', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  summaryCard: { margin: 16, padding: 16, borderRadius: 12, alignItems: 'center' },
-  msgBubble: { padding: 12, borderRadius: 16, marginBottom: 8, maxWidth: '80%' },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
-  inputArea: { flexDirection: 'row', padding: 10, borderTopWidth: 1, borderTopColor: '#eee', alignItems: 'center' },
-  input: { flex: 1, height: 40, borderWidth: 1, borderRadius: 20, paddingHorizontal: 15 },
-  card: { padding: 16, borderRadius: 12 }
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  statusCard: { flexDirection: 'row', justifyContent: 'space-around', padding: 12, marginHorizontal: 16, borderRadius: 12, marginBottom: 8 },
+  statusItem: { alignItems: 'center' },
+  chatContent: { padding: 16, paddingBottom: 20 },
+  bubble: { padding: 12, borderRadius: 16, maxWidth: '80%', marginBottom: 12 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', padding: 12, borderTopWidth: 1, borderTopColor: '#eee' },
+  input: { flex: 1, fontSize: 16, maxHeight: 100 },
+  chip: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }
 });

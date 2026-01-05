@@ -1,4 +1,3 @@
-// [START OF FILE app/(tabs)/profile.tsx]
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Platform } from "react-native";
@@ -10,14 +9,16 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
-import { userProfiles } from "@/drizzle/schema";
+import { userProfiles, foodLogs, dailyMetrics, foodItems } from "@/drizzle/schema"; 
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format, isValid, differenceInDays } from "date-fns";
-import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+
+// [FIX] 根據錯誤訊息，從 legacy 引入 FileSystem API
+import { cacheDirectory, writeAsStringAsync, readAsStringAsync, getInfoAsync, makeDirectoryAsync, copyAsync, documentDirectory } from 'expo-file-system/legacy';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -62,108 +63,93 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [DEBUG] 檢查路徑狀態
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-        // 嘗試讀取，若 undefined 代表模組載入異常
-        console.log("[Profile] DocDir Check:", FileSystem.documentDirectory); 
-    }
-  }, []);
-
+  // [FIX] 改用 JSON 匯出 (相容性最佳)
   const handleBackup = async () => {
-      // 1. 環境檢查
-      if (Platform.OS === 'web') {
-          return Alert.alert(t('error', lang), "Backup feature is not available on Web.");
-      }
-      
-      const docDir = FileSystem.documentDirectory;
-      const cacheDir = FileSystem.cacheDirectory;
-
-      if (!docDir || !cacheDir) {
-          console.error("FileSystem Paths missing:", { docDir, cacheDir });
-          return Alert.alert(t('error', lang), `FileSystem not ready. (docDir=${docDir})`);
-      }
-
-      const dbPath = docDir + 'SQLite/food_tracker.db';
-      const backupPath = cacheDir + 'food_tracker_backup.db';
-
+      setLoading(true);
       try {
-          const fileInfo = await FileSystem.getInfoAsync(dbPath);
-          if (!fileInfo.exists) {
-              Alert.alert(t('error', lang), "Database file not found. Please add some data first.");
-              return;
+          // 1. 讀取所有資料表
+          const users = await db.select().from(userProfiles);
+          const foods = await db.select().from(foodItems);
+          const logs = await db.select().from(foodLogs);
+          const metrics = await db.select().from(dailyMetrics);
+
+          const backupData = {
+              version: 1,
+              timestamp: new Date().toISOString(),
+              data: { users, foods, logs, metrics }
+          };
+
+          // 2. 寫入暫存檔案 (使用 legacy API)
+          const fileUri = cacheDirectory + `food_tracker_backup_${Date.now()}.json`;
+          await writeAsStringAsync(fileUri, JSON.stringify(backupData));
+
+          // 3. 分享
+          if (await Sharing.isAvailableAsync()) {
+              await Sharing.shareAsync(fileUri, {
+                  mimeType: 'application/json',
+                  dialogTitle: t('backup_db', lang)
+              });
+          } else {
+              Alert.alert(t('error', lang), "Sharing not available");
           }
-
-          // 複製到暫存區
-          await FileSystem.copyAsync({ from: dbPath, to: backupPath });
-
-          // 分享
-          if (!(await Sharing.isAvailableAsync())) {
-              return Alert.alert(t('error', lang), "Sharing is not available on this device");
-          }
-
-          await Sharing.shareAsync(backupPath, {
-              mimeType: 'application/x-sqlite3',
-              dialogTitle: t('backup_db', lang),
-              UTI: 'public.database'
-          });
       } catch (e: any) {
           console.error("Backup Error:", e);
           Alert.alert(t('error', lang), "Backup failed: " + e.message);
+      } finally {
+          setLoading(false);
       }
   };
 
+  // [FIX] 改用 JSON 匯入
   const handleRestore = async () => {
-      if (Platform.OS === 'web') return Alert.alert("Error", "Not supported on Web");
+      try {
+          const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
+          if (result.canceled) return;
+          
+          const file = result.assets[0];
+          setLoading(true);
+          
+          // 使用 legacy API 讀取
+          const content = await readAsStringAsync(file.uri);
+          const backup = JSON.parse(content);
+          
+          if (!backup.data) throw new Error("Invalid backup format");
 
-      const docDir = FileSystem.documentDirectory;
-      if (!docDir) {
-          return Alert.alert(t('error', lang), "FileSystem.documentDirectory is null/undefined");
-      }
-
-      const dbPath = docDir + 'SQLite/food_tracker.db';
-      const dbFolder = docDir + 'SQLite';
-
-      Alert.alert(
-          t('restore_confirm_title', lang),
-          t('restore_confirm_msg', lang),
-          [
+          Alert.alert(
+            t('restore_confirm_title', lang), 
+            t('restore_confirm_msg', lang),
+            [
               { text: t('cancel', lang), style: "cancel" },
-              { 
-                  text: t('restore_db', lang), 
-                  style: "destructive",
-                  onPress: async () => {
-                      try {
-                          const result = await DocumentPicker.getDocumentAsync({
-                              type: '*/*', 
-                              copyToCacheDirectory: true
-                          });
-
-                          if (result.canceled) return;
-                          const sourceUri = result.assets[0].uri;
-                          
-                          // 確保資料夾存在
-                          const folderInfo = await FileSystem.getInfoAsync(dbFolder);
-                          if (!folderInfo.exists) {
-                              await FileSystem.makeDirectoryAsync(dbFolder, { intermediates: true });
-                          }
-
-                          // 複製覆蓋
-                          await FileSystem.copyAsync({ from: sourceUri, to: dbPath });
-
-                          Alert.alert(t('success', lang), t('restore_success_msg', lang), [
-                              { text: "OK", onPress: () => {
-                                  // 建議重啟 App 以重置 DB 連線
-                              }}
-                          ]);
-                      } catch (e: any) {
-                          console.error("Restore Error:", e);
-                          Alert.alert(t('error', lang), "Restore failed: " + e.message);
+              { text: t('restore_db', lang), style: "destructive", onPress: async () => {
+                  try {
+                      await db.delete(foodLogs);
+                      await db.delete(foodItems);
+                      await db.delete(dailyMetrics);
+                      
+                      if (backup.data.foods?.length) await db.insert(foodItems).values(backup.data.foods);
+                      if (backup.data.logs?.length) await db.insert(foodLogs).values(backup.data.logs);
+                      if (backup.data.metrics?.length) await db.insert(dailyMetrics).values(backup.data.metrics);
+                      
+                      if (backup.data.users?.length && profileId) {
+                          const u = backup.data.users[0];
+                          await db.update(userProfiles).set(u).where(eq(userProfiles.id, profileId));
                       }
+
+                      Alert.alert(t('success', lang), t('restore_success_msg', lang));
+                  } catch(e) {
+                      Alert.alert("Restore Error", String(e));
+                  } finally {
+                      setLoading(false);
                   }
-              }
-          ]
-      );
+              }}
+            ]
+          );
+
+      } catch (e: any) {
+          console.error("Restore Error:", e);
+          Alert.alert(t('error', lang), "Restore failed: " + e.message);
+          setLoading(false);
+      }
   };
 
   useEffect(() => {
@@ -538,4 +524,3 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
   modalContent: { padding: 20, borderRadius: 16 }
 });
-// [END OF FILE app/(tabs)/profile.tsx]
