@@ -1,12 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
 import { differenceInDays } from "date-fns";
-import * as FileSystem from 'expo-file-system'; // 確保有 import FileSystem
+import * as FileSystem from 'expo-file-system';
 
 async function getModel() {
   const { apiKey, model } = await getSettings();
   if (!apiKey) throw new Error("API Key not found");
   const genAI = new GoogleGenerativeAI(apiKey);
+  // 使用 gemini-1.5-flash，速度快且支援長文本
   return genAI.getGenerativeModel({ model: model || "gemini-flash-latest" });
 }
 
@@ -15,72 +16,104 @@ export async function validateApiKey(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const testModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
     await testModel.generateContent("Hi");
-    return { valid: true, models: ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro"] };
+    return { valid: true, models: ["gemini-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"] };
   } catch (error: any) {
     return { valid: false, error: error.message || "Invalid Key" };
   }
 }
 
-// 輔助函式：產生包含年齡與期限的上下文
 const getProfileContext = (profile: any) => {
-    // 1. 計算年齡
+    if (!profile) return "";
+    
     let age = 30;
-    if (profile?.birthDate) {
+    if (profile.birthDate) {
         age = new Date().getFullYear() - new Date(profile.birthDate).getFullYear();
     }
     
-    // 2. 計算目標期限
     let deadlineInfo = "";
-    if (profile?.targetDate) {
+    if (profile.targetDate) {
         const diff = differenceInDays(new Date(profile.targetDate), new Date());
-        if (diff > 0) {
-            deadlineInfo = `, Target Deadline: ${profile.targetDate} (${diff} days remaining)`;
-        } else if (diff === 0) {
-            deadlineInfo = `, Target Deadline: Today`;
-        } else {
-            deadlineInfo = `, Target Deadline: Passed (${Math.abs(diff)} days ago)`;
-        }
+        if (diff > 0) deadlineInfo = `, Target Deadline: ${profile.targetDate} (${diff} days remaining)`;
+        else if (diff === 0) deadlineInfo = `, Target Deadline: Today`;
+        else deadlineInfo = `, Target Deadline: Passed`;
     }
 
-    return `User Profile: Age ${age}, Gender: ${profile?.gender || 'N/A'}, Goal: ${profile?.goal || "Maintain"}${deadlineInfo}`;
+    return `User Profile: Age ${age}, Gender: ${profile.gender || 'N/A'}, Goal: ${profile.goal || "Maintain"}${deadlineInfo}`;
 };
 
-// [修改] 圖像分析 - 支援份量估算與完整營養素
+// [FIX] 強制格式化指令 (Strict Formatting)
+const formattingInstruction = `
+[FORMATTING RULES - STRICTLY FOLLOW]
+1. **TABLES**: You MUST use Markdown Tables for any list of items, ingredients, or equipment.
+   - Example: | Item | Qty | Calories |
+2. **LISTS**: Use bullet points (-) for step-by-step instructions.
+3. **LINKS**: Provide hyperlinks as [Title](URL).
+4. **STRUCTURE**: Use '### Heading' for sections. Use **Bold** for emphasis.
+5. **CLARITY**: Do not output large blocks of text. Break it down visually.
+`;
+
+export async function chatWithAI(history: any[], newMessage: string, profile: any, lang: string) {
+    try {
+        const model = await getModel();
+        const chatHistory = history.map(h => ({
+            role: h.role,
+            parts: h.parts
+        }));
+
+        const chat = model.startChat({
+            history: chatHistory,
+            generationConfig: { maxOutputTokens: 8192 }, // 確保長篇回覆不被截斷
+        });
+
+        let systemInstruction = "";
+        
+        if (profile) {
+            const context = getProfileContext(profile);
+            const status = `(Current Status: Remaining Calories: ${profile.remaining} kcal.)`;
+            systemInstruction = `${context}\n${status}\n`;
+        }
+        
+        // 組合指令：系統上下文 + 格式要求 + 語言要求
+        const langInstruction = `(IMPORTANT: Reply in ${lang} language only.)`;
+        const finalMessage = `${systemInstruction}${formattingInstruction}${langInstruction}\n\n${newMessage}`;
+        
+        const result = await chat.sendMessage(finalMessage);
+        return result.response.text();
+    } catch (e) {
+        console.error("Chat Error:", e);
+        throw e; 
+    }
+}
+
+// 圖像分析
 export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
   try {
     const model = await getModel();
-    const context = getProfileContext(profile);
+    const context = profile ? getProfileContext(profile) : "";
 
     const prompt = `
-      You are a professional nutritionist and food analyst. 
-      Analyze the provided image, which could be a photo of a plated meal OR a nutrition facts label.
+      You are a professional nutritionist.
+      Analyze the provided image (plated meal or nutrition label).
 
       Task:
-      1. Identify the food item(s).
-      2. ESTIMATE the serving size (weight in grams or volume in ml). 
-         - If it's a plated meal, estimate based on visual portion size (assume standard plate/bowl size if no reference).
-         - If it's a nutrition label, EXTRACT the "Serving Size" value.
-         - DO NOT default to 100g. Make an educated guess (e.g., a burger is ~250g, a bowl of rice is ~200g).
-      3. Analyze nutrition facts.
-      4. Provide a composition analysis and advice.
+      1. Identify food item(s).
+      2. ESTIMATE serving size (g/ml). Do NOT default to 100g unless unsure.
+      3. Analyze nutrition facts for that serving size.
+      4. Provide composition analysis and health advice.
 
       Language: ${lang}.
       ${context}.
 
-      Output ONLY valid JSON. Structure:
+      Output JSON ONLY:
       {
-        "foodName": "Short descriptive name",
-        "brand": "Brand name if visible, else null",
-        "estimated_weight_g": 200, 
-        "serving_unit": "g", 
-        "calories": 0, "protein": 0, "fat": 0, "carbs": 0, "sodium": 0,
-        "sugar": 0, "fiber": 0, "saturated_fat": 0, "trans_fat": 0, "cholesterol": 0,
-        "zinc": 0, "magnesium": 0, "iron": 0,
-        "composition": "List of main ingredients...",
-        "suggestion": "Health advice based on user goal..."
+        "foodName": "string",
+        "estimated_weight_g": number, 
+        "calories": number, "protein": number, "fat": number, "carbs": number, "sodium": number,
+        "sugar": number, "fiber": number, "saturated_fat": number, "trans_fat": number, "cholesterol": number,
+        "zinc": number, "magnesium": number, "iron": number,
+        "composition": "string",
+        "suggestion": "string"
       }
-      
-      Note: The nutrition values (calories, protein, etc.) should be for the ESTIMATED WEIGHT, not per 100g.
     `;
 
     const result = await model.generateContent([
@@ -96,28 +129,27 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
   }
 }
 
-// [修改] 純文字食物分析 - 包含微量營養素
+// 文字分析
 export async function analyzeFoodText(foodName: string, lang: string, profile?: any) {
     try {
       const model = await getModel();
-      const context = getProfileContext(profile);
+      const context = profile ? getProfileContext(profile) : "";
   
       const prompt = `
         You are a professional nutritionist. Estimate nutrition for: "${foodName}".
-        Assume a standard serving size for this food.
-        
+        Assume standard serving size.
         Language: ${lang}.
         ${context}.
   
-        Output ONLY valid JSON:
+        Output JSON ONLY:
         {
           "foodName": "${foodName}",
           "estimated_weight_g": 100,
           "calories": 0, "protein": 0, "fat": 0, "carbs": 0, "sodium": 0,
           "sugar": 0, "fiber": 0, "saturated_fat": 0, "trans_fat": 0, "cholesterol": 0,
           "zinc": 0, "magnesium": 0, "iron": 0,
-          "composition": "Estimated ingredients...",
-          "suggestion": "Advice based on user goal..."
+          "composition": "string",
+          "suggestion": "string"
         }
       `;
   
@@ -128,95 +160,4 @@ export async function analyzeFoodText(foodName: string, lang: string, profile?: 
       console.error("Text Analyze Error:", e);
       return null;
     }
-}
-
-// 聊天對話
-export async function chatWithAI(history: any[], newMessage: string, profile: any, lang: string) {
-    try {
-        const model = await getModel();
-        const chatHistory = history.map(h => ({
-            role: h.role,
-            parts: h.parts
-        }));
-
-        const chat = model.startChat({
-            history: chatHistory,
-            generationConfig: { maxOutputTokens: 800 },
-        });
-
-        const context = getProfileContext(profile);
-        const status = `(Current Status: Remaining Calories: ${profile?.remaining} kcal. Language: ${lang}.)`;
-        
-        const result = await chat.sendMessage(`${context}\n${status}\nUser: ${newMessage}`);
-        return result.response.text();
-    } catch (e) {
-        console.error("Chat Error:", e);
-        return "AI is busy, please try again.";
-    }
-}
-
-export async function suggestRecipe(remainingCalories: number, type: 'STORE'|'COOK', lang: string, profile?: any) {
-  try {
-    const model = await getModel();
-    const context = getProfileContext(profile);
-    const status = remainingCalories < 0 ? "Exceeded (Negative)" : "Sufficient";
-    
-    const prompt = `
-      You are a professional nutritionist AI.
-      ${context}.
-      Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
-      
-      Please suggest a recipe/meal plan (Type: ${type}).
-      **IMPORTANT: Reply in language code: ${lang}.**
-      
-      Output JSON format:
-      {
-        "title": "Meal Name (in ${lang})",
-        "calories": 500,
-        "ingredients": ["item1", "item2"],
-        "steps": ["step1", "step2"],
-        "reason": "Reason based on timeline and goal (in ${lang})"
-      }
-      Only return JSON.
-    `;
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error(e);
-    return null;
-  }
-}
-
-export async function suggestWorkout(profile: any, remainingCalories: number, lang: string) {
-  try {
-    const model = await getModel();
-    const context = getProfileContext(profile);
-    const status = remainingCalories < 0 ? "Exceeded (Negative)" : "Sufficient";
-
-    const prompt = `
-      You are a fitness coach AI.
-      ${context}.
-      Current Calorie Status: ${remainingCalories} kcal remaining (${status}).
-      
-      Suggest a workout session considering the deadline.
-      **IMPORTANT: Reply in language code: ${lang}.**
-      
-      Output JSON format:
-      {
-        "activity": "Activity Name (in ${lang})",
-        "duration_minutes": 30,
-        "estimated_calories": 200,
-        "reason": "Reason based on deadline urgency (in ${lang})",
-        "video_url": "https://youtube.com/results?search_query=..."
-      }
-      Only return JSON.
-    `;
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error(e);
-    return null;
-  }
 }
