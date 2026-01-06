@@ -333,7 +333,7 @@ export default function HomeScreen() {
                     <Modal visible={showInputModal} transparent animationType="fade">
                         <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={styles.modalOverlay}>
                             <View style={[styles.modalContent, {backgroundColor: 'white', height: 'auto', padding: 20}]}>
-                                <ThemedText type="subtitle" style={{marginBottom:16}}>Input Date</ThemedText>
+                                <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_date', lang)}</ThemedText>
                                 <TextInput 
                                     style={{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:10, fontSize:16, marginBottom:16}}
                                     placeholder="YYYY-MM-DD"
@@ -342,8 +342,8 @@ export default function HomeScreen() {
                                     keyboardType="numbers-and-punctuation"
                                 />
                                 <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
-                                    <TouchableOpacity onPress={()=>setShowInputModal(false)}><ThemedText>Cancel</ThemedText></TouchableOpacity>
-                                    <TouchableOpacity onPress={handleManualInput}><ThemedText style={{color:theme.tint, fontWeight:'bold'}}>Go</ThemedText></TouchableOpacity>
+                                    <TouchableOpacity onPress={()=>setShowInputModal(false)}><ThemedText>{t('cancel', lang)}</ThemedText></TouchableOpacity>
+                                    <TouchableOpacity onPress={handleManualInput}><ThemedText style={{color:theme.tint, fontWeight:'bold'}}>{t('confirm', lang)}</ThemedText></TouchableOpacity>
                                 </View>
                             </View>
                         </KeyboardAvoidingView>

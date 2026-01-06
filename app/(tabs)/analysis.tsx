@@ -46,7 +46,8 @@ export default function AnalysisScreen() {
       icon: useThemeColor({}, "icon"),
       warn: '#FF3B30'
   };
-  const secondaryColor = '#AF52DE';
+  const secondaryColor = '#AF52DE'; // 體脂顏色 (紫色)
+  const weightColor = '#007AFF';    // [新增] 體重顏色 (藍色)，確保與統計表一致
 
   // 週期狀態
   const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
@@ -216,11 +217,35 @@ export default function AnalysisScreen() {
           yAxisLabelTexts: ['0', Math.round(finalMaxWeight*0.25).toString(), Math.round(finalMaxWeight*0.5).toString(), Math.round(finalMaxWeight*0.75).toString(), Math.round(finalMaxWeight).toString()]
       });
 
-      sortedData.forEach((d: any, i: number) => {
-          if (d.weight > 0) wData.push({ value: d.weight * factor, dataPointText: String(d.weight), customData: { val: d.weight }});
-          else wData.push({ value: interpolatedWeights[i] * factor, hideDataPoint: true });
+      // [修改] 取得最後一筆資料的索引
+      const lastIndex = sortedData.length - 1;
 
-          if (d.bodyFat > 0) fData.push({ value: d.bodyFat * factor, dataPointText: String(d.bodyFat), textColor: secondaryColor });
+      sortedData.forEach((d: any, i: number) => {
+          // [修改] 如果是最後一筆資料，將文字向左移 20 單位，避免被截斷
+          const textShiftX = i === lastIndex ? -20 : 0;
+
+          // 處理體重 (wData)
+          if (d.weight > 0) {
+              wData.push({ 
+                  value: d.weight * factor, 
+                  dataPointText: String(d.weight), 
+                  textShiftX: textShiftX, // 套用位移
+                  customData: { val: d.weight }
+              });
+          }
+          else {
+              wData.push({ value: interpolatedWeights[i] * factor, hideDataPoint: true });
+          }
+
+          // 處理體脂 (fData)
+          if (d.bodyFat > 0) {
+              fData.push({ 
+                  value: d.bodyFat * factor, 
+                  dataPointText: String(d.bodyFat), 
+                  textColor: secondaryColor,
+                  textShiftX: textShiftX // 套用位移
+              });
+          }
           else {
               const lastFat = fData.length > 0 ? fData[fData.length-1].value : 0;
               fData.push({ value: lastFat, hideDataPoint: true });
@@ -445,7 +470,8 @@ export default function AnalysisScreen() {
                 <View style={{flexDirection:'row', gap: 8, flexWrap:'wrap', justifyContent:'flex-end', flex:1}}>
                     <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#34C759', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('intake', lang)}</ThemedText></View>
                     <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#FF9500', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('burned', lang)}</ThemedText></View>
-                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:theme.tint, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('weight', lang)}</ThemedText></View>
+                    {/* [修改] 圖例顏色改為 weightColor (藍色) */}
+                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:weightColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('weight', lang)}</ThemedText></View>
                     <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:secondaryColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('body_fat', lang)}</ThemedText></View>
                 </View>
             </View>
@@ -469,7 +495,7 @@ export default function AnalysisScreen() {
                             showSecondaryYAxis
                             secondaryYAxisConfig={{
                                 showYAxisIndices: true,
-                                yAxisTextStyle: {color: theme.tint, fontSize: 10},
+                                yAxisTextStyle: {color: weightColor, fontSize: 10}, // [修改] 右軸文字改為藍色
                                 maxValue: axisConfig.maxWeight,
                                 noOfSections: 5,
                                 yAxisLabelTexts: axisConfig.yAxisLabelTexts
@@ -477,7 +503,18 @@ export default function AnalysisScreen() {
 
                             showLine
                             lineData={lineDataWeight}
-                            lineConfig={{ color: theme.tint, thickness: 2, curved: true, hideDataPoints: barWidth < 10, dataPointsColor: theme.tint, textFontSize: 9, textShiftY: -10, textColor: theme.tint, zIndex: 10, isSecondary: true }}
+                            lineConfig={{ 
+                                color: weightColor, // [修改] 線條顏色改為藍色
+                                thickness: 2, 
+                                curved: true, 
+                                hideDataPoints: barWidth < 10, 
+                                dataPointsColor: weightColor, // [修改] 數據點顏色改為藍色
+                                textFontSize: 9, 
+                                textShiftY: -10, 
+                                textColor: weightColor, // [修改] 數據文字顏色改為藍色
+                                zIndex: 10, 
+                                isSecondary: true 
+                            }}
                             
                             lineData2={lineDataFat}
                             lineConfig2={{ color: secondaryColor, thickness: 2, curved: true, hideDataPoints: barWidth < 10, dataPointsColor: secondaryColor, textFontSize: 9, textShiftY: 10, textColor: secondaryColor, zIndex: 10, isSecondary: true }}
@@ -487,8 +524,8 @@ export default function AnalysisScreen() {
                             rulesColor={'#eee'}
                             rulesType="solid"
                             height={280}
-                            width={VISIBLE_CHART_WIDTH}
-                            scrollable={chartScrollable} // 控制是否可捲動
+                            width={VISIBLE_CHART_WIDTH} // 固定寬度
+                            scrollable={chartScrollable} //控制是否可滾動
                             renderTooltip={renderTooltip}
                         />
                     </View>

@@ -19,7 +19,7 @@ export const TRANSLATIONS = {
     // General
     welcome: "歡迎", save: "儲存", cancel: "取消", delete: "刪除", error: "錯誤", success: "成功", loading: "載入中...",
     tip: "提示", save_success: "儲存成功", invalid_input: "輸入數值無效", settings: "設定", edit: "編輯",
-    close: "關閉", version_history: "改版履歷", how_to_get_key: "如何取得 Key?",
+    close: "關閉", version_history: "改版履歷", how_to_get_key: "如何取得 Key?", input_date: "輸入日期",
     
     // Backup & Restore
     data_backup: "資料備份與還原",
@@ -139,124 +139,127 @@ export const TRANSLATIONS = {
     increase: "增加", decrease: "減少", no_change: "無變化"
   },
   'en': {
+    // Tab Titles
     tab_home: "Home", tab_analysis: "Analysis", tab_ai_coach: "AI Coach", tab_settings: "Settings",
+    // General
     welcome: "Welcome", save: "Save", cancel: "Cancel", delete: "Delete", error: "Error", success: "Success", loading: "Loading...",
     tip: "Tip", save_success: "Saved successfully", invalid_input: "Invalid input", settings: "Settings", edit: "Edit",
-
-    data_backup: "Backup & Restore",
-    backup_db: "Export DB (Backup)",
-    restore_db: "Import DB (Restore)",
-    backup_desc: "Export database to Google Drive or local files",
-    restore_desc: "Restore database from file (Overwrites current data)",
+    close: "Close", version_history: "Version History", how_to_get_key: "How to get the Key?", input_date: "Input Date",
+    // Backup & Restore
+    data_backup: "Data Backup & Restore",
+    backup_db: "Export Database (Backup)",
+    restore_db: "Import Database (Restore)",
+    backup_desc: "Export the database file to Google Drive or local",
+    restore_desc: "Restore database from file (will overwrite current data)",
     restore_confirm_title: "Confirm Restore?",
-    restore_confirm_msg: "This will overwrite all current data and cannot be undone. Please ensure you selected the correct backup file.",
-    restore_success_msg: "Restore successful! Please restart the App to apply changes.",
-
-    api_guide_title: "How to get Gemini API Key",
-    api_step_1: "1. Click button below to go to Google AI Studio.",
-    api_step_2: "2. Sign in with your Google account.",
+    restore_confirm_msg: "This will completely overwrite your current records and cannot be undone. Please ensure you have selected the correct backup file.",
+    restore_success_msg: "Restore successful! Please fully close and restart the app to apply changes.",
+    // API Guide
+    api_guide_title: "Steps to Apply for Gemini API Key",
+    api_step_1: "1. Click the button below to go to Google AI Studio.",
+    api_step_2: "2. Log in with your Google account.",
     api_step_3: "3. Click 'Get API Key' or 'Create API Key'.",
     api_step_4: "4. Select 'Create API key in new project'.",
-    api_step_5: "5. Copy the key and paste it here.",
-    go_to_site: "Go to Website",
-
+    api_step_5: "5. Copy the generated Key and paste it back into this app.",
+    go_to_site: "Go to Application Site",
+    // Home
     body_metrics: "Body Metrics", record_metrics: "+ Record", target_weight: "Target Weight", target_body_fat: "Target Body Fat",
-    intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target", 
-    quick_record: "Quick Add", no_recent_foods: "No recent records", exercise: "Exercise",quick_add_activity: "Quick Add Activity",
-    
-    camera: "Camera", scan_barcode: "Scan Code", manual_input: "Manual", gallery: "Gallery",
-    scan_hint: "Align barcode within frame",allow: "Allow",
-    
-    breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", afternoon_tea: "Afternoon Tea", late_night: "Late Night", snack: "Snack", no_records: "No records",
-    
+    intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target",
+    quick_record: "Frequent Foods", no_recent_foods: "No Frequent Records", exercise: "Exercise", quick_add_activity: "Frequent Exercises", today: "Today", confirm: "Confirm",
+    // Actions
+    camera: "Camera", scan_barcode: "Scan", manual_input: "Manual Input", gallery: "Gallery",
+    scan_hint: "Please align the barcode within the frame",allow: "Allow",
+    // Meals
+    breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", afternoon_tea: "Afternoon Tea", late_night: "Late Night", snack: "Snack", no_records: "No Records",
+    // Nutrients
     calories: "Calories", protein: "Protein", fat: "Fat", carbs: "Carbs", sodium: "Sodium",
     sugar: "Sugar", fiber: "Fiber", saturated_fat: "Saturated Fat", trans_fat: "Trans Fat", cholesterol: "Cholesterol",
     zinc: "Zinc", magnesium: "Magnesium", iron: "Iron",
-
-    trend_analysis: "Analysis",
-    chart_title_cal: "Calories Trend",
-    chart_title_body: "Body Metrics Trend",
-    week: "7 Days", month: "30 Days", avg_daily: "Daily Avg",
-    axis_l: "(L)", axis_r: "(R)", analysis: "Analysis", total: "Total",
-    pinch_to_zoom: "Pinch to Zoom Chart", drag_to_move: "Drag to Move Chart",tap_msg: "Tap to Select/Swap. Press X to Delete.", done: "Done",
+    // Analysis
+    trend_analysis: "Data Analysis",
+    chart_title_cal: "Calorie Trend",
+    chart_title_body: "Weight & Body Fat Trend", calories_and_weight: "Calorie Balance & Weight/Body Fat Trend",
+    week: "Last 7 Days", month: "Last 30 Days", avg_daily: "Avg. Daily",
+    axis_l: "(Left)", axis_r: "(Right)", analysis: "Analysis", total: "Total",
+    pinch_to_zoom: "Pinch to zoom chart", drag_to_move: "Drag to move chart", tap_msg: "Tap blocks to select/swap. Delete with X.", done: "Done",
     last_7_days: "Last 7 Days", last_30_days: "Last 30 Days", custom: "Custom Range",
-    avg_daily_intake: "Avg Daily Intake", avg_burned: "Avg Burned", avg_bmr: "Avg Net Intake", net_intake: "Net Intake",
-    total_time: "Total Time", total_steps: "Total Steps", total_calories: "Total Calories",
-    avg_weight: "Avg Weight", weight_change: "Weight Change", avg_body_fat: "Avg Body Fat", body_fat_change: "Body Fat Change",
-
+    avg_daily_intake: "Avg. Daily Intake", avg_burned: "Avg. Burned", avg_bmr: "Avg. Net Intake", net_intake: "Net Intake",
+    total_time: "Total Exercise Time", total_steps: "Total Steps", total_calories: "Total Burned Calories",
+    avg_weight: "Avg. Weight", weight_change: "Weight Change", avg_body_fat: "Avg. Body Fat", body_fat_change: "Body Fat Change",
+    // Profile & AI
     profile: "Profile", ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female",
-    birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
-    target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
-    api_key_placeholder: "Paste API Key", get_api_key: "Get API Key", how_to_get_key:"How to obtain the API Key？", test_key: "Test Key", test_key_first: "Test Key First", current_model: "Model", language: "Language", version_history: "Version History",
+    birth_date: "Birth Date", height: "Height", weight: "Weight", body_fat: "Body Fat %",
+    target_goals: "Target Goals", training_goal: "Training Goal", activity_level: "Daily Activity Level", save_settings: "Save Settings",
+    api_key_placeholder: "Paste your API Key", get_api_key: "Get API Key", test_key: "Test Key", test_key_first: "Please test API Key first", current_model: "Current Model", language: "Language", 
     
-    lose_weight: "Weight Loss", lose_weight_desc: "Calorie deficit",
-    maintain: "Maintain", maintain_desc: "Maintain weight",
-    gain_weight: "Gain Weight", gain_weight_desc: "Muscle gain",
-    recomp: "Recomp", recomp_desc: "Lose fat gain muscle",
-    blood_sugar: "Blood Sugar", blood_sugar_desc: "Stable blood sugar",
+    lose_weight: "Lose Weight", lose_weight_desc: "Calorie Deficit, Focus on Fat Loss",
+    maintain: "Maintain", maintain_desc: "Maintain Current Weight and Physique",
+    gain_weight: "Gain Weight", gain_weight_desc: "Calorie Surplus, Focus on Muscle Gain",
+    recomp: "Body Recomposition", recomp_desc: "Build Muscle while Losing Fat",
+    blood_sugar: "Control Blood Sugar", blood_sugar_desc: "Stabilize Blood Sugar Levels",
 
-    sedentary: "Sedentary", sedentary_desc: "Little exercise",
-    lightly_active: "Lightly Active", lightly_active_desc: "1-3 days/week",
-    moderately_active: "Moderately Active", moderately_active_desc: "3-5 days/week",
-    very_active: "Very Active", very_active_desc: "6-7 days/week",
-    extra_active: "Extra Active", extra_active_desc: "Physical job",
-    target_date: "Target Date",
+    sedentary: "Sedentary", sedentary_desc: "Little to No Exercise",
+    lightly_active: "Lightly Active", lightly_active_desc: "1-3 Days/Week",
+    moderately_active: "Moderately Active", moderately_active_desc: "3-5 Days/Week",
+    very_active: "Very Active", very_active_desc: "6-7 Days/Week",
+    extra_active: "Extra Active", extra_active_desc: "Physical Job",
+    target_date: "Target Completion Date",
     days_remaining: "Days Remaining",
-
     // AI Coach UI
-    ai_coach: "AI Coach", ai_welcome_msg: "Hello! I am your personal nutrition and fitness assistant.\nClick the buttons below or type your questions directly.",
-    ask_ai_placeholder: "Type your message...",
+    ai_coach: "AI Coach", ai_welcome_msg: "Hello! I'm your personal nutrition and fitness assistant.\nPlease click the buttons below or type in your questions directly.",  
+    ask_ai_placeholder: "Type your message...", 
     meal_suggestions: "Meal Suggestions", workout_suggestions: "Workout Suggestions",
-    cook_meal: "Cook Meal", store_meal: "Convenience Store",
-    home_workout: "Home Workout", gym_workout: "Gym Workout",
-    remaining: "Remaining", daily_calorie_target: "Daily Calorie Target",
-    
+    cook_meal: "Cook at Home", store_meal: "Convenience Store",
+    home_workout: "Home Workout", gym_workout: "Gym/Equipment",
+    remaining: "Remaining", daily_calorie_target: "Daily Target",
     // AI Coach Prompts (Dynamic)
-    coach_prompt_cook: "As a nutritionist, please provide a 'cook meal at home' menu suitable for my current remaining calories. Please include: 1. Ingredient list 2. Detailed cooking steps 3. Recommended YouTube cooking tutorial keywords or links. Consider my personal goals.",
-    coach_prompt_store: "As a nutritionist, please provide a 'convenience store meal' menu suitable for my current remaining calories (e.g., 7-Eleven, FamilyMart). List specific product names and estimated calories. Consider my personal goals.",
-    coach_prompt_home_workout: "As a fitness coach, please provide a 'home workout without equipment' routine suitable for my current condition. Please include: 1. Exercise name 2. Repetitions/Sets 3. Key points of the exercise 4. Recommended YouTube exercise tutorial links.",
-    coach_prompt_gym_workout: "As a fitness coach, please provide a 'gym/equipment-assisted' workout routine suitable for my current condition. Please include: 1. Equipment name 2. Weight/Sets recommendations 3. Precautions 4. Recommended YouTube tutorial links.",
-    
+    coach_prompt_cook: "As a nutritionist, please provide a 'Cook at Home' meal plan suitable for my current remaining calories. Please include: 1. Ingredient list 2. Detailed cooking steps 3. Recommended YouTube cooking tutorial keywords or links. Please consider my personal goals.", 
+    coach_prompt_store: "As a nutritionist, please provide a 'Convenience Store' meal combination suitable for my current remaining calories (e.g., 7-11 or FamilyMart). Please list specific product names and estimated calories. Please consider my personal goals.",  
+    coach_prompt_home_workout: "As a fitness coach, please provide a 'Home Workout without Equipment' exercise routine suitable for my current condition. Please include: 1. Exercise name 2. Reps/Sets 3. Key points 4. Recommended YouTube exercise tutorial links.", 
+    coach_prompt_gym_workout: "As a fitness coach, please provide a 'Gym/Equipment Assisted' exercise routine suitable for my current condition. Please include: 1. Equipment name 2. Weight/Sets recommendations 3. Precautions 4. Recommended YouTube tutorial links.", 
     // Food Editor
-    ai_analysis: "AI Analysis", analyzing: "Analyzing...", composition: "Composition", suggestion: "Suggestion",
-    food_name_placeholder: "Enter name", barcode_scanned: "Barcode: ",
-    local_db: "Local DB", loaded: "Loaded", downloaded: "Downloaded", read_failed: "Read Failed",
-    scan_failed: "Not Found", scan_failed_msg: "Choose option:",
-    scan_ai_option: "Scan Label (AI)", manual_option: "Manual",
-    food_name: "Food Name", brand_placeholder: "Brand (Optional)", brand: "Brand",
-    portion: "Portion", portion_count: "Count", unit_weight: "Unit Weight",
+    ai_analysis: "AI Analysis", analyzing: "AI Analyzing...", composition: "Food Composition", suggestion: "Intake Suggestions",
+    food_name_placeholder: "Enter name or scan barcode", barcode_scanned: "Barcode scanned: ",
+    local_db: "Local Database", loaded: "Loaded", downloaded: "Info Downloaded", read_failed: "Read Failed",
+    scan_failed: "No Data Found", scan_failed_msg: "No such product, please choose:",
+    scan_ai_option: "Scan Label (AI)", manual_option: "Manual Input",
+    food_name: "Food Name", brand_placeholder: "Brand (optional)", brand: "Brand",
+    portion: "Portion Settings", portion_count: "Portion Count", unit_weight: "Unit Weight",
     total_weight_input: "Total Weight", total_label: "Total",
-    switch_to_weight: "Switch to Total", switch_to_serving: "Switch to Servings",
-    val_per_100g: "Per 100g", data_incomplete: "Incomplete Data", food_modified_msg: "Values changed. Update original item?",
+    switch_to_weight: "Switch to Total Weight Input", switch_to_serving: "Switch to Portion Count Input",
+    val_per_100g: "Per 100g", data_incomplete: "Data Incomplete", food_modified_msg: "Values have changed. Update original item or save as new?",
     save_as_new: "Save as New", update_original: "Update Original",
-
     //app/barcode-product.tsx
-    product_not_found: "Product Not Found", product_not_found_msg: "You can choose:", unknown_product: "Unknown Product",
-    product_info: "Product Info", product_name: "Product Name", input_serving: "Input Serving", input_gram: "Input Gram",
+    product_not_found: "Product Not Found", product_not_found_msg: "You can choose the following options:", unknown_product: "Unknown Product",
+    product_info: "Product Info", product_name: "Product Name", input_serving: "Input Serving", input_gram: "Input Grams",
     serving_unit: "Serving Unit" , barcode: "Barcode",
-
     // Activity Editor
-    record_activity: "Record Activity", select_activity: "Select Activity", custom_activity: "Custom", input_activity_name: "Enter Activity Name",
+    record_activity: "Record Activity", select_activity: "Select Activity", custom_activity: "Custom Activity", input_activity_name: "Input Activity Name",
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
-    floors: "Floors", est_calories: "Est. Calories", feeling_notes: "Notes & Feeling", enter_notes: "Enter notes...",
-    data_incomplete_msg: "Please select activity and enter at least one value.", activity_name: "Activity Name", category: "Category",
-    select_category_msg: "Please select category..",
+    floors: "Floors", est_calories: "Estimated Burned Calories", feeling_notes: "Notes & Feelings", enter_notes: "Enter notes...",
+    data_incomplete_msg: "Please select an activity and enter at least one value", activity_name: "Activity Name", category: "Category",
+    select_category_msg: "Please select an activity category...",
 
-    cat_cardio: "Cardio", cat_gym: "Gym", cat_sport: "Sport", cat_life: "Life", cat_custom: "Custom",
+    cat_cardio: "Cardio & Endurance", cat_gym: "Gym", cat_sport: "Sports & Competition", cat_life: "Daily Life", cat_custom: "Custom",
     act_walk: "Walking", act_run_slow: "Jogging", act_run_fast: "Running", act_cycling: "Cycling", act_swim: "Swimming", act_hike: "Hiking", act_jump_rope: "Jump Rope",
     act_weight_training: "Weight Training", act_powerlifting: "Powerlifting", act_yoga: "Yoga", act_pilates: "Pilates", act_hiit: "HIIT", act_elliptical: "Elliptical",
     act_basketball: "Basketball", act_badminton: "Badminton", act_tennis: "Tennis", act_soccer: "Soccer", act_baseball: "Baseball",
     act_housework: "Housework", act_gardening: "Gardening", act_moving: "Moving",
-    
-    intensity_low: "Low", intensity_medium: "Medium", intensity_high: "High",
-    
-    increase: "Inc", decrease: "Dec", no_change: "-"
+
+    intensity_low: "Low Intensity", intensity_medium: "Medium Intensity", intensity_high: "High Intensity",
+
+    increase: "Increase", decrease: "Decrease", no_change: "No Change"
+
   },
   'ja': {
     tab_home: "ホーム", tab_analysis: "分析", tab_ai_coach: "AIコーチ", tab_settings: "設定",
+    
+    // General
     welcome: "ようこそ", save: "保存", cancel: "キャンセル", delete: "削除", error: "エラー", success: "成功", loading: "読み込み中...",
     tip: "ヒント", save_success: "保存しました", invalid_input: "無効な入力", settings: "設定", edit: "編集",
-
+    close: "閉じる", version_history: "バージョン履歴", how_to_get_key: "キーの取得方法", input_date: "日付を入力",
+    
+    // Backup & Restore
     data_backup: "データバックアップ",
     backup_db: "DBをエクスポート",
     restore_db: "DBをインポート",
@@ -266,6 +269,7 @@ export const TRANSLATIONS = {
     restore_confirm_msg: "現在のデータは完全に上書きされ、元に戻すことはできません。",
     restore_success_msg: "復元しました！アプリを再起動してください。",
     
+    // API Guide
     api_guide_title: "Gemini APIキーの取得手順",
     api_step_1: "1. 下のボタンをクリックしてGoogle AI Studioへ移動します。",
     api_step_2: "2. Googleアカウントでログインします。",
@@ -274,42 +278,53 @@ export const TRANSLATIONS = {
     api_step_5: "5. 生成されたキーをコピーしてアプリに貼り付けます。",
     go_to_site: "サイトへ移動",
 
+    // Home
     body_metrics: "身体測定", record_metrics: "+ 記録", target_weight: "目標体重", target_body_fat: "目標体脂肪率",
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
-    quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動",
+    quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動", today: "今日", confirm: "確認",
     
+    // Actions
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
     scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
     
+    // Meals
     breakfast: "朝食", lunch: "昼食", dinner: "夕食", afternoon_tea: "間食", late_night: "夜食", snack: "スナック", no_records: "記録なし",
     
+    // Nutrients
     calories: "カロリー", protein: "タンパク質", fat: "脂質", carbs: "炭水化物", sodium: "ナトリウム",
     sugar: "糖質", fiber: "食物繊維", saturated_fat: "飽和脂肪酸", trans_fat: "トランス脂肪酸", cholesterol: "コレステロール",
     zinc: "亜鉛", magnesium: "マグネシウム", iron: "鉄",
 
+    // Analysis
     trend_analysis: "データ分析",
-    chart_title_cal: "カロリー収支",
-    chart_title_body: "体重と体脂肪率",
-    week: "7日間", month: "30日間", avg_daily: "日平均",
+    chart_title_cal: "カロリートレンド",
+    chart_title_body: "体重と体脂肪のトレンド", calories_and_weight: "カロリー収支と体重/体脂肪のトレンド",
+    week: "過去7日", month: "過去30日", avg_daily: "1日平均",
     axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "合計",
-    pinch_to_zoom: "ピンチでズーム", drag_to_move: "ドラッグで移動",tap_msg: "タップで選択/交換。Xで削除。", done: "完了",
-    last_7_days: "過去7日間", last_30_days: "過去30日間", custom: "カスタム範囲",
+    pinch_to_zoom: "ピンチでズーム", drag_to_move: "ドラッグで移動", tap_msg: "ブロックをタップして選択/交換。Xで削除。", done: "完了",
+    last_7_days: "過去7日", last_30_days: "過去30日", custom: "カスタム範囲",
     avg_daily_intake: "1日平均摂取", avg_burned: "1日平均消費", avg_bmr: "1日平均純摂取", net_intake: "純摂取",
     total_time: "総運動時間", total_steps: "総歩数", total_calories: "総消費カロリー",
     avg_weight: "平均体重", weight_change: "体重変化", avg_body_fat: "平均体脂肪率", body_fat_change: "体脂肪率変化",
 
-    profile: "プロフィール", ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性",
-    birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
-    target_goals: "目標設定", training_goal: "トレーニング目標", activity_level: "活動レベル", save_settings: "設定を保存",
-    api_key_placeholder: "API Keyを入力", how_to_get_key:"API Keyはどうやって取得しますか？",
-    get_api_key: "API Keyを取得", test_key: "キーをテスト", test_key_first: "先にキーをテストしてください", current_model: "モデル", language: "言語", version_history: "バージョン履歴",
-    
-    lose_weight: "減量", maintain: "維持", gain_weight: "増量", recomp: "ボディメイク", blood_sugar: "血糖値管理",
-    lose_weight_desc: "カロリー制限", maintain_desc: "体重維持", gain_weight_desc: "筋肉増強", recomp_desc: "除脂肪と増筋", blood_sugar_desc: "血糖値安定",
+    // Profile & AI
+    profile: "プロフィール", ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性", 
+    birth_date: "生年月日", height: "身長", weight: "体重", body_fat: "体脂肪率",
+    target_goals: "目標設定", training_goal: "トレーニング目標", activity_level: "日常活動レベル", save_settings: "設定を保存",
+    api_key_placeholder: "APIキーを貼り付けてください", get_api_key: "APIキーを取得", test_key: "キーをテスト", test_key_first: "まずAPIキーをテストしてください", current_model: "現在のモデル", language: "言語", 
 
-    sedentary: "ほぼ座りっぱなし", lightly_active: "軽い運動", moderately_active: "中程度の運動", very_active: "活発な運動", extra_active: "非常に活発",
-    sedentary_desc: "運動しない", lightly_active_desc: "週1-3日", moderately_active_desc: "週3-5日", very_active_desc: "週6-7日", extra_active_desc: "肉体労働など",
-    target_date: "目標達成日",
+    lose_weight: "減量", lose_weight_desc: "カロリー不足、脂肪燃焼に集中",
+    maintain: "維持", maintain_desc: "現在の体重と体型を維持",
+    gain_weight: "増量", gain_weight_desc: "カロリー過剰、筋肉増強に集中",
+    recomp: "ボディリコンポジション", recomp_desc: "脂肪を減らしながら筋肉を増やす",
+    blood_sugar: "血糖値コントロール", blood_sugar_desc: "血糖値の安定化",
+
+    sedentary: "座りがち", sedentary_desc: "ほとんど運動しない",
+    lightly_active: "軽度の活動", lightly_active_desc: "週1-3日",
+    moderately_active: "中程度の活動", moderately_active_desc: "週3-5日",
+    very_active: "高強度の活動", very_active_desc: "週6-7日",
+    extra_active: "非常に活発", extra_active_desc: "肉体労働",
+    target_date: "目標完了日",
     days_remaining: "残り日数",
     
     // AI Coach UI
@@ -357,13 +372,18 @@ export const TRANSLATIONS = {
     act_basketball: "バスケットボール", act_badminton: "バドミントン", act_tennis: "テニス", act_soccer: "サッカー", act_baseball: "野球",
     act_housework: "家事", act_gardening: "ガーデニング", act_moving: "引越し作業",
     
-    intensity_low: "低", intensity_medium: "中", intensity_high: "高"
+    intensity_low: "低", intensity_medium: "中", intensity_high: "高",
+
+    increase: "増加", decrease: "減少", no_change: "変化なし"
   },
   'ko': {
+    // Tab Titles
     tab_home: "홈", tab_analysis: "분석", tab_ai_coach: "AI 코치", tab_settings: "설정",
+    // General
     welcome: "환영합니다", save: "저장", cancel: "취소", delete: "삭제", error: "오류", success: "성공", loading: "로딩 중...",
     tip: "팁", save_success: "저장되었습니다", invalid_input: "잘못된 입력", settings: "설정", edit: "편집",
-
+    close: "닫기", version_history: "버전 기록", how_to_get_key: "키를 얻는 방법?", input_date: "날짜 입력",
+    // Backup & Restore 
     data_backup: "데이터 백업 및 복원",
     backup_db: "데이터베이스 내보내기 (백업)",
     restore_db: "데이터베이스 가져오기 (복원)",
@@ -372,7 +392,7 @@ export const TRANSLATIONS = {
     restore_confirm_title: "복원하시겠습니까?",
     restore_confirm_msg: "이 작업은 현재 기록을 완전히 덮어쓰며 복구할 수 없습니다. 올바른 백업 파일을 선택했는지 확인하세요.",
     restore_success_msg: "복원 성공! 변경 사항을 적용하려면 앱을 완전히 종료한 후 다시 시작하세요.",
-    
+    // API Guide
     api_guide_title: "Gemini API 키 발급 순서",
     api_step_1: "1. 아래 버튼을 눌러 Google AI Studio로 이동하세요.",
     api_step_2: "2. Google 계정으로 로그인하세요.",
@@ -380,20 +400,20 @@ export const TRANSLATIONS = {
     api_step_4: "4. 'Create API key in new project'를 선택하세요.",
     api_step_5: "5. 생성된 키를 복사하여 앱에 붙여넣으세요.",
     go_to_site: "사이트로 이동",
-
+    // Home
     body_metrics: "신체 수치", record_metrics: "+ 기록", target_weight: "목표 체중", target_body_fat: "목표 체지방",
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
-    quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동",
-    
+    quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동", today: "오늘", confirm: "확인",
+    // Actions
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
-    
+    // Meals
     breakfast: "아침", lunch: "점심", dinner: "저녁", afternoon_tea: "간식", late_night: "야식", snack: "스낵", no_records: "기록 없음",
-    
+    // Nutrients
     calories: "칼로리", protein: "단백질", fat: "지방", carbs: "탄수화물", sodium: "나트륨",
     sugar: "당류", fiber: "식이섬유", saturated_fat: "포화지방", trans_fat: "트랜스지방", cholesterol: "콜레스테롤",
     zinc: "아연", magnesium: "마그네슘", iron: "철분",
-
+    // Analysis
     trend_analysis: "데이터 분석",
     chart_title_cal: "칼로리 추세",
     chart_title_body: "체중 및 체지방 추세",
@@ -404,19 +424,24 @@ export const TRANSLATIONS = {
     avg_daily_intake: "일평균 섭취", avg_burned: "일평균 소모", avg_bmr: "일평균 순섭취", net_intake: "순 섭취",
     total_time: "총 운동 시간", total_steps: "총 걸음 수", total_calories: "총 칼로리 소모",
     avg_weight: "평균 체중", weight_change: "체중 변화", avg_body_fat: "평균 체지방", body_fat_change: "체지방 변화",
-
+    // Profile & AI
     profile: "프로필", ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성",
-    birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",
-    target_goals: "목표 설정", training_goal: "훈련 목표", activity_level: "활동 수준", save_settings: "설정 저장",
-    api_key_placeholder: "API Key 입력", how_to_get_key:"API Key는 어떻게 얻나요?",
-    get_api_key: "API Key 받기", test_key: "키 테스트", test_key_first: "키를 먼저 테스트하세요", current_model: "모델", language: "언어", version_history: "버전 기록",
+    birth_date: "생년월일", height: "신장", weight: "체중", body_fat: "체지방 %",
+    target_goals: "목표 설정", training_goal: "운동 목표", activity_level: "일상 활동 수준", save_settings: "설정 저장",
+    api_key_placeholder: "API 키를 붙여넣으세요", get_api_key: "API 키 받기", test_key: "키 테스트", test_key_first: "먼저 API 키를 테스트하세요", current_model: "현재 모델", language: "언어",  
     
-    lose_weight: "체중 감량", maintain: "유지", gain_weight: "체중 증량", recomp: "린매스업", blood_sugar: "혈당 관리",
-    lose_weight_desc: "칼로리 제한", maintain_desc: "체중 유지", gain_weight_desc: "근육 증가", recomp_desc: "체지방 감소/근육 증가", blood_sugar_desc: "혈당 안정",
+    lose_weight: "체중 감량", lose_weight_desc: "칼로리 적자, 지방 감소에 집중",
+    maintain: "유지", maintain_desc: "현재 체중과 체형 유지",
+    gain_weight: "체중 증가", gain_weight_desc: "칼로리 과잉, 근육 증가에 집중",
+    recomp: "바디 리컴포지션", recomp_desc: "지방을 줄이면서 근육을 늘리기",
+    blood_sugar: "혈당 조절", blood_sugar_desc: "혈당 수치 안정화",
 
-    sedentary: "활동 적음", lightly_active: "가벼운 활동", moderately_active: "보통 활동", very_active: "활발한 활동", extra_active: "매우 활발",
-    sedentary_desc: "운동 안 함", lightly_active_desc: "주 1-3일", moderately_active_desc: "주 3-5일", very_active_desc: "주 6-7일", extra_active_desc: "육체 노동",
-    target_date: "목표 완료일",
+    sedentary: "좌식 생활", sedentary_desc: "거의 운동하지 않음",
+    lightly_active: "가벼운 활동", lightly_active_desc: "주 1-3일",
+    moderately_active: "적당한 활동", moderately_active_desc: "주 3-5일",
+    very_active: "활발한 활동", very_active_desc: "주 6-7일",
+    extra_active: "매우 활발함", extra_active_desc: "육체 노동",
+    target_date: "목표 완료 날짜",
     days_remaining: "남은 일수",
     
 
@@ -465,7 +490,9 @@ export const TRANSLATIONS = {
     act_basketball: "농구", act_badminton: "배드민턴", act_tennis: "테니스", act_soccer: "축구", act_baseball: "야구",
     act_housework: "집안일", act_gardening: "정원 가꾸기", act_moving: "이사/운반",
     
-    intensity_low: "저", intensity_medium: "중", intensity_high: "고"
+    intensity_low: "저", intensity_medium: "중", intensity_high: "고",
+    
+    increase: "증가", decrease: "감소", no_change: "변화 없음"
   }
 };
 
