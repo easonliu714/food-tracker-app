@@ -47,7 +47,8 @@ const formattingInstruction = `
 1. **TABLES**: You MUST use Markdown Tables for any list of items, ingredients, or equipment.
    - Example: | Item | Qty | Calories |
 2. **LISTS**: Use bullet points (-) for step-by-step instructions.
-3. **LINKS**: Provide hyperlinks as [Title](URL).
+3. **LINKS**: Provide hyperlinks as [Title](URL). 
+   - IMPORTANT: The 'Title' and any search queries in the URL MUST be in the user's requested language (e.g., Traditional Chinese), NOT in English.
 4. **STRUCTURE**: Use '### Heading' for sections. Use **Bold** for emphasis.
 5. **CLARITY**: Do not output large blocks of text. Break it down visually.
 `;
@@ -74,7 +75,7 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
         }
         
         // 組合指令：系統上下文 + 格式要求 + 語言要求
-        const langInstruction = `(IMPORTANT: Reply in ${lang} language only.)`;
+        const langInstruction = `(IMPORTANT: Reply in ${lang} language only. Ensure all generated search links and keywords are also in ${lang}.)`;
         const finalMessage = `${systemInstruction}${formattingInstruction}${langInstruction}\n\n${newMessage}`;
         
         const result = await chat.sendMessage(finalMessage);
