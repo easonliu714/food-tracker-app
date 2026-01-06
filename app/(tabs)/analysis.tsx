@@ -271,8 +271,11 @@ export default function AnalysisScreen() {
                     hideRules
                     height={220}
                     width={VISIBLE_WIDTH} 
+                      // [新增] 加入右側留白，避免最後一筆日期的文字或數值被切掉
+                    endSpacing={50} 
                     isAnimated={false} 
-                    xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 40}}
+                    // 建議同時檢查這項，確保 X 軸標籤不會因為過寬而重疊或截斷
+                    xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 50, textAlign: 'center'}}
                     renderTooltip={renderTooltip}
                     
                     // [FIX] 啟用右側 Y 軸並手動設定標籤
