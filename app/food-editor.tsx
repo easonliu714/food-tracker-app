@@ -488,6 +488,19 @@ export default function FoodEditorScreen() {
                     {isAnalyzing ? <ActivityIndicator color="#FFF" size="small"/> : <Ionicons name="sparkles" size={20} color="#FFF" />}
                 </TouchableOpacity>
             </View>
+
+            {/* [新增] 品牌輸入欄位 */}
+            <View style={{marginTop: 12}}>
+                <ThemedText style={{fontSize: 12, color: '#888', marginBottom: 4}}>{t('brand', lang) || "Brand (Optional)"}</ThemedText>
+                <TextInput 
+                    style={[styles.input, { color: theme.text, borderColor: theme.icon }]} 
+                    value={brand} 
+                    onChangeText={setBrand} 
+                    placeholder={t('brand_placeholder', lang) || "e.g. 統一, 義美"} 
+                    placeholderTextColor={theme.icon} 
+                />
+            </View>
+
             {barcode && <View style={{flexDirection:'row', marginTop: 8}}><Ionicons name="barcode-outline" size={16} color={theme.icon} /><ThemedText style={{fontSize: 12, color: theme.icon}}>{t('barcode_scanned', lang)} {barcode}</ThemedText></View>}
         </ThemedView>
         
