@@ -116,9 +116,10 @@ export default function ActivityEditorScreen() {
     loadUserProfile();
   }, []);
 
-  // 2. 載入現有紀錄 (編輯模式)
+  // 2. 載入紀錄 (編輯模式 或 快捷新增模式)
   useEffect(() => {
       async function loadLog() {
+          // A. 編輯既有紀錄
           if (params.logId) {
               const id = parseInt(params.logId as string);
               setLogId(id);
@@ -138,13 +139,11 @@ export default function ActivityEditorScreen() {
                       if(log.intensity) setIntensity(log.intensity as any);
 
                       // 嘗試回填類別與活動
-                      // 策略：比對翻譯後的名稱，若比對不到則歸類為自訂
                       let found = false;
                       const logCatName = log.category;
                       const logActName = log.activityName;
 
                       for (const cat of ACTIVITY_RAW) {
-                          // 比對類別名稱 (翻譯後)
                           if (t(cat.id, lang) === logCatName || (cat.id === 'cat_custom' && logCatName === t('cat_custom', lang))) {
                               if (cat.items.length > 0) {
                                   const act = cat.items.find(item => t(item.id, lang) === logActName);
@@ -159,7 +158,6 @@ export default function ActivityEditorScreen() {
                       }
 
                       if (!found) {
-                          // 若找不到對應的預設活動，則設為自訂
                           const customCat = ACTIVITY_RAW.find(c => c.id === 'cat_custom');
                           setCategory(customCat || null);
                           setCustomActivityName(logActName);
@@ -169,10 +167,34 @@ export default function ActivityEditorScreen() {
               } catch (e) {
                   console.error("Load log failed:", e);
               }
+          } 
+          // B. [FIX] 來自首頁快捷鍵的新增模式
+          else if (params.activityName) {
+             const targetName = params.activityName as string;
+             let found = false;
+
+             // 遍歷所有分類尋找符合名稱的項目 (比對翻譯後的名稱)
+             for (const cat of ACTIVITY_RAW) {
+                 const matchItem = cat.items.find(item => t(item.id, lang) === targetName);
+                 if (matchItem) {
+                     setCategory(cat);
+                     setActivity(matchItem);
+                     found = true;
+                     break;
+                 }
+             }
+
+             // 若找不到 (可能是自訂名稱)，則歸類為 Custom
+             if (!found) {
+                 const customCat = ACTIVITY_RAW.find(c => c.id === 'cat_custom');
+                 setCategory(customCat || null);
+                 setCustomActivityName(targetName);
+                 setActivity(null);
+             }
           }
       }
       loadLog();
-  }, [params.logId]);
+  }, [params.logId, params.activityName]);
 
   const calculatedCalories = useMemo(() => {
     const timeMins = parseFloat(duration);
@@ -323,7 +345,7 @@ export default function ActivityEditorScreen() {
                 <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
                     {activity?.icon && <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>}
                     <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
-                        {category?.id === 'cat_custom' ? t('custom_activity', lang) : (activity ? t(activity.id, lang) : t('select_activity', lang))}
+                        {category?.id === 'cat_custom' ? (customActivityName || t('custom_activity', lang)) : (activity ? t(activity.id, lang) : t('select_activity', lang))}
                     </ThemedText>
                 </View>
              </View>

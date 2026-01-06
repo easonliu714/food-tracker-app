@@ -9,7 +9,7 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
-// [修改] 引入 activityLogs
+// [修正] 引入 activityLogs
 import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs } from "@/drizzle/schema"; 
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
@@ -103,7 +103,7 @@ export default function ProfileScreen() {
       }
   };
 
-  // [修改] 還原功能：修正日期轉換與 activityLogs 處理
+  // [修改] 還原功能：修正日期轉換 (含 UserProfile) 與 activityLogs 處理
   const handleRestore = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
@@ -167,12 +167,15 @@ export default function ProfileScreen() {
                           await db.insert(activityLogs).values(cleanActivities);
                       }
                       
-                      // 6. 還原 User Profile
+                      // 6. 還原 User Profile (修正 TypeError: value.getTime is not a function)
                       if (backup.data.users?.length && profileId) {
                           const u = backup.data.users[0];
-                          const { id, ...userData } = u; // 移除 ID 避免衝突
+                          const { id, createdAt, updatedAt, ...userData } = u; // 移除 ID 和 時間字串
+                          
                           await db.update(userProfiles).set({
                               ...userData,
+                              // 關鍵修正：將 JSON 字串轉回 Date 物件
+                              createdAt: createdAt ? new Date(createdAt) : new Date(),
                               updatedAt: new Date()
                           }).where(eq(userProfiles.id, profileId));
                       }

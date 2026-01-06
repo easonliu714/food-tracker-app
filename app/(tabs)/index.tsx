@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -7,19 +7,21 @@ import {
   Dimensions,
   TextInput,
   Alert,
-  ActivityIndicator,
   Modal,
-  RefreshControl
+  RefreshControl,
+  Text,
+  KeyboardAvoidingView,
+  Platform
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { format, addDays, subDays } from "date-fns";
+import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isValid, parse } from "date-fns";
 import { zhTW, enUS, ja, ko, fr, ru } from "date-fns/locale"; 
 import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-gifted-charts";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { eq, desc } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
+import DateTimePicker from "@react-native-community/datetimepicker"; // 用於快速切換年份月份
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -27,8 +29,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n"; 
 
-// [FIX] 引入新增的 DB 函式
-import { db, getLatestTwoDailyMetrics, duplicateFoodLog } from "@/lib/db";
+import { db, getLatestTwoDailyMetrics, duplicateFoodLog, getFrequentActivities, getRangeStats } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -42,9 +43,12 @@ export default function HomeScreen() {
   const dateLocale = LOCALE_MAP[lang] || enUS;
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  
+  // Modal 控制
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  
   const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false); // [NEW] 下拉刷新
+  const [refreshing, setRefreshing] = useState(false); 
   
   const [weight, setWeight] = useState(""); 
   const [bodyFat, setBodyFat] = useState("");
@@ -61,7 +65,7 @@ export default function HomeScreen() {
   const [allDailyLogs, setAllDailyLogs] = useState<any[]>([]);
   const [dailyActivities, setDailyActivities] = useState<any[]>([]);
   const [recentFoods, setRecentFoods] = useState<any[]>([]);
-
+  const [frequentActivities, setFrequentActivities] = useState<string[]>([]);
   const [selectedMacro, setSelectedMacro] = useState<{label: string, key: string, unit: string} | null>(null);
 
   useFocusEffect(
@@ -93,8 +97,7 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
-      // 2. [FIX] 身體數值比較邏輯優化
-      // 先抓取當日的數值
+      // 2. 身體數值比較
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
@@ -103,15 +106,10 @@ export default function HomeScreen() {
         setBodyFat(curF > 0 ? String(curF) : "");
       }
 
-      // 再抓取「最新兩筆」來計算差異 (不限於昨天)
       const latestTwo = await getLatestTwoDailyMetrics();
       if (latestTwo.length >= 2) {
-          // latestTwo[0] 是最新, latestTwo[1] 是次新
-          // 我們需要確認 latestTwo[0] 是否就是「今天」顯示的數值
-          // 如果今天是最新，那就跟次新比；如果今天還沒量，那就顯示最新兩筆的差異作為參考
           const latest = latestTwo[0];
           const previous = latestTwo[1];
-          
           if (latest.date === dateStr && latest.weightKg && previous.weightKg) {
              setDiffWeight(parseFloat((latest.weightKg - previous.weightKg).toFixed(1)));
           }
@@ -145,10 +143,13 @@ export default function HomeScreen() {
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
-
+      // 最近食物
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
       setRecentFoods(uniqueRecents);
+      // 載入常用運動
+      const acts = await getFrequentActivities();
+      setFrequentActivities(acts);
 
     } catch (e) { console.error(e); } finally { setIsLoading(false); setRefreshing(false); }
   };
@@ -157,7 +158,7 @@ export default function HomeScreen() {
       setRefreshing(true);
       loadData();
   };
-
+  
   const handleSaveMetrics = async () => {
       const w = parseFloat(weight);
       const bf = parseFloat(bodyFat);
@@ -180,11 +181,10 @@ export default function HomeScreen() {
       } catch(e) { console.error(e); }
   };
 
-  // [FIX] 新增複製功能
   const handleDuplicate = async (id: number) => {
       try {
           await duplicateFoodLog(id);
-          Alert.alert(t('success', lang), t('save_success', lang)); // 或者使用 Toast
+          Alert.alert(t('success', lang), t('save_success', lang));
           loadData();
       } catch (e) {
           Alert.alert(t('error', lang), "Copy failed");
@@ -201,15 +201,172 @@ export default function HomeScreen() {
       ]);
   };
 
+  // --- 客製化月曆 Modal ---
+  const CustomCalendarModal = () => {
+    const [viewDate, setViewDate] = useState(currentDate);
+    const [monthStats, setMonthStats] = useState<Record<string, any>>({});
+    
+    // [NEW] 快速切換年份月份的 Picker
+    const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
+    // [NEW] 手動輸入日期的 Modal
+    const [showInputModal, setShowInputModal] = useState(false);
+    const [inputDateStr, setInputDateStr] = useState("");
+
+    useEffect(() => {
+        async function fetchStats() {
+            const start = format(startOfMonth(viewDate), 'yyyy-MM-dd');
+            const end = format(endOfMonth(viewDate), 'yyyy-MM-dd');
+            const stats = await getRangeStats(start, end);
+            setMonthStats(stats);
+        }
+        fetchStats();
+    }, [viewDate, showCalendarModal]);
+
+    const daysInMonth = eachDayOfInterval({ start: startOfMonth(viewDate), end: endOfMonth(viewDate) });
+    const startDayOfWeek = getDay(startOfMonth(viewDate));
+    const emptySlots = Array(startDayOfWeek).fill(null);
+    const weeks = [];
+    let currentWeek = [...emptySlots];
+    
+    daysInMonth.forEach(day => {
+        currentWeek.push(day);
+        if (currentWeek.length === 7) { weeks.push(currentWeek); currentWeek = []; }
+    });
+    if (currentWeek.length > 0) weeks.push(currentWeek);
+
+    const handleManualInput = () => {
+        const parsed = parse(inputDateStr, 'yyyy-MM-dd', new Date());
+        if (isValid(parsed)) {
+            setCurrentDate(parsed);
+            setViewDate(parsed);
+            setShowInputModal(false);
+            setShowCalendarModal(false);
+        } else {
+            Alert.alert(t('error', lang), t('invalid_date_format', lang) || "Invalid Format (YYYY-MM-DD)");
+        }
+    };
+
+    return (
+        <Modal visible={showCalendarModal} animationType="slide" transparent>
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, {backgroundColor: theme.cardBackground, height: '70%'}]}>
+                    {/* Header: Clickable Month/Year */}
+                    <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:10}}>
+                        <TouchableOpacity onPress={()=>setViewDate(subMonths(viewDate, 1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
+                        
+                        <TouchableOpacity onPress={() => setShowYearMonthPicker(true)} style={{flexDirection:'row', alignItems:'center'}}>
+                            <ThemedText type="subtitle" style={{marginRight: 4}}>
+                                {format(viewDate, "yyyy MMMM", {locale: dateLocale})}
+                            </ThemedText>
+                            <Ionicons name="caret-down" size={16} color={theme.icon}/>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity onPress={()=>setViewDate(addMonths(viewDate, 1))}><Ionicons name="chevron-forward" size={24} color={theme.text}/></TouchableOpacity>
+                    </View>
+
+                    {/* Week headers */}
+                    <View style={{flexDirection:'row', justifyContent:'space-around', borderBottomWidth:1, borderColor:'#eee', paddingBottom:8}}>
+                        {['S','M','T','W','T','F','S'].map((d,i)=>(<ThemedText key={i} style={{width: 40, textAlign:'center', color: theme.icon, fontWeight:'bold'}}>{d}</ThemedText>))}
+                    </View>
+
+                    <ScrollView>
+                        {weeks.map((week, wIdx) => (
+                            <View key={wIdx} style={{flexDirection:'row', justifyContent:'space-around', marginVertical: 8}}>
+                                {week.map((day, dIdx) => {
+                                    if (!day) return <View key={dIdx} style={{width: 40}} />;
+                                    const dateStr = format(day, 'yyyy-MM-dd');
+                                    const stat = monthStats[dateStr];
+                                    const net = stat ? Math.round(stat.net) : 0;
+                                    const isSelected = isSameDay(day, currentDate);
+                                    const isOverLimit = targets.calories > 0 && net > targets.calories;
+                                    return (
+                                        <TouchableOpacity 
+                                            key={dIdx} 
+                                            onPress={() => { setCurrentDate(day); setShowCalendarModal(false); }}
+                                            style={{width: 40, alignItems:'center', backgroundColor: isSelected ? theme.tint+'20' : 'transparent', borderRadius: 8, padding: 4}}
+                                        >
+                                            <ThemedText style={{fontWeight: isSelected?'bold':'normal', color: isSelected?theme.tint:theme.text}}>{format(day, 'd')}</ThemedText>
+                                            <Text style={{fontSize: 9, color: isOverLimit ? '#FF3B30' : theme.icon, marginTop: 2}}>{stat ? net : '-'}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        ))}
+                    </ScrollView>
+
+                    {/* Footer */}
+                    <View style={{flexDirection:'row', justifyContent:'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: '#eee', alignItems:'center'}}>
+                        <View style={{flexDirection:'row', alignItems:'center'}}>
+                            {/* [NEW] Keyboard Input Button */}
+                            <TouchableOpacity onPress={() => setShowInputModal(true)} style={{padding: 10, marginRight: 8}}>
+                                <Ionicons name="keypad-outline" size={20} color={theme.tint} />
+                            </TouchableOpacity>
+
+                            {/* Today Button */}
+                            <TouchableOpacity onPress={() => {
+                                const today = new Date();
+                                setCurrentDate(today);
+                                setViewDate(today);
+                                setShowCalendarModal(false);
+                            }} style={{padding: 10, flexDirection:'row', alignItems:'center'}}>
+                                <Ionicons name="today-outline" size={16} color={theme.tint} style={{marginRight: 4}}/>
+                                <ThemedText style={{color: theme.tint, fontWeight:'bold'}}>{t('today', lang) || "Today"}</ThemedText>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity onPress={() => setShowCalendarModal(false)} style={{padding: 10}}>
+                            <ThemedText style={{color: theme.tint, fontWeight:'bold'}}>{t('confirm', lang) || "OK"}</ThemedText>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* 內層: 年月選擇器 Modal (使用 DateTimePicker spinner 模式) */}
+                    {showYearMonthPicker && (
+                        <DateTimePicker 
+                            value={viewDate} 
+                            mode="date" 
+                            display="spinner"
+                            onChange={(e, d) => {
+                                setShowYearMonthPicker(false);
+                                if (d) setViewDate(d);
+                            }} 
+                        />
+                    )}
+
+                    {/* 內層: 手動輸入日期 Modal */}
+                    <Modal visible={showInputModal} transparent animationType="fade">
+                        <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={styles.modalOverlay}>
+                            <View style={[styles.modalContent, {backgroundColor: 'white', height: 'auto', padding: 20}]}>
+                                <ThemedText type="subtitle" style={{marginBottom:16}}>Input Date</ThemedText>
+                                <TextInput 
+                                    style={{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:10, fontSize:16, marginBottom:16}}
+                                    placeholder="YYYY-MM-DD"
+                                    value={inputDateStr}
+                                    onChangeText={setInputDateStr}
+                                    keyboardType="numbers-and-punctuation"
+                                />
+                                <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
+                                    <TouchableOpacity onPress={()=>setShowInputModal(false)}><ThemedText>Cancel</ThemedText></TouchableOpacity>
+                                    <TouchableOpacity onPress={handleManualInput}><ThemedText style={{color:theme.tint, fontWeight:'bold'}}>Go</ThemedText></TouchableOpacity>
+                                </View>
+                            </View>
+                        </KeyboardAvoidingView>
+                    </Modal>
+
+                </View>
+            </View>
+        </Modal>
+    );
+  };
+
+  // Header 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <TouchableOpacity onPress={() => setCurrentDate(addDays(currentDate, -1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
-      <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateDisplay}>
+      <TouchableOpacity onPress={() => setShowCalendarModal(true)} style={styles.dateDisplay}>
         <ThemedText type="subtitle">{format(currentDate, "yyyy-MM-dd", {locale: dateLocale})}</ThemedText>
         <ThemedText style={{color: theme.icon, fontSize: 14}}>{format(currentDate, "EEEE", {locale: dateLocale})}</ThemedText>
       </TouchableOpacity>
       <TouchableOpacity onPress={() => setCurrentDate(addDays(currentDate, 1))}><Ionicons name="chevron-forward" size={24} color={theme.text}/></TouchableOpacity>
-      {showDatePicker && <DateTimePicker value={currentDate} mode="date" onChange={(e,d) => {setShowDatePicker(false); if(d) setCurrentDate(d);}} />}
     </View>
   );
 
@@ -224,7 +381,6 @@ export default function HomeScreen() {
           </View>
       );
   };
-
   const renderBodyMetricsCard = () => (
     <ThemedView style={styles.card}>
       <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
@@ -384,8 +540,7 @@ export default function HomeScreen() {
       </View>
   );
 
-  // [FIX] 新增複製按鈕的 Swipeable Log
-  const renderSwipeableLog = (log: any) => (
+    const renderSwipeableLog = (log: any) => (
       <Swipeable 
         renderRightActions={()=>(
             <View style={{flexDirection: 'row', width: 140}}>
@@ -443,6 +598,25 @@ export default function HomeScreen() {
                     );
                 })}
             </View>
+
+            {/* 常用運動快捷區 */}
+            {frequentActivities.length > 0 && (
+                <View style={{marginTop: 20, marginBottom: 8}}>
+                     <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
+                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>
+                        {frequentActivities.map((name, idx) => (
+                            <TouchableOpacity 
+                                key={idx} 
+                                style={[styles.quickChip, {borderColor: theme.icon}]}
+                                onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}
+                            >
+                                <ThemedText>🏃 {name}</ThemedText>
+                            </TouchableOpacity>
+                        ))}
+                     </ScrollView>
+                </View>
+            )}
+
             <View style={[styles.mealGroup, {marginTop: 20}]}>
                 <View style={styles.mealHeader}>
                     <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
@@ -462,12 +636,15 @@ export default function HomeScreen() {
                 ))}
             </View>
         </View>
+        
+        {CustomCalendarModal()}
         {renderMacroDetailModal()}
       </ScrollView>
     </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
+
 
 const ActionButton = ({ icon, label, onPress, color }: any) => (
   <TouchableOpacity style={styles.actionButton} onPress={onPress}>

@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/expo-sqlite";
 import { openDatabaseSync } from "expo-sqlite";
-import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm";
+// 1. 確保引入 desc 排序函式
+import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm"; 
 import * as schema from "../drizzle/schema";
 import { 
   userProfiles, foodItems, foodLogs, recipes, 
@@ -243,8 +244,14 @@ export async function getFoodItemById(id: number) {
   return result[0] || null;
 }
 
+// 2. 修改 getFoodItemByBarcode 函式
 export async function getFoodItemByBarcode(barcode: string) {
-  const result = await db.select().from(foodItems).where(eq(foodItems.barcode, barcode));
+  const result = await db
+    .select()
+    .from(foodItems)
+    .where(eq(foodItems.barcode, barcode))
+    .orderBy(desc(foodItems.updatedAt)); // [新增] 強制依更新時間倒序排列，確保抓到最新的一筆
+  
   return result[0] || null;
 }
 
@@ -378,4 +385,58 @@ export async function createActivityLog(data: typeof activityLogs.$inferInsert) 
 
 export async function deleteActivityLog(id: number) {
   await db.delete(activityLogs).where(eq(activityLogs.id, id));
+}
+
+export async function getFrequentActivities(limit = 5) {
+  // 取得最近 30 天的運動紀錄來分析頻率
+  const rawLogs = await db.select().from(activityLogs).orderBy(desc(activityLogs.date)).limit(100);
+  
+  const frequency: Record<string, number> = {};
+  rawLogs.forEach(log => {
+    if (log.activityName) {
+      frequency[log.activityName] = (frequency[log.activityName] || 0) + 1;
+    }
+  });
+
+  // 排序取出前 N 名
+  const sortedNames = Object.entries(frequency)
+    .sort((a, b) => b[1] - a[1]) // 頻率高到低
+    .slice(0, limit)
+    .map(([name]) => name);
+
+  return sortedNames;
+}
+
+// [新增] 取得指定日期範圍的每日統計 (供月曆與分析頁面使用)
+export async function getRangeStats(startDateStr: string, endDateStr: string) {
+  // 1. 取得範圍內的飲食紀錄
+  const logs = await db.select({
+    date: foodLogs.date,
+    calories: foodLogs.totalCalories
+  })
+  .from(foodLogs)
+  .where(and(gte(foodLogs.date, startDateStr), lte(foodLogs.date, endDateStr)));
+
+  // 2. 取得範圍內的運動紀錄
+  const activities = await db.select({
+    date: activityLogs.date,
+    caloriesBurned: activityLogs.caloriesBurned
+  })
+  .from(activityLogs)
+  .where(and(gte(activityLogs.date, startDateStr), lte(activityLogs.date, endDateStr)));
+
+  // 3. 合併資料
+  const stats: Record<string, { intake: number, burned: number, net: number }> = {};
+  
+  // 初始化 helper
+  const updateStat = (date: string, type: 'intake'|'burned', val: number) => {
+      if (!stats[date]) stats[date] = { intake: 0, burned: 0, net: 0 };
+      stats[date][type] += val;
+      stats[date].net = stats[date].intake - stats[date].burned;
+  };
+
+  logs.forEach(l => updateStat(l.date, 'intake', l.calories || 0));
+  activities.forEach(a => updateStat(a.date, 'burned', a.caloriesBurned || 0));
+
+  return stats;
 }

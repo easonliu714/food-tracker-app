@@ -1,359 +1,354 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Dimensions, Pressable, ActivityIndicator } from "react-native";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BarChart } from "react-native-gifted-charts";
+import { format, subDays, addDays, parseISO, differenceInDays } from "date-fns";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
+import { GestureHandlerRootView, PinchGestureHandler, State } from "react-native-gesture-handler";
+
 import { ThemedText } from "@/components/themed-text";
-import { Colors } from "@/constants/theme";
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import { BarChart } from "react-native-gifted-charts"; 
-import { useFocusEffect } from "expo-router";
-import { db } from "@/lib/db";
-import { foodLogs, dailyMetrics, activityLogs } from "@/drizzle/schema";
-import { gte } from "drizzle-orm";
-import { format, subDays, eachDayOfInterval } from "date-fns";
+import { ThemedView } from "@/components/themed-view";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import { t, useLanguage } from "@/lib/i18n";
+import { getRangeStats, db } from "@/lib/db"; 
+import { dailyMetrics } from "@/drizzle/schema";
+import { desc, gte, lte, and } from "drizzle-orm";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const VISIBLE_WIDTH = SCREEN_WIDTH - 48; 
 
 export default function AnalysisScreen() {
-  const theme = Colors[useColorScheme() ?? "light"];
   const lang = useLanguage();
+  const backgroundColor = useThemeColor({}, "background");
+  const cardBackground = useThemeColor({}, "cardBackground");
+  const textColor = useThemeColor({}, "text");
+  const tintColor = useThemeColor({}, "tint");
+
+  // 週期狀態
+  const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<7 | 30>(7);
-  
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [lineData, setLineData] = useState<any[]>([]);     
-  const [lineData2, setLineData2] = useState<any[]>([]);   
-  const [summary, setSummary] = useState({ avgIn: 0, avgOut: 0, avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0 });
-  
-  // [NEW] 用於處理雙軸縮放的參數
-  const [axisConfig, setAxisConfig] = useState({
-      maxCal: 2500,
-      maxWeight: 100,
-      scaleFactor: 1, // 用於將體重映射到熱量軸的比例
-      yAxisLabelTexts: ['0', '25', '50', '75', '100'] // 右側軸的顯示標籤
+
+  // 自訂日期範圍狀態
+  const [customStart, setCustomStart] = useState(subDays(new Date(), 7));
+  const [customEnd, setCustomEnd] = useState(new Date());
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  // 數據狀態
+  const [chartData, setChartData] = useState<any[]>([]); // 堆疊圖數據
+  const [lineDataWeight, setLineDataWeight] = useState<any[]>([]); // 體重折線
+  const [lineDataFat, setLineDataFat] = useState<any[]>([]); // 體脂折線
+  const [summary, setSummary] = useState({ 
+      avgIntake: 0, avgBurned: 0, avgNet: 0, 
+      avgWeight: 0, avgBodyFat: 0, totalSteps: 0 
   });
 
-  const chartRef = useRef<any>(null);
+  // 圖表縮放參數
+  const [barWidth, setBarWidth] = useState(20);
+  const [spacing, setSpacing] = useState(20);
+  const [zoomScale, setZoomScale] = useState(1);
 
-  const barConfig = period === 30 
-    ? { barWidth: 8, spacing: 12, initialSpacing: 10 }
-    : { barWidth: 20, spacing: 24, initialSpacing: 20 };
+  // 載入數據
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      let startStr = "";
+      let endStr = format(new Date(), "yyyy-MM-dd");
 
-  useFocusEffect(
-    useCallback(() => { loadAnalysis(period); }, [period])
-  );
-
-  // [FIX] 確保資料載入後捲動到最右側 (最新日期)
-  useEffect(() => {
-      if (chartData.length > 0 && chartRef.current) {
-          setTimeout(() => {
-              chartRef.current.scrollToEnd({ animated: false }); 
-          }, 300); // 延遲確保渲染完成
+      // 1. 決定日期範圍
+      if (period === 'week') {
+          startStr = format(subDays(new Date(), 6), "yyyy-MM-dd");
+      } else if (period === 'month') {
+          startStr = format(subDays(new Date(), 29), "yyyy-MM-dd");
+      } else {
+          startStr = format(customStart, "yyyy-MM-dd");
+          endStr = format(customEnd, "yyyy-MM-dd");
       }
-  }, [chartData]);
 
-  const loadAnalysis = async (days: number) => {
-      setLoading(true);
-      try {
-          const endDate = new Date(); 
-          const startDate = subDays(endDate, days - 1);
-          const dateRange = eachDayOfInterval({ start: startDate, end: endDate });
-          const strStart = format(startDate, 'yyyy-MM-dd');
+      // 2. 取得統計數據 (Intake, Burned)
+      const rangeStats = await getRangeStats(startStr, endStr);
+      
+      // 3. 取得體重/體脂數據
+      const metrics = await db.select()
+        .from(dailyMetrics)
+        .where(and(gte(dailyMetrics.date, startStr), lte(dailyMetrics.date, endStr)))
+        .orderBy(desc(dailyMetrics.date));
 
-          const dataMap = new Map();
-          dateRange.forEach(d => {
-              const k = format(d, 'yyyy-MM-dd');
-              const showLabel = days === 7 || d.getDate() % 5 === 0;
-              dataMap.set(k, { 
-                  in: 0, out: 0, pro: 0, fat: 0, carb: 0, sod: 0, 
-                  w: null, bf: null, 
-                  hasData: false, 
-                  label: showLabel ? format(d, 'MM/dd') : '',
-                  dateStr: k
-              });
+      // 4. 整合數據為圖表格式
+      const daysDiff = differenceInDays(new Date(endStr), new Date(startStr));
+      const newChartData = [];
+      const wData = [];
+      const fData = [];
+
+      let totalIntake = 0, totalBurned = 0, totalNet = 0;
+      let validFoodDays = 0;
+
+      // 建立日期 Map 方便查找 Metrics
+      const metricsMap = new Map();
+      metrics.forEach(m => metricsMap.set(m.date, m));
+
+      for (let i = 0; i <= daysDiff; i++) {
+          const d = addDays(new Date(startStr), i);
+          const dStr = format(d, "yyyy-MM-dd");
+          const stats = rangeStats[dStr] || { intake: 0, burned: 0, net: 0 };
+          const metric = metricsMap.get(dStr);
+
+          // 累計摘要數據
+          if (stats.intake > 0) {
+              totalIntake += stats.intake;
+              validFoodDays++;
+          }
+          totalBurned += stats.burned || 0;
+          totalNet += stats.net || 0;
+
+          // 堆疊長條圖 (Stack Data)
+          // 每個 Bar 包含兩個部分: [攝取, 消耗]
+          newChartData.push({
+            stacks: [
+                { value: stats.intake, color: '#34C759', marginBottom: 2 }, // 攝取 (綠)
+                { value: stats.burned, color: '#FF9500' }  // 消耗 (橘)
+            ],
+            label: format(d, "MM/dd"),
+            labelTextStyle: { color: '#888', fontSize: 10 },
+            fullDate: dStr // 用於後續過濾 Label
           });
 
-          // Fetch Data
-          const logs = await db.select().from(foodLogs).where(gte(foodLogs.date, strStart));
-          const acts = await db.select().from(activityLogs).where(gte(activityLogs.date, strStart));
-          const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, strStart));
+          // 折線圖數據 (需對齊 X 軸索引，若無數據填 null 或 0，GiftedCharts 支援 data point 獨立設定)
+          // 注意: GiftedCharts 混合圖表時，Line 的數據點數量需與 Bar 一致或對應
+          wData.push({ value: metric?.weightKg || 0, dataPointText: metric?.weightKg?.toString() || '', hideDataPoint: !metric?.weightKg });
+          fData.push({ value: metric?.bodyFatPercentage || 0, dataPointText: metric?.bodyFatPercentage?.toString() || '', hideDataPoint: !metric?.bodyFatPercentage });
+      }
 
-          let maxCalVal = 2000; 
-          let maxWeightVal = 80;
+      setChartData(newChartData);
+      setLineDataWeight(wData);
+      setLineDataFat(fData);
 
-          logs.forEach(l => {
-              if (dataMap.has(l.date)) {
-                  const d = dataMap.get(l.date);
-                  d.in += l.totalCalories || 0;
-                  d.pro += l.totalProteinG || 0;
-                  d.fat += l.totalFatG || 0;
-                  d.carb += l.totalCarbsG || 0;
-                  d.sod += l.totalSodiumMg || 0;
-                  d.hasData = true;
-                  if (d.in > maxCalVal) maxCalVal = d.in;
-              }
-          });
-          acts.forEach(a => {
-              if (dataMap.has(a.date)) {
-                  const d = dataMap.get(a.date);
-                  d.out += a.caloriesBurned || 0; 
-                  d.hasData = true;
-                  if (d.out > maxCalVal) maxCalVal = d.out; // 消耗也納入最大值考量
-              }
-          });
-          metrics.forEach(m => {
-              if (dataMap.has(m.date)) {
-                  const d = dataMap.get(m.date);
-                  if (m.weightKg && m.weightKg > 0) {
-                      d.w = m.weightKg;
-                      if (d.w > maxWeightVal) maxWeightVal = d.w;
-                  }
-                  if (m.bodyFatPercentage && m.bodyFatPercentage > 0) d.bf = m.bodyFatPercentage;
-              }
-          });
+      // 5. 計算摘要
+      const validMetrics = metrics.filter(m => m.weightKg > 0);
+      const avgWeight = validMetrics.length > 0 
+          ? validMetrics.reduce((sum, m) => sum + (m.weightKg || 0), 0) / validMetrics.length 
+          : 0;
+      
+      const validFat = metrics.filter(m => m.bodyFatPercentage > 0);
+      const avgFat = validFat.length > 0 
+          ? validFat.reduce((sum, m) => sum + (m.bodyFatPercentage || 0), 0) / validFat.length 
+          : 0;
 
-          // [FIX] 計算雙軸縮放參數
-          // 1. 熱量軸最大值 (取 500 的倍數)
-          const finalMaxCal = Math.ceil(maxCalVal / 500) * 500;
-          // 2. 體重軸最大值 (取 10 的倍數)
-          const finalMaxWeight = Math.ceil((maxWeightVal + 10) / 10) * 10;
-          // 3. 縮放比例 (讓體重數值能 mapping 到熱量軸的高度)
-          const factor = finalMaxCal / finalMaxWeight;
+      setSummary({
+          avgIntake: validFoodDays > 0 ? Math.round(totalIntake / validFoodDays) : 0,
+          avgBurned: Math.round(totalBurned / (daysDiff + 1)), // 消耗通常每天都有基礎代謝，除以總天數
+          avgNet: Math.round(totalNet / (daysDiff + 1)),
+          avgWeight: parseFloat(avgWeight.toFixed(1)),
+          avgBodyFat: parseFloat(avgFat.toFixed(1)),
+          totalSteps: 0 // 若 getRangeStats 有回傳步數可填入，目前暫留 0
+      });
 
-          // 產生右側軸的標籤文字 (0, 20%, 40%, 60%, 80%, 100% of maxWeight)
-          const yAxisLabels = [
-              '0', 
-              Math.round(finalMaxWeight * 0.25).toString(),
-              Math.round(finalMaxWeight * 0.5).toString(),
-              Math.round(finalMaxWeight * 0.75).toString(),
-              Math.round(finalMaxWeight).toString()
-          ];
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [period, customStart, customEnd]);
 
-          setAxisConfig({
-              maxCal: finalMaxCal,
-              maxWeight: finalMaxWeight,
-              scaleFactor: factor,
-              yAxisLabelTexts: yAxisLabels
-          });
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-          const sortedArr = Array.from(dataMap.values()).sort((a:any, b:any) => a.dateStr.localeCompare(b.dateStr));
-
-          // 構建 Bar Data
-          const bars = sortedArr.map((d, idx) => ({
-              label: d.label,
-              labelTextStyle: { fontSize: 10, color: '#888', width: 40, textAlign: 'center' },
-              stacks: [
-                  { value: d.in, color: '#34C759', marginBottom: 1 }, 
-                  { value: -d.out, color: '#FF9500' }, 
-              ],
-              customData: { ...d, index: idx } 
-          }));
-
-          // 構建 Line Data (使用縮放後的值繪圖，Tooltip 顯示真實值)
-          const interpolate = (arr: any[], key: string) => {
-             const knownIndices = arr.map((item, i) => item[key] !== null ? i : -1).filter(i => i !== -1);
-             return arr.map((item, i) => {
-                 if (item[key] !== null) {
-                     return { 
-                         value: item[key] * factor, // [Scaling] 放大數值以配合左軸高度
-                         dataPointText: String(item[key]),
-                         customData: { type: 'real', dateStr: item.dateStr, name: key==='w'?'Weight':'BodyFat', realVal: item[key] }
-                     };
-                 }
-                 const prevIdx = knownIndices.filter(idx => idx < i).pop();
-                 const nextIdx = knownIndices.filter(idx => idx > i).shift();
-                 let val = 0;
-                 if (prevIdx !== undefined && nextIdx !== undefined) {
-                     const startVal = arr[prevIdx][key];
-                     const endVal = arr[nextIdx][key];
-                     val = startVal + (endVal - startVal) * ((i - prevIdx) / (nextIdx - prevIdx));
-                 } else if (prevIdx !== undefined) val = arr[prevIdx][key]; 
-                 else if (nextIdx !== undefined) val = arr[nextIdx][key]; 
-                 
-                 return { 
-                     value: (val > 0 ? val : 0) * factor, // [Scaling]
-                     hideDataPoint: true, 
-                     customData: { type: 'interpolated', dateStr: item.dateStr, realVal: Number(val.toFixed(1)) }
-                 };
-             });
-          };
-
-          setChartData(bars);
-          setLineData(interpolate(sortedArr, 'w'));
-          setLineData2(interpolate(sortedArr, 'bf'));
-
-          // 計算平均值
-          const validInDays = sortedArr.filter(d => d.in > 0).length || 1;
-          const validOutDays = sortedArr.filter(d => d.out > 0).length || 1;
-          const validMacroDays = sortedArr.filter(d => d.hasData).length || 1;
-          const sum = sortedArr.reduce((acc, cur) => ({
-              avgIn: acc.avgIn + cur.in, avgOut: acc.avgOut + cur.out,
-              avgPro: acc.avgPro + cur.pro, avgFat: acc.avgFat + cur.fat,
-              avgCarb: acc.avgCarb + cur.carb, avgSod: acc.avgSod + cur.sod
-          }), { avgIn:0, avgOut:0, avgPro:0, avgFat:0, avgCarb:0, avgSod:0 });
-
-          setSummary({
-              avgIn: Math.round(sum.avgIn / validInDays),
-              avgOut: Math.round(sum.avgOut / validOutDays),
-              avgPro: Math.round(sum.avgPro / validMacroDays),
-              avgFat: Math.round(sum.avgFat / validMacroDays),
-              avgCarb: Math.round(sum.avgCarb / validMacroDays),
-              avgSod: Math.round(sum.avgSod / validMacroDays),
-          });
-
-      } catch(e) { console.error(e); } finally { setLoading(false); }
+  // 處理縮放手勢
+  const onPinchEvent = (event: any) => {
+      const scale = event.nativeEvent.scale;
+      // 簡單的阻尼處理，避免變化太快
+      const newScale = Math.max(0.5, Math.min(zoomScale * scale, 3.0));
+      setZoomScale(newScale);
+      
+      // 根據縮放比例調整 Bar 寬度與間距
+      const baseWidth = 12;
+      const baseSpacing = 10;
+      
+      const w = Math.max(4, baseWidth * newScale);
+      const s = Math.max(2, baseSpacing * newScale);
+      
+      setBarWidth(w);
+      setSpacing(s);
   };
 
-  const renderTooltip = (item: any) => {
-      if (!item.customData) return null;
-      const isRightSide = item.customData.index > (chartData.length / 2);
-      
+  // 動態處理 X 軸標籤顯示 (避免擁擠)
+  const processedChartData = useMemo(() => {
+      // 如果放大到一定程度 (Bar寬度 > 20)，顯示所有日期
+      // 否則根據密度抽樣顯示
+      const showAll = barWidth > 20;
+      const interval = showAll ? 1 : Math.ceil(chartData.length / 6); // 預設顯示約 6 個標籤
+
+      return chartData.map((item, index) => ({
+          ...item,
+          label: (index % interval === 0) ? item.label : '' 
+      }));
+  }, [chartData, barWidth]);
+
+  // 日期選擇器處理
+  const onStartDateChange = (event: any, selectedDate?: Date) => {
+      setShowStartDatePicker(false);
+      if (selectedDate) setCustomStart(selectedDate);
+  };
+  const onEndDateChange = (event: any, selectedDate?: Date) => {
+      setShowEndDatePicker(false);
+      if (selectedDate) setCustomEnd(selectedDate);
+  };
+
+  // UI Render Helpers
+  const renderPeriodSelector = () => (
+    <View style={{flexDirection:'row', backgroundColor: cardBackground, padding:4, borderRadius:8, marginBottom:16}}>
+      {['week', 'month', 'custom'].map((p) => (
+        <TouchableOpacity 
+          key={p} 
+          onPress={() => setPeriod(p as any)}
+          style={{
+            flex: 1, 
+            paddingVertical: 6, 
+            alignItems:'center', 
+            borderRadius:6, 
+            backgroundColor: period === p ? tintColor : 'transparent'
+          }}
+        >
+          <ThemedText style={{fontSize:12, fontWeight:'bold', color: period === p ? 'white' : textColor}}>
+            {p === 'week' ? t('last_7_days', lang) : (p === 'month' ? t('last_30_days', lang) : t('custom', lang) || "Custom")}
+          </ThemedText>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderSummaryCard = (title: string, value: string, unit: string, color?: string) => (
+      <View style={{width: '32%', padding: 10, backgroundColor: cardBackground, borderRadius: 12, marginBottom: 8}}>
+          <ThemedText style={{fontSize: 10, color: '#888', marginBottom: 4}}>{title}</ThemedText>
+          <View style={{flexDirection: 'row', alignItems: 'baseline'}}>
+            <ThemedText style={{fontSize: 16, fontWeight: 'bold', color: color || textColor}}>{value}</ThemedText>
+            <ThemedText style={{fontSize: 10, marginLeft: 2, color: '#888'}}>{unit}</ThemedText>
+          </View>
+      </View>
+  );
+
+  const renderCustomRangePicker = () => {
+      if (period !== 'custom') return null;
       return (
-          <View style={[styles.tooltip, { left: isRightSide ? -110 : 10, top: 0 }]}>
-              <ThemedText style={styles.tooltipTitle}>{item.customData.dateStr}</ThemedText>
-              <ThemedText style={styles.tooltipText}>➕ {t('intake', lang)}: {Math.round(item.customData.in)}</ThemedText>
-              <ThemedText style={styles.tooltipText}>➖ {t('burned', lang)}: {Math.round(item.customData.out)}</ThemedText>
-              {item.customData.w && <ThemedText style={styles.tooltipText}>⚖️ {t('weight', lang)}: {item.customData.w} kg</ThemedText>}
-              {item.customData.bf && <ThemedText style={styles.tooltipText}>💧 {t('body_fat', lang)}: {item.customData.bf} %</ThemedText>}
+          <View style={{flexDirection:'row', justifyContent:'center', alignItems:'center', marginBottom: 16}}>
+              <TouchableOpacity onPress={()=>setShowStartDatePicker(true)} style={[styles.dateBtn, {borderColor: textColor}]}>
+                  <ThemedText>{format(customStart, "yyyy-MM-dd")}</ThemedText>
+              </TouchableOpacity>
+              <ThemedText style={{marginHorizontal: 8}}>-</ThemedText>
+              <TouchableOpacity onPress={()=>setShowEndDatePicker(true)} style={[styles.dateBtn, {borderColor: textColor}]}>
+                  <ThemedText>{format(customEnd, "yyyy-MM-dd")}</ThemedText>
+              </TouchableOpacity>
+              
+              {showStartDatePicker && <DateTimePicker value={customStart} mode="date" onChange={onStartDateChange} />}
+              {showEndDatePicker && <DateTimePicker value={customEnd} mode="date" onChange={onEndDateChange} />}
           </View>
       );
   };
 
+  if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems:'center'}]}><ActivityIndicator /></View>;
+
   return (
-    <SafeAreaView style={[styles.container, {backgroundColor: theme.background}]}>
-       <ScrollView contentContainerStyle={{padding: 16}}>
-          <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
-              <ThemedText type="title">{t('trend_analysis', lang)}</ThemedText>
-              <View style={styles.periodSwitch}>
-                  <Pressable onPress={()=>setPeriod(7)} style={[styles.pBtn, period===7 && {backgroundColor:theme.tint}]}><ThemedText style={{color:period===7?'#FFF':theme.text, fontSize:12}}>{t('week', lang)}</ThemedText></Pressable>
-                  <Pressable onPress={()=>setPeriod(30)} style={[styles.pBtn, period===30 && {backgroundColor:theme.tint}]}><ThemedText style={{color:period===30?'#FFF':theme.text, fontSize:12}}>{t('month', lang)}</ThemedText></Pressable>
-              </View>
-          </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <ScrollView contentContainerStyle={{padding: 16}} scrollEnabled={true}>
+        <ThemedText type="title" style={{marginBottom: 16}}>{t('analysis', lang)}</ThemedText>
+        
+        {renderPeriodSelector()}
+        {renderCustomRangePicker()}
 
-          <View style={styles.card}>
-              <ThemedText type="subtitle" style={{marginBottom:12}}>{t('avg_daily', lang)}</ThemedText>
-              <View style={styles.grid}>
-                  <StatBox label={t('intake', lang)} val={summary.avgIn} unit="kcal" color="#34C759"/>
-                  <StatBox label={t('burned', lang)} val={summary.avgOut} unit="kcal" color="#FF9500"/>
-                  <StatBox label={t('protein', lang)} val={summary.avgPro} unit="g"/>
-                  <StatBox label={t('fat', lang)} val={summary.avgFat} unit="g"/>
-                  <StatBox label={t('carbs', lang)} val={summary.avgCarb} unit="g"/>
-                  <StatBox label={t('sodium', lang)} val={summary.avgSod} unit="mg"/>
-              </View>
-          </View>
+        {/* 1. 摘要資訊區 (六格) */}
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
+            {renderSummaryCard(t('avg_daily_intake', lang), String(summary.avgIntake), 'kcal', '#34C759')}
+            {renderSummaryCard(t('avg_burned', lang), String(summary.avgBurned), 'kcal', '#FF9500')}
+            {renderSummaryCard(t('net_intake', lang) || "Net", String(summary.avgNet), 'kcal')}
+            {renderSummaryCard(t('avg_weight', lang), String(summary.avgWeight), 'kg', tintColor)}
+            {renderSummaryCard(t('avg_body_fat', lang), String(summary.avgBodyFat), '%', '#AF52DE')}
+            {renderSummaryCard(t('total_steps', lang) || "Steps", String(summary.totalSteps || '--'), 'steps')}
+        </View>
 
-          <View style={[styles.card, {marginTop: 16, marginBottom: 40}]}>
-              <ThemedText type="subtitle" style={{marginBottom:16}}>{t('calories_and_weight', lang)}</ThemedText>
-              
-              <View style={{flexDirection:'row', justifyContent:'center', marginBottom:10, gap: 16, flexWrap: 'wrap'}}>
-                  <LegendItem color="#34C759" label={`${t('intake', lang)}`} />
-                  <LegendItem color="#FF9500" label={`${t('burned', lang)}`} />
-                  <LegendItem color="#007AFF" label={`${t('weight', lang)}`} isLine />
-                  <LegendItem color="#AF52DE" label={`${t('body_fat', lang)}`} isLine />
-              </View>
+        {/* 2. 整合圖表 */}
+        <ThemedView style={styles.chartCard}>
+            <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
+                <ThemedText type="subtitle">{t('trend_analysis', lang) || "Trend Analysis"}</ThemedText>
+                <View style={{flexDirection:'row', gap: 8}}>
+                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#34C759', marginRight:4}}/><ThemedText style={{fontSize:10}}>In</ThemedText></View>
+                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#FF9500', marginRight:4}}/><ThemedText style={{fontSize:10}}>Out</ThemedText></View>
+                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:tintColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>Kg</ThemedText></View>
+                </View>
+            </View>
 
-              {loading ? <ActivityIndicator size="large" color={theme.tint}/> : (
-                  <BarChart 
-                    ref={chartRef}
-                    data={chartData} 
-                    stackData={chartData} 
-                    barWidth={barConfig.barWidth} 
-                    spacing={barConfig.spacing}
-                    initialSpacing={barConfig.initialSpacing}
-                    noOfSections={4} 
-                    maxValue={axisConfig.maxCal} // 左軸最大值
-                    barBorderRadius={4} 
-                    xAxisThickness={1}
-                    xAxisColor={theme.icon}
-                    yAxisThickness={0}
-                    yAxisTextStyle={{ fontSize: 10, color: '#34C759' }}
-                    hideRules
-                    height={220}
-                    width={VISIBLE_WIDTH} 
-                      // [新增] 加入右側留白，避免最後一筆日期的文字或數值被切掉
-                    endSpacing={50} 
-                    isAnimated={false} 
-                    // 建議同時檢查這項，確保 X 軸標籤不會因為過寬而重疊或截斷
-                    xAxisLabelTextStyle={{fontSize: 9, color: '#888', width: 50, textAlign: 'center'}}
-                    renderTooltip={renderTooltip}
-                    
-                    // [FIX] 啟用右側 Y 軸並手動設定標籤
-                    showSecondaryYAxis
-                    secondaryYAxisConfig={{
-                        noOfSections: 4,
-                        maxValue: axisConfig.maxCal, // 這裡必須設為跟主軸一樣，才能對齊 grid
-                        showYAxisIndices: true,
-                        yAxisLabelTexts: axisConfig.yAxisLabelTexts, // 顯示真實體重數值
-                        yAxisTextStyle: { color: '#007AFF', fontSize: 10 },
-                    }}
+            {processedChartData.length > 0 ? (
+                <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
+                    <View>
+                        <BarChart 
+                            stackData={processedChartData} // 堆疊長條數據
+                            barWidth={barWidth}
+                            spacing={spacing}
+                            noOfSections={4}
+                            
+                            // 左軸 (熱量)
+                            yAxisThickness={0}
+                            yAxisTextStyle={{color: '#888', fontSize: 10}}
+                            yAxisLabelSuffix=" k" // 簡易顯示
+                            
+                            // 右軸 (體重/體脂) - 使用 GiftedCharts 的 Secondary Axis
+                            secondaryYAxis={{
+                                showYAxisIndices: true,
+                                yAxisTextStyle: {color: tintColor, fontSize: 10},
+                                maxValue: 100, // 假設體重體脂不超過 100 方便共用軸，或需動態計算 max
+                                noOfSections: 4,
+                            }}
 
-                    showLine
-                    lineData={lineData} 
-                    lineConfig={{
-                        color: '#007AFF',
-                        thickness: 3,
-                        curved: true,
-                        hideDataPoints: false,
-                        dataPointsColor: '#007AFF',
-                        dataPointsRadius: 3,
-                        textShiftY: -10,
-                        textFontSize: 9,
-                        textColor: '#007AFF',
-                        zIndex: 100
-                    }}
-                    
-                    lineData2={lineData2} 
-                    lineConfig2={{
-                        color: '#AF52DE',
-                        thickness: 3,
-                        curved: true,
-                        hideDataPoints: false,
-                        dataPointsColor: '#AF52DE',
-                        dataPointsRadius: 3,
-                        textShiftY: 10,
-                        textFontSize: 9,
-                        textColor: '#AF52DE',
-                        zIndex: 100
-                    }}
-                  />
-              )}
-          </View>
-       </ScrollView>
+                            // 折線數據 (混合圖表)
+                            lineData={lineDataWeight}
+                            lineConfig={{
+                                color: tintColor,
+                                thickness: 2,
+                                curbed: true,
+                                hideDataPoints: barWidth < 15, // 縮小時隱藏點
+                                dataPointsColor: tintColor,
+                                shiftY: 0, // 對應右軸刻度需自行換算? GiftedCharts的 secondaryYAxis 對應 lineData 需設定 isSecondary: true (在新版)
+                                           // 註: GiftedCharts 對 secondary axis 支援有限，通常 lineData 預設對應左軸。
+                                           // 技巧: 若 library 版本不支援 line 對應 secondary，需 normalization。
+                                           // 假設這裡使用數據歸一化或接受共用刻度的限制。
+                            }}
+                            // 第二條線 (體脂) - GiftedCharts 支援 lineData2
+                            lineData2={lineDataFat}
+                            lineConfig2={{
+                                color: '#AF52DE',
+                                thickness: 2,
+                                curbed: true,
+                                hideDataPoints: barWidth < 15,
+                                dataPointsColor: '#AF52DE'
+                            }}
+                            
+                            xAxisThickness={1}
+                            xAxisColor={'#ddd'}
+                            rulesColor={'#eee'}
+                            rulesType="solid"
+                            height={280}
+                            width={SCREEN_WIDTH - 64} // Card padding
+                            scrollable={true} // 允許拖曳移動
+                            initialSpacing={10}
+                        />
+                    </View>
+                </PinchGestureHandler>
+            ) : <ThemedText>No Data</ThemedText>}
+            
+            <ThemedText style={{textAlign:'center', fontSize:10, color:'#888', marginTop: 8}}>
+                {t('pinch_to_zoom', lang) || "Pinch to zoom, drag to move"}
+            </ThemedText>
+        </ThemedView>
+
+      </ScrollView>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
-const StatBox = ({ label, val, unit, color }: any) => (
-    <View style={{width:'33%', marginBottom: 12}}>
-        <ThemedText style={{fontSize:11, color:'#888'}}>{label}</ThemedText>
-        <ThemedText style={{fontSize:16, fontWeight:'bold', color: color || undefined}}>{val} <ThemedText style={{fontSize:10, fontWeight:'normal'}}>{unit}</ThemedText></ThemedText>
-    </View>
-);
-
-const LegendItem = ({color, label, isLine}: any) => (
-    <View style={{flexDirection:'row', alignItems:'center'}}>
-        <View style={{width:12, height: isLine?3:12, backgroundColor:color, marginRight:4}}/>
-        <ThemedText style={{fontSize:10}}>{label}</ThemedText>
-    </View>
-);
-
 const styles = StyleSheet.create({
-    container: { flex: 1 },
-    card: { padding: 16, borderRadius: 16, backgroundColor: 'rgba(120,120,120,0.05)' },
-    periodSwitch: { flexDirection:'row', backgroundColor:'rgba(120,120,120,0.1)', borderRadius:20, padding:2 },
-    pBtn: { paddingVertical:6, paddingHorizontal:12, borderRadius:18 },
-    grid: { flexDirection:'row', flexWrap:'wrap' },
-    tooltip: {
-        position: 'absolute',
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        padding: 10,
-        borderRadius: 8,
-        minWidth: 120,
-        zIndex: 9999, 
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)'
-    },
-    tooltipTitle: { color: 'white', fontSize: 11, fontWeight: 'bold', marginBottom: 4 },
-    tooltipText: { color: 'white', fontSize: 12, lineHeight: 16 }
+  container: { flex: 1 },
+  chartCard: { padding: 16, borderRadius: 16, marginBottom: 16, backgroundColor: 'white', overflow: 'hidden' },
+  dateBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }
 });

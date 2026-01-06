@@ -43,7 +43,7 @@ export const TRANSLATIONS = {
     // Home
     body_metrics: "身體數值", record_metrics: "+ 紀錄", target_weight: "目標體重", target_body_fat: "目標體脂",
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
-    quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動",
+    quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動",
     
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
@@ -121,6 +121,7 @@ export const TRANSLATIONS = {
     activity_intensity: "運動強度", activity_details: "詳細數據", time_min: "時間 (分鐘)", distance_km: "距離 (km)", steps: "步數",
     floors: "樓層", est_calories: "預估消耗熱量", feeling_notes: "運動感受 & 筆記", enter_notes: "輸入筆記...",
     data_incomplete_msg: "請選擇運動項目，並至少輸入一項數據", activity_name: "運動名稱", category: "分類",
+    select_category_msg: "請選擇運動類別...",
     
     cat_cardio: "有氧與耐力", cat_gym: "健身房", cat_sport: "球類與競技", cat_life: "日常生活", cat_custom: "自訂",
     act_walk: "散步", act_run_slow: "慢跑", act_run_fast: "快跑", act_cycling: "騎腳踏車", act_swim: "游泳", act_hike: "登山", act_jump_rope: "跳繩",
@@ -156,7 +157,7 @@ export const TRANSLATIONS = {
 
     body_metrics: "Body Metrics", record_metrics: "+ Record", target_weight: "Target Weight", target_body_fat: "Target Body Fat",
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target", 
-    quick_record: "Quick Add", no_recent_foods: "No recent records", exercise: "Exercise",
+    quick_record: "Quick Add", no_recent_foods: "No recent records", exercise: "Exercise",quick_add_activity: "Quick Add Activity",
     
     camera: "Camera", scan_barcode: "Scan Code", manual_input: "Manual", gallery: "Gallery",
     scan_hint: "Align barcode within frame",allow: "Allow",
@@ -193,19 +194,20 @@ export const TRANSLATIONS = {
     days_remaining: "Days Remaining",
 
     // AI Coach UI
-    ai_coach: "AI Coach", ai_welcome_msg:"Hello! I'm your personal nutrition and fitness assistant. \nPlease click the button below, or enter your question directly.",
-    ask_ai_placeholder: "Enter message...",
+    ai_coach: "AI Coach", ai_welcome_msg: "Hello! I am your personal nutrition and fitness assistant.\nClick the buttons below or type your questions directly.",
+    ask_ai_placeholder: "Type your message...",
     meal_suggestions: "Meal Suggestions", workout_suggestions: "Workout Suggestions",
-    cook_meal: "Cook Meal", store_meal: "Store Meal",
+    cook_meal: "Cook Meal", store_meal: "Convenience Store",
     home_workout: "Home Workout", gym_workout: "Gym Workout",
     remaining: "Remaining", daily_calorie_target: "Daily Calorie Target",
     
     // AI Coach Prompts (Dynamic)
-    coach_prompt_cook: "As a nutritionist, please provide a 'home-cooked' menu suitable for my current remaining calorie intake. Please include: 1. Ingredient list 2. Detailed cooking steps 3. Recommended YouTube cooking tutorial keywords or links. Please consider my personal goals.",
-    coach_prompt_store: "As a nutritionist, please provide a 'convenience store' meal plan (such as 7-Eleven or FamilyMart) suitable for my current remaining calorie intake. Please list specific product names and estimated calories. Please consider my personal goals.",
-    coach_prompt_home_workout: "As a fitness coach, please provide a 'home workout without equipment' schedule suitable for my current condition. Please include: 1. Exercise name 2. Repetitions/sets 3. Key points of the exercise 4. Recommended YouTube exercise tutorial links.",
-    coach_prompt_gym_workout: "As a fitness coach, please provide a 'gym/equipment-assisted' workout schedule suitable for my current condition. Please include: 1. Equipment name; 2. Weight/set recommendations; 3. Precautions; 4. Recommended YouTube tutorial link.",
+    coach_prompt_cook: "As a nutritionist, please provide a 'cook meal at home' menu suitable for my current remaining calories. Please include: 1. Ingredient list 2. Detailed cooking steps 3. Recommended YouTube cooking tutorial keywords or links. Consider my personal goals.",
+    coach_prompt_store: "As a nutritionist, please provide a 'convenience store meal' menu suitable for my current remaining calories (e.g., 7-Eleven, FamilyMart). List specific product names and estimated calories. Consider my personal goals.",
+    coach_prompt_home_workout: "As a fitness coach, please provide a 'home workout without equipment' routine suitable for my current condition. Please include: 1. Exercise name 2. Repetitions/Sets 3. Key points of the exercise 4. Recommended YouTube exercise tutorial links.",
+    coach_prompt_gym_workout: "As a fitness coach, please provide a 'gym/equipment-assisted' workout routine suitable for my current condition. Please include: 1. Equipment name 2. Weight/Sets recommendations 3. Precautions 4. Recommended YouTube tutorial links.",
     
+    // Food Editor
     ai_analysis: "AI Analysis", analyzing: "Analyzing...", composition: "Composition", suggestion: "Suggestion",
     food_name_placeholder: "Enter name", barcode_scanned: "Barcode: ",
     local_db: "Local DB", loaded: "Loaded", downloaded: "Downloaded", read_failed: "Read Failed",
@@ -228,6 +230,7 @@ export const TRANSLATIONS = {
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
     floors: "Floors", est_calories: "Est. Calories", feeling_notes: "Notes & Feeling", enter_notes: "Enter notes...",
     data_incomplete_msg: "Please select activity and enter at least one value.", activity_name: "Activity Name", category: "Category",
+    select_category_msg: "Please select category..",
 
     cat_cardio: "Cardio", cat_gym: "Gym", cat_sport: "Sport", cat_life: "Life", cat_custom: "Custom",
     act_walk: "Walking", act_run_slow: "Jogging", act_run_fast: "Running", act_cycling: "Cycling", act_swim: "Swimming", act_hike: "Hiking", act_jump_rope: "Jump Rope",
@@ -263,7 +266,7 @@ export const TRANSLATIONS = {
 
     body_metrics: "身体測定", record_metrics: "+ 記録", target_weight: "目標体重", target_body_fat: "目標体脂肪率",
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
-    quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動",
+    quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動",
     
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
     scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
@@ -293,14 +296,21 @@ export const TRANSLATIONS = {
     sedentary_desc: "運動しない", lightly_active_desc: "週1-3日", moderately_active_desc: "週3-5日", very_active_desc: "週6-7日", extra_active_desc: "肉体労働など",
     target_date: "目標達成日",
     days_remaining: "残り日数",
-
-    ai_coach: "AIコーチ", ai_hello: "こんにちは！AI栄養トレーナーです。", remaining_budget: "残りのカロリー", generate_plan: "プラン作成",
-    recipe_suggestion: "レシピ提案", workout_suggestion: "運動提案", ask_ai: "AIに質問...",
-    ask_recipe: "おすすめのメニューは？", ask_workout: "おすすめの運動は？",
-    follow_up_1: "栄養士として、本日の栄養摂取量と運動量に基づき、残りの食事についてアドバイスをお願いします。",
-    follow_up_2: "栄養士として、本日の栄養摂取量と運動量に基づき、私がうまくできた点を3つ挙げてください。",
-    follow_up_3: "栄養士として、本日の栄養摂取量と運動量に基づき、優先的に調整が必要な点を3つ挙げてください。",
     
+    // AI Coach UI
+    ai_coach: "AI コーチ", ai_welcome_msg: "こんにちは！私はあなたの専属の栄養とフィットネスアシスタントです。\n下のボタンをクリックするか、直接質問を入力してください。",
+    ask_ai_placeholder: "メッセージを入力...",
+    meal_suggestions: "食事の提案", workout_suggestions: "運動の提案",
+    cook_meal: "自炊", store_meal: "コンビニ食",
+    home_workout: "自宅トレーニング", gym_workout: "ジムトレーニング",
+    remaining: "残り", daily_calorie_target: "1日の目標カロリー",
+    
+    // AI Coach Prompts (Dynamic)
+    coach_prompt_cook: "栄養士として、私の現在の残りカロリーに適した「自炊」メニューを提供してください。以下を含めてください：1. 材料リスト 2. 詳細な調理手順 3. 推奨されるYouTube料理チュートリアルのキーワードまたはリンク。私の個人目標を考慮してください。",
+    coach_prompt_store: "栄養士として、私の現在の残りカロリーに適した「コンビニ食」メニューを提供してください（例：セブンイレブンやファミリーマート）。具体的な商品名と推定カロリーをリストアップしてください。私の個人目標を考慮してください。",
+    coach_prompt_home_workout: "フィットネスコーチとして、私の現在の状態に適した「自宅での器具なし」トレーニングスケジュールを提供してください。以下を含めてください：1. 運動名 2. 回数/セット数 3. 運動のポイント 4. 推奨されるYouTube運動チュートリアルのリンク。",
+    coach_prompt_gym_workout: "フィットネスコーチとして、私の現在の状態に適した「ジム/器具使用」トレーニングスケジュールを提供してください。以下を含めてください：1. 器具名 2. 重量/セット数の推奨 3. 注意事項 4. 推奨されるYouTubeチュートリアルのリンク。",
+
     // Food Editor
     ai_analysis: "AI分析", analyzing: "分析中...", composition: "成分", suggestion: "アドバイス",
     food_name_placeholder: "食品名またはスキャン", barcode_scanned: "バーコード: ",
@@ -324,6 +334,7 @@ export const TRANSLATIONS = {
     activity_intensity: "強度", activity_details: "詳細", time_min: "時間 (分)", distance_km: "距離 (km)", steps: "歩数",
     floors: "階数", est_calories: "推定消費カロリー", feeling_notes: "メモ & 感想", enter_notes: "メモを入力...",
     data_incomplete_msg: "運動を選択し、少なくとも1つの値を入力してください", activity_name: "運動名", category: "カテゴリ",
+    select_category_msg: "スポーツのカテゴリーを選択してください",
 
     cat_cardio: "有酸素", cat_gym: "ジム", cat_sport: "スポーツ", cat_life: "生活活動", cat_custom: "カスタム",
     act_walk: "ウォーキング", act_run_slow: "ジョギング", act_run_fast: "ランニング", act_cycling: "サイクリング", act_swim: "水泳", act_hike: "ハイキング", act_jump_rope: "縄跳び",
@@ -357,7 +368,7 @@ export const TRANSLATIONS = {
 
     body_metrics: "신체 수치", record_metrics: "+ 기록", target_weight: "목표 체중", target_body_fat: "목표 체지방",
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
-    quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동",
+    quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동",
     
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
@@ -388,12 +399,20 @@ export const TRANSLATIONS = {
     target_date: "목표 완료일",
     days_remaining: "남은 일수",
     
-    ai_coach: "AI 코치", ai_hello: "안녕하세요! AI 영양 코치입니다.", remaining_budget: "남은 칼로리", generate_plan: "계획 생성",
-    recipe_suggestion: "식단 추천", workout_suggestion: "운동 추천", ask_ai: "AI에게 질문...",
-    ask_recipe: "추천 메뉴가 있나요?", ask_workout: "추천 운동이 있나요?",
-    follow_up_1: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 남은 식사에 대한 조언을 부탁드립니다.",
-    follow_up_2: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 제가 잘한 부분 세 가지를 지적해 주십시오.",
-    follow_up_3: "영양사로서, 오늘 섭취한 음식과 운동량을 바탕으로 우선적으로 조정해야 할 부분 세 가지를 지적해 주십시오.",
+
+    // AI Coach UI
+    ai_coach: "AI 코치", ai_welcome_msg: "안녕하세요! 저는 당신의 개인 영양 및 피트니스 어시스턴트입니다.\n아래 버튼을 클릭하거나 직접 질문을 입력하세요.",
+    ask_ai_placeholder: "메시지 입력...",
+    meal_suggestions: "식사 제안", workout_suggestions: "운동 제안",
+    cook_meal: "요리하기", store_meal: "편의점 식사",
+    home_workout: "홈 트레이닝", gym_workout: "헬스장 트레이닝",
+    remaining: "남은 칼로리", daily_calorie_target: "일일 칼로리 목표",
+    
+    // AI Coach Prompts (Dynamic)
+    coach_prompt_cook: "영양사로서, 제 현재 남은 칼로리에 맞는 '집에서 요리하는' 메뉴를 제공해 주세요. 다음을 포함해 주세요: 1. 재료 목록 2. 상세한 조리 단계 3. 추천 유튜브 요리 튜토리얼 키워드 또는 링크. 제 개인 목표를 고려해 주세요.",
+    coach_prompt_store: "영양사로서, 제 현재 남은 칼로리에 맞는 '편의점 식사' 메뉴를 제공해 주세요 (예: 세븐일레븐, 패밀리마트). 구체적인 상품명과 예상 칼로리를 나열해 주세요. 제 개인 목표를 고려해 주세요.",
+    coach_prompt_home_workout: "피트니스 코치로서, 제 현재 상태에 맞는 '집에서 하는 기구 없는' 운동 일정을 제공해 주세요. 다음을 포함해 주세요: 1. 운동명 2. 반복 횟수/세트 수 3. 운동의 핵심 포인트 4. 추천 유튜브 운동 튜토리얼 링크.",
+    coach_prompt_gym_workout: "피트니스 코치로서, 제 현재 상태에 맞는 '헬스장/기구 사용' 운동 일정을 제공해 주세요. 다음을 포함해 주세요: 1. 기구명 2. 무게/세트 수 추천 3. 주의사항 4. 추천 유튜브 튜토리얼 링크.",
     
     // Food Editor
     ai_analysis: "AI 분석", analyzing: "분석 중...", composition: "성분", suggestion: "조언",
@@ -418,6 +437,7 @@ export const TRANSLATIONS = {
     activity_intensity: "강도", activity_details: "상세 정보", time_min: "시간 (분)", distance_km: "거리 (km)", steps: "걸음 수",
     floors: "층", est_calories: "예상 칼로리", feeling_notes: "메모 & 느낌", enter_notes: "메모 입력...",
     data_incomplete_msg: "운동을 선택하고 값을 입력하세요", activity_name: "운동명", category: "카테고리",
+    select_category_msg: "스포츠 카테고리를 선택해 주세요.",
 
     cat_cardio: "유산소", cat_gym: "헬스장", cat_sport: "스포츠", cat_life: "생활", cat_custom: "직접 입력",
     act_walk: "걷기", act_run_slow: "조깅", act_run_fast: "달리기", act_cycling: "자전거", act_swim: "수영", act_hike: "등산", act_jump_rope: "줄넘기",
