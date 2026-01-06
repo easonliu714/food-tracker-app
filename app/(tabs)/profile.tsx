@@ -9,7 +9,8 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { saveSettings, getSettings } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
-import { userProfiles, foodLogs, dailyMetrics, foodItems } from "@/drizzle/schema"; 
+// [修改] 引入 activityLogs
+import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs } from "@/drizzle/schema"; 
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -63,7 +64,7 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [FIX] 改用 JSON 匯出 (相容性最佳)
+  // [修改] 備份功能：加入 activityLogs
   const handleBackup = async () => {
       setLoading(true);
       try {
@@ -72,11 +73,13 @@ export default function ProfileScreen() {
           const foods = await db.select().from(foodItems);
           const logs = await db.select().from(foodLogs);
           const metrics = await db.select().from(dailyMetrics);
+          // [新增] 讀取運動紀錄
+          const activities = await db.select().from(activityLogs);
 
           const backupData = {
               version: 1,
               timestamp: new Date().toISOString(),
-              data: { users, foods, logs, metrics }
+              data: { users, foods, logs, metrics, activities }
           };
 
           // 2. 寫入暫存檔案 (使用 legacy API)
@@ -100,7 +103,7 @@ export default function ProfileScreen() {
       }
   };
 
-  // [FIX] 改用 JSON 匯入
+  // [修改] 還原功能：修正日期轉換與 activityLogs 處理
   const handleRestore = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
@@ -122,21 +125,61 @@ export default function ProfileScreen() {
               { text: t('cancel', lang), style: "cancel" },
               { text: t('restore_db', lang), style: "destructive", onPress: async () => {
                   try {
+                      // 1. 清空舊資料
                       await db.delete(foodLogs);
                       await db.delete(foodItems);
                       await db.delete(dailyMetrics);
+                      await db.delete(activityLogs); // [新增] 清空運動紀錄
                       
-                      if (backup.data.foods?.length) await db.insert(foodItems).values(backup.data.foods);
-                      if (backup.data.logs?.length) await db.insert(foodLogs).values(backup.data.logs);
-                      if (backup.data.metrics?.length) await db.insert(dailyMetrics).values(backup.data.metrics);
+                      // 2. 還原 Food Items (需轉換 updatedAt)
+                      if (backup.data.foods?.length) {
+                          const cleanFoods = backup.data.foods.map((f: any) => ({
+                              ...f,
+                              updatedAt: f.updatedAt ? new Date(f.updatedAt) : new Date(),
+                          }));
+                          await db.insert(foodItems).values(cleanFoods);
+                      }
+
+                      // 3. 還原 Food Logs (需轉換 loggedAt)
+                      if (backup.data.logs?.length) {
+                          const cleanLogs = backup.data.logs.map((l: any) => ({
+                              ...l,
+                              loggedAt: l.loggedAt ? new Date(l.loggedAt) : new Date(),
+                          }));
+                          await db.insert(foodLogs).values(cleanLogs);
+                      }
+
+                      // 4. 還原 Metrics (需轉換 createdAt)
+                      if (backup.data.metrics?.length) {
+                          const cleanMetrics = backup.data.metrics.map((m: any) => ({
+                              ...m,
+                              createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
+                          }));
+                          await db.insert(dailyMetrics).values(cleanMetrics);
+                      }
+
+                      // 5. 還原 Activity Logs (需轉換 loggedAt)
+                      if (backup.data.activities?.length) {
+                          const cleanActivities = backup.data.activities.map((a: any) => ({
+                              ...a,
+                              loggedAt: a.loggedAt ? new Date(a.loggedAt) : new Date(),
+                          }));
+                          await db.insert(activityLogs).values(cleanActivities);
+                      }
                       
+                      // 6. 還原 User Profile
                       if (backup.data.users?.length && profileId) {
                           const u = backup.data.users[0];
-                          await db.update(userProfiles).set(u).where(eq(userProfiles.id, profileId));
+                          const { id, ...userData } = u; // 移除 ID 避免衝突
+                          await db.update(userProfiles).set({
+                              ...userData,
+                              updatedAt: new Date()
+                          }).where(eq(userProfiles.id, profileId));
                       }
 
                       Alert.alert(t('success', lang), t('restore_success_msg', lang));
                   } catch(e) {
+                      console.error(e);
                       Alert.alert("Restore Error", String(e));
                   } finally {
                       setLoading(false);
