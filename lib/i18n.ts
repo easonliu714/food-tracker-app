@@ -43,7 +43,7 @@ export const TRANSLATIONS = {
     // Home
     body_metrics: "身體數值", record_metrics: "+ 紀錄", target_weight: "目標體重", target_body_fat: "目標體脂",
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
-    quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動",
+    quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動", today: "今天", confirm: "確認",
     
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
@@ -63,6 +63,11 @@ export const TRANSLATIONS = {
     chart_title_body: "體重與體脂趨勢", calories_and_weight: "熱量收支與體重體脂趨勢",
     week: "近7天", month: "近30天", avg_daily: "日均數值",
     axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "總計",
+    pinch_to_zoom: "雙指縮放圖表", drag_to_move: "拖曳移動圖表", tap_msg: "點擊方塊以選取/交換位置，按 X 刪除。", done: "完成",
+    last_7_days: "最近 7 天", last_30_days: "最近 30 天", custom: "自訂區間",
+    avg_daily_intake: "日均攝取", avg_burned: "日均消耗", avg_bmr: "日均淨攝取", net_intake: "淨攝取",
+    total_time: "總運動時間", total_steps: "總步數", total_calories: "總消耗熱量",
+    avg_weight: "平均體重", weight_change: "體重變化", avg_body_fat: "平均體脂", body_fat_change: "體脂變化",
 
     // Profile & AI
     profile: "個人資料", ai_settings: "AI 設定", basic_info: "基本資料", gender: "性別", male: "男", female: "女",
@@ -173,7 +178,12 @@ export const TRANSLATIONS = {
     chart_title_body: "Body Metrics Trend",
     week: "7 Days", month: "30 Days", avg_daily: "Daily Avg",
     axis_l: "(L)", axis_r: "(R)", analysis: "Analysis", total: "Total",
-    
+    pinch_to_zoom: "Pinch to Zoom Chart", drag_to_move: "Drag to Move Chart",tap_msg: "Tap to Select/Swap. Press X to Delete.", done: "Done",
+    last_7_days: "Last 7 Days", last_30_days: "Last 30 Days", custom: "Custom Range",
+    avg_daily_intake: "Avg Daily Intake", avg_burned: "Avg Burned", avg_bmr: "Avg Net Intake", net_intake: "Net Intake",
+    total_time: "Total Time", total_steps: "Total Steps", total_calories: "Total Calories",
+    avg_weight: "Avg Weight", weight_change: "Weight Change", avg_body_fat: "Avg Body Fat", body_fat_change: "Body Fat Change",
+
     profile: "Profile", ai_settings: "AI Settings", basic_info: "Basic Info", gender: "Gender", male: "Male", female: "Female",
     birth_date: "Birth Date", height: "Height", weight: "Weight(kg)", body_fat: "Body Fat(%)",
     target_goals: "Targets", training_goal: "Goal", activity_level: "Activity Level", save_settings: "Save Settings",
@@ -282,6 +292,11 @@ export const TRANSLATIONS = {
     chart_title_body: "体重と体脂肪率",
     week: "7日間", month: "30日間", avg_daily: "日平均",
     axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "合計",
+    pinch_to_zoom: "ピンチでズーム", drag_to_move: "ドラッグで移動",tap_msg: "タップで選択/交換。Xで削除。", done: "完了",
+    last_7_days: "過去7日間", last_30_days: "過去30日間", custom: "カスタム範囲",
+    avg_daily_intake: "1日平均摂取", avg_burned: "1日平均消費", avg_bmr: "1日平均純摂取", net_intake: "純摂取",
+    total_time: "総運動時間", total_steps: "総歩数", total_calories: "総消費カロリー",
+    avg_weight: "平均体重", weight_change: "体重変化", avg_body_fat: "平均体脂肪率", body_fat_change: "体脂肪率変化",
 
     profile: "プロフィール", ai_settings: "AI設定", basic_info: "基本情報", gender: "性別", male: "男性", female: "女性",
     birth_date: "生年月日", height: "身長", weight: "体重(kg)", body_fat: "体脂肪率(%)",
@@ -384,6 +399,11 @@ export const TRANSLATIONS = {
     chart_title_body: "체중 및 체지방 추세",
     week: "7일", month: "30일", avg_daily: "일평균",
     axis_l: "(좌)", axis_r: "(우)", analysis: "분석", total: "합계",
+    pinch_to_zoom: "핀치로 확대/축소", drag_to_move: "드래그로 이동",tap_msg: "탭하여 선택/교체. X로 삭제.", done: "완료",
+    last_7_days: "최근 7일", last_30_days: "최근 30일", custom: "사용자 지정 범위",
+    avg_daily_intake: "일평균 섭취", avg_burned: "일평균 소모", avg_bmr: "일평균 순섭취", net_intake: "순 섭취",
+    total_time: "총 운동 시간", total_steps: "총 걸음 수", total_calories: "총 칼로리 소모",
+    avg_weight: "평균 체중", weight_change: "체중 변화", avg_body_fat: "평균 체지방", body_fat_change: "체지방 변화",
 
     profile: "프로필", ai_settings: "AI 설정", basic_info: "기본 정보", gender: "성별", male: "남성", female: "여성",
     birth_date: "생년월일", height: "키", weight: "체중(kg)", body_fat: "체지방률(%)",

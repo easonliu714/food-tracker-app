@@ -21,7 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-gifted-charts";
 import { eq, desc } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
-import DateTimePicker from "@react-native-community/datetimepicker"; // 用於快速切換年份月份
+import DateTimePicker from "@react-native-community/datetimepicker"; 
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -97,7 +97,7 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
-      // 2. 身體數值比較
+      // 2. 身體數值
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
@@ -118,7 +118,7 @@ export default function HomeScreen() {
           }
       }
 
-      // 3. 載入飲食紀錄
+      // 3. 飲食紀錄
       const logsRes = await db.select().from(foodLogs).where(eq(foodLogs.date, dateStr));
       setAllDailyLogs(logsRes);
 
@@ -138,32 +138,29 @@ export default function HomeScreen() {
       setIntake(newIntake);
       setDailyLogs(groupedLogs);
 
-      // 4. 載入運動與最近紀錄
+      // 4. 運動與最近
       const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
-      // 最近食物
+
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
       setRecentFoods(uniqueRecents);
-      // 載入常用運動
+
       const acts = await getFrequentActivities();
       setFrequentActivities(acts);
 
     } catch (e) { console.error(e); } finally { setIsLoading(false); setRefreshing(false); }
   };
 
-  const onRefresh = () => {
-      setRefreshing(true);
-      loadData();
-  };
-  
+  const onRefresh = () => { setRefreshing(true); loadData(); };
+
+  // Save/Delete handlers
   const handleSaveMetrics = async () => {
       const w = parseFloat(weight);
       const bf = parseFloat(bodyFat);
       if (isNaN(w)) return Alert.alert(t('error', lang), t('invalid_input', lang) || "Invalid Input");
-      
       try {
           const dateStr = format(currentDate, "yyyy-MM-dd");
           const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
@@ -180,25 +177,11 @@ export default function HomeScreen() {
           loadData(); 
       } catch(e) { console.error(e); }
   };
-
   const handleDuplicate = async (id: number) => {
-      try {
-          await duplicateFoodLog(id);
-          Alert.alert(t('success', lang), t('save_success', lang));
-          loadData();
-      } catch (e) {
-          Alert.alert(t('error', lang), "Copy failed");
-      }
+      try { await duplicateFoodLog(id); Alert.alert(t('success', lang), t('save_success', lang)); loadData(); } catch (e) { Alert.alert(t('error', lang), "Copy failed"); }
   };
-
   const deleteLog = (id: number) => {
-      Alert.alert(t('delete', lang), "", [
-          { text: t('cancel', lang), style: "cancel" },
-          { text: t('delete', lang), style: "destructive", onPress: async () => {
-              await db.delete(foodLogs).where(eq(foodLogs.id, id));
-              loadData();
-          }}
-      ]);
+      Alert.alert(t('delete', lang), "", [{ text: t('cancel', lang), style: "cancel" }, { text: t('delete', lang), style: "destructive", onPress: async () => { await db.delete(foodLogs).where(eq(foodLogs.id, id)); loadData(); }}]);
   };
 
   // --- 客製化月曆 Modal ---
@@ -206,9 +189,9 @@ export default function HomeScreen() {
     const [viewDate, setViewDate] = useState(currentDate);
     const [monthStats, setMonthStats] = useState<Record<string, any>>({});
     
-    // [NEW] 快速切換年份月份的 Picker
+    // 快速切換年份月份的 Picker
     const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
-    // [NEW] 手動輸入日期的 Modal
+    // 手動輸入日期的 Modal
     const [showInputModal, setShowInputModal] = useState(false);
     const [inputDateStr, setInputDateStr] = useState("");
 
@@ -294,32 +277,46 @@ export default function HomeScreen() {
                         ))}
                     </ScrollView>
 
-                    {/* Footer */}
-                    <View style={{flexDirection:'row', justifyContent:'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: '#eee', alignItems:'center'}}>
-                        <View style={{flexDirection:'row', alignItems:'center'}}>
-                            {/* [NEW] Keyboard Input Button */}
-                            <TouchableOpacity onPress={() => setShowInputModal(true)} style={{padding: 10, marginRight: 8}}>
-                                <Ionicons name="keypad-outline" size={20} color={theme.tint} />
-                            </TouchableOpacity>
+                    {/* Footer - Modified Layout */}
+                    <View style={{
+                        flexDirection: 'row', 
+                        justifyContent: 'center', // 讓內容居中 (Today 按鈕)
+                        alignItems: 'center', 
+                        marginTop: 10, 
+                        paddingTop: 10, 
+                        borderTopWidth: 1, 
+                        borderColor: '#eee',
+                        position: 'relative' // 為了讓鍵盤按鈕絕對定位
+                    }}>
+                        {/* 左側: 鍵盤輸入按鈕 */}
+                        <TouchableOpacity 
+                            onPress={() => setShowInputModal(true)} 
+                            style={{
+                                position: 'absolute', 
+                                left: 10, 
+                                padding: 10
+                            }}
+                        >
+                            <Ionicons name="keypad-outline" size={24} color={theme.tint} />
+                        </TouchableOpacity>
 
-                            {/* Today Button */}
-                            <TouchableOpacity onPress={() => {
-                                const today = new Date();
-                                setCurrentDate(today);
-                                setViewDate(today);
-                                setShowCalendarModal(false);
-                            }} style={{padding: 10, flexDirection:'row', alignItems:'center'}}>
-                                <Ionicons name="today-outline" size={16} color={theme.tint} style={{marginRight: 4}}/>
-                                <ThemedText style={{color: theme.tint, fontWeight:'bold'}}>{t('today', lang) || "Today"}</ThemedText>
-                            </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity onPress={() => setShowCalendarModal(false)} style={{padding: 10}}>
-                            <ThemedText style={{color: theme.tint, fontWeight:'bold'}}>{t('confirm', lang) || "OK"}</ThemedText>
+                        {/* 中間: 回到今日按鈕 */}
+                        <TouchableOpacity onPress={() => {
+                            const today = new Date();
+                            setCurrentDate(today);
+                            setViewDate(today);
+                            setShowCalendarModal(false);
+                        }} style={{
+                            padding: 10, 
+                            flexDirection:'row', 
+                            alignItems:'center'
+                        }}>
+                            <Ionicons name="today-outline" size={18} color={theme.tint} style={{marginRight: 6}}/>
+                            <ThemedText style={{color: theme.tint, fontWeight:'bold', fontSize: 16}}>{t('today', lang) || "Today"}</ThemedText>
                         </TouchableOpacity>
                     </View>
 
-                    {/* 內層: 年月選擇器 Modal (使用 DateTimePicker spinner 模式) */}
+                    {/* 內層: 年月選擇器 Modal */}
                     {showYearMonthPicker && (
                         <DateTimePicker 
                             value={viewDate} 
@@ -358,7 +355,7 @@ export default function HomeScreen() {
     );
   };
 
-  // Header 
+  // Render Functions
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <TouchableOpacity onPress={() => setCurrentDate(addDays(currentDate, -1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
@@ -370,40 +367,17 @@ export default function HomeScreen() {
     </View>
   );
 
-  const renderDiffBadge = (val: number | null, unit: string) => {
-      if (val === null) return null;
-      const color = val > 0 ? '#FF3B30' : (val < 0 ? '#34C759' : '#888');
-      const icon = val > 0 ? 'arrow-up' : (val < 0 ? 'arrow-down' : 'remove');
-      return (
-          <View style={{flexDirection:'row', alignItems:'center', marginLeft:8, backgroundColor: color+'20', paddingHorizontal:6, borderRadius:4}}>
-              <Ionicons name={icon} size={12} color={color} />
-              <ThemedText style={{fontSize:10, color:color, fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText>
-          </View>
-      );
-  };
+  const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
+  
   const renderBodyMetricsCard = () => (
     <ThemedView style={styles.card}>
-      <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
-        <ThemedText type="defaultSemiBold">{t('body_metrics', lang)}</ThemedText>
-        <TouchableOpacity onPress={handleSaveMetrics}><ThemedText style={{color:theme.tint, fontSize:14}}>{t('record_metrics', lang)}</ThemedText></TouchableOpacity>
-      </View>
-      <View style={{flexDirection:'row', justifyContent:'space-between'}}>
+      <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:12}}><ThemedText type="defaultSemiBold">{t('body_metrics',lang)}</ThemedText><TouchableOpacity onPress={handleSaveMetrics}><ThemedText style={{color:theme.tint,fontSize:14}}>{t('record_metrics',lang)}</ThemedText></TouchableOpacity></View>
+      <View style={{flexDirection:'row',justifyContent:'space-between'}}>
         <View>
-            <View style={{flexDirection:'row', alignItems:'center'}}>
-                <TextInput style={[styles.metricInput, {color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText>kg</ThemedText>
-                {renderDiffBadge(diffWeight, 'kg')}
-            </View>
-            <View style={{flexDirection:'row', alignItems:'center', marginTop:8}}>
-                <TextInput style={[styles.metricInput, {color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText>%</ThemedText>
-                {renderDiffBadge(diffFat, '%')}
-            </View>
+            <View style={{flexDirection:'row',alignItems:'center'}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>kg</ThemedText>{renderDiffBadge(diffWeight,'kg')}</View>
+            <View style={{flexDirection:'row',alignItems:'center',marginTop:8}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>%</ThemedText>{renderDiffBadge(diffFat,'%')}</View>
         </View>
-        <View style={{justifyContent:'space-around', alignItems:'flex-end'}}>
-            <ThemedText style={{fontSize:12, color:'#888'}}>{t('target_weight', lang)} {targetWeight} kg</ThemedText>
-            <ThemedText style={{fontSize:12, color:'#888'}}>{t('target_body_fat', lang)} {targetBodyFat} %</ThemedText>
-        </View>
+        <View style={{justifyContent:'space-around',alignItems:'flex-end'}}><ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)} {targetWeight} kg</ThemedText><ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)} {targetBodyFat} %</ThemedText></View>
       </View>
     </ThemedView>
   );
@@ -412,25 +386,18 @@ export default function HomeScreen() {
     const intakePct = targets.calories > 0 ? Math.min(intake.calories / targets.calories, 1) : 0;
     const net = intake.calories - burnedCalories;
     const netPct = targets.calories > 0 ? Math.round((net / targets.calories) * 100) : 0;
-    
     return (
       <View style={styles.sectionContainer}>
         <View style={{flexDirection:'row', marginBottom:20}}>
             <View style={{flex:1}}>
-                <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}>
-                    <ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText>
-                    <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText>
-                </View>
+                <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}><ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText></View>
                 <View style={styles.barBg}><View style={[styles.barFill, {width:`${intakePct*100}%`, backgroundColor:'#34C759'}]}/></View>
                 <View style={[styles.barBg, {marginTop:8}]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
             </View>
             <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
                 <ThemedText style={{fontSize:12, color:'#888'}}>{t('intake_target', lang)}: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
                 <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}: -{Math.round(burnedCalories)}</ThemedText>
-                <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}>
-                    <ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText>
-                    <ThemedText type="title">{netPct}%</ThemedText>
-                </View>
+                <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}><ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText><ThemedText type="title">{netPct}%</ThemedText></View>
             </View>
         </View>
         <View style={{flexDirection:'row', justifyContent:'space-between'}}>
@@ -444,139 +411,24 @@ export default function HomeScreen() {
   };
 
   const renderMacroRing = (label:string, val:number, target:number, color:string, key: string, unit="g") => {
-      const realPct = target > 0 ? (val/target)*100 : 0; 
-      const visualPct = Math.min(realPct, 100); 
-      
-      return (
-          <TouchableOpacity 
-             onPress={() => setSelectedMacro({label, key, unit})}
-             style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}
-          >
-              <View pointerEvents="none">
-                  <PieChart 
-                    data={[{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}]} 
-                    donut 
-                    radius={32} 
-                    innerRadius={24} 
-                    centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}
-                  />
-              </View>
-              <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText>
-              <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText>
-          </TouchableOpacity>
-      );
+      const realPct = target > 0 ? (val/target)*100 : 0; const visualPct = Math.min(realPct, 100); 
+      return (<TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}><View pointerEvents="none"><PieChart data={[{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}]} donut radius={32} innerRadius={24} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}/></View><ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText></TouchableOpacity>);
   };
 
-  const renderMacroDetailModal = () => {
-      if (!selectedMacro) return null;
-      
-      const keyMap: Record<string, string> = {
-          'protein': 'totalProteinG',
-          'fat': 'totalFatG',
-          'carbs': 'totalCarbsG',
-          'sodium': 'totalSodiumMg'
-      };
-      
-      const dbKey = keyMap[selectedMacro.key];
-      const sortedLogs = allDailyLogs
-        .filter(l => (l[dbKey] || 0) > 0)
-        .sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0));
+  const renderMacroDetailModal = () => { if (!selectedMacro) return null; const keyMap: any = {'protein': 'totalProteinG','fat': 'totalFatG','carbs': 'totalCarbsG','sodium': 'totalSodiumMg'}; const dbKey = keyMap[selectedMacro.key]; const sortedLogs = allDailyLogs.filter(l => (l[dbKey] || 0) > 0).sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0)); const totalVal = sortedLogs.reduce((sum, item) => sum + (item[dbKey] || 0), 0); return (<Modal visible={!!selectedMacro} transparent animationType="slide" onRequestClose={()=>setSelectedMacro(null)}><View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor: theme.cardBackground, maxHeight: '60%'}]}><View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16}}><ThemedText type="subtitle">{selectedMacro.label} {t('analysis', lang)}</ThemedText><TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity></View><ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>{t('total', lang)}: {Math.round(totalVal)} {selectedMacro.unit}</ThemedText><ScrollView>{sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : sortedLogs.map((log, idx) => { const val = log[dbKey] || 0; const pct = totalVal > 0 ? (val / totalVal * 100).toFixed(1) : "0"; return (<View key={idx} style={{flexDirection:'row', justifyContent:'space-between', paddingVertical:10, borderBottomWidth:1, borderColor:'#eee'}}><View style={{flex:1}}><ThemedText>{log.foodName}</ThemedText><View style={{width: '100%', height:4, backgroundColor:'#eee', marginTop:4, borderRadius:2}}><View style={{width: `${pct}%`, backgroundColor: theme.tint, height:'100%', borderRadius:2}}/></View></View><View style={{alignItems:'flex-end', marginLeft:10}}><ThemedText style={{fontWeight:'bold'}}>{Math.round(val)} {selectedMacro.unit}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{pct}%</ThemedText></View></View>);})}</ScrollView></View></View></Modal>);};
 
-      const totalVal = sortedLogs.reduce((sum, item) => sum + (item[dbKey] || 0), 0);
+  const renderQuickAdd = () => (<View style={{paddingHorizontal: 16, marginTop: 20}}><ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_record', lang)}</ThemedText><ScrollView horizontal showsHorizontalScrollIndicator={false}>{recentFoods.length > 0 ? recentFoods.map((item, idx) => (<TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id, clone: "true" } })} ><ThemedText>{item.foodName}</ThemedText></TouchableOpacity>)) : <ThemedText style={{color:'#888', fontSize:12}}>{t('no_recent_foods', lang)}</ThemedText>}</ScrollView></View>);
 
-      return (
-          <Modal visible={!!selectedMacro} transparent animationType="slide" onRequestClose={()=>setSelectedMacro(null)}>
-              <View style={styles.modalOverlay}>
-                  <View style={[styles.modalContent, {backgroundColor: theme.cardBackground, maxHeight: '60%'}]}>
-                      <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16}}>
-                          <ThemedText type="subtitle">{selectedMacro.label} {t('analysis', lang)}</ThemedText>
-                          <TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity>
-                      </View>
-                      <ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>
-                          {t('total', lang)}: {Math.round(totalVal)} {selectedMacro.unit}
-                      </ThemedText>
-                      <ScrollView>
-                          {sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : 
-                           sortedLogs.map((log, idx) => {
-                               const val = log[dbKey] || 0;
-                               const pct = totalVal > 0 ? (val / totalVal * 100).toFixed(1) : "0";
-                               return (
-                                   <View key={idx} style={{flexDirection:'row', justifyContent:'space-between', paddingVertical:10, borderBottomWidth:1, borderColor:'#eee'}}>
-                                       <View style={{flex:1}}>
-                                           <ThemedText>{log.foodName}</ThemedText>
-                                           <View style={{width: '100%', height:4, backgroundColor:'#eee', marginTop:4, borderRadius:2}}>
-                                               <View style={{width: `${pct}%`, backgroundColor: theme.tint, height:'100%', borderRadius:2}}/>
-                                           </View>
-                                       </View>
-                                       <View style={{alignItems:'flex-end', marginLeft:10}}>
-                                           <ThemedText style={{fontWeight:'bold'}}>{Math.round(val)} {selectedMacro.unit}</ThemedText>
-                                           <ThemedText style={{fontSize:10, color:'#888'}}>{pct}%</ThemedText>
-                                       </View>
-                                   </View>
-                               );
-                           })
-                          }
-                      </ScrollView>
-                  </View>
-              </View>
-          </Modal>
-      );
-  };
-
-  const renderQuickAdd = () => (
-      <View style={{paddingHorizontal: 16, marginTop: 20}}>
-          <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_record', lang)}</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {recentFoods.length > 0 ? recentFoods.map((item, idx) => (
-                  <TouchableOpacity 
-                    key={idx} 
-                    style={[styles.quickChip, {borderColor: theme.icon}]}
-                    onPress={() => router.push({ pathname: "/food-editor", params: { logId: item.id, clone: "true" } })} 
-                  >
-                      <ThemedText>{item.foodName}</ThemedText>
-                  </TouchableOpacity>
-              )) : <ThemedText style={{color:'#888', fontSize:12}}>{t('no_recent_foods', lang)}</ThemedText>}
-          </ScrollView>
-      </View>
-  );
-
-    const renderSwipeableLog = (log: any) => (
-      <Swipeable 
-        renderRightActions={()=>(
-            <View style={{flexDirection: 'row', width: 140}}>
-                <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF9500'}]} onPress={() => handleDuplicate(log.id)}>
-                    <Ionicons name="copy" size={24} color="white"/>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30'}]} onPress={() => deleteLog(log.id)}>
-                    <Ionicons name="trash" size={24} color="white"/>
-                </TouchableOpacity>
-            </View>
-        )} 
-        renderLeftActions={()=>(
-            <TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}>
-                <Ionicons name="create" size={24} color="white"/>
-            </TouchableOpacity>
-        )}
-      >
-          <View style={[styles.logItem, {backgroundColor: theme.background}]}>
-              <View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':t('portion', lang)}</ThemedText></View>
-              <ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText>
-          </View>
-      </Swipeable>
-  );
+  const renderSwipeableLog = (log: any) => (<Swipeable renderRightActions={()=>(<View style={{flexDirection: 'row', width: 140}}><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF9500'}]} onPress={() => handleDuplicate(log.id)}><Ionicons name="copy" size={24} color="white"/></TouchableOpacity><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30'}]} onPress={() => deleteLog(log.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity></View>)} renderLeftActions={()=>(<TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>)}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':t('portion', lang)}</ThemedText></View><ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText></View></Swipeable>);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
+      <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         {renderBodyMetricsCard()}
         {renderEnergySection()}
         {renderQuickAdd()}
-        
         <View style={styles.recordSection}>
             <View style={styles.quickActionRow}>
                 <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
@@ -589,54 +441,18 @@ export default function HomeScreen() {
                     const logs = dailyLogs[mealType] || [];
                     return (
                         <View key={mealType} style={styles.mealGroup}>
-                            <View style={styles.mealHeader}>
-                                <ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText>
-                                <ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal</ThemedText>
-                            </View>
+                            <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal</ThemedText></View>
                             {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : logs.map(log => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
                         </View>
                     );
                 })}
             </View>
-
-            {/* 常用運動快捷區 */}
-            {frequentActivities.length > 0 && (
-                <View style={{marginTop: 20, marginBottom: 8}}>
-                     <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
-                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>
-                        {frequentActivities.map((name, idx) => (
-                            <TouchableOpacity 
-                                key={idx} 
-                                style={[styles.quickChip, {borderColor: theme.icon}]}
-                                onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}
-                            >
-                                <ThemedText>🏃 {name}</ThemedText>
-                            </TouchableOpacity>
-                        ))}
-                     </ScrollView>
-                </View>
-            )}
-
+            {frequentActivities.length > 0 && (<View style={{marginTop: 20, marginBottom: 8}}><ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>{frequentActivities.map((name, idx) => (<TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}><ThemedText>🏃 {name}</ThemedText></TouchableOpacity>))}</ScrollView></View>)}
             <View style={[styles.mealGroup, {marginTop: 20}]}>
-                <View style={styles.mealHeader}>
-                    <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
-                    <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
-                </View>
-                {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (
-                    <Swipeable 
-                        key={act.id} 
-                        renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>}
-                        renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}
-                    >
-                        <View style={[styles.logItem, {backgroundColor: theme.background}]}>
-                            <View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View>
-                            <ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText>
-                        </View>
-                    </Swipeable>
-                ))}
+                <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText></View>
+                {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
             </View>
         </View>
-        
         {CustomCalendarModal()}
         {renderMacroDetailModal()}
       </ScrollView>
@@ -645,13 +461,7 @@ export default function HomeScreen() {
   );
 }
 
-
-const ActionButton = ({ icon, label, onPress, color }: any) => (
-  <TouchableOpacity style={styles.actionButton} onPress={onPress}>
-    <View style={[styles.iconCircle, { backgroundColor: color }]}><Ionicons name={icon} size={24} color="#FFF" /></View>
-    <ThemedText style={styles.actionLabel}>{label}</ThemedText>
-  </TouchableOpacity>
-);
+const ActionButton = ({ icon, label, onPress, color }: any) => (<TouchableOpacity style={styles.actionButton} onPress={onPress}><View style={[styles.iconCircle, { backgroundColor: color }]}><Ionicons name={icon} size={24} color="#FFF" /></View><ThemedText style={styles.actionLabel}>{label}</ThemedText></TouchableOpacity>);
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
