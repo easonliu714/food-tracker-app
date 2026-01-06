@@ -504,12 +504,17 @@ export const setAppLanguage = (lang: string) => {
 
 const LOGS_ZH = [
   {
+    version: "V1.0.12",
+    date: "2026-01-06",
+    content: "[新增] 分析頁面統計方塊支援自由排序、新增與刪除 (長按進入編輯模式)。\n[升級] 分析圖表整合雙軸顯示 (熱量/體重/體脂)，支援「自訂區間」與自動縮放適配螢幕。\n[新增] 首頁「常用運動」快捷鍵；客製化月曆支援鍵盤輸入日期與淨熱量預覽。\n[修正] 修復備份還原邏輯 (含運動紀錄) 及部分 UI 顯示問題。"
+  },
+  {
     version: "V1.0.11",
     date: "2026-01-05",
     content: "[新增] 數據備份與還原功能 (JSON 格式，支援跨裝置)。\n[優化] 分析圖表升級：雙軸顯示體重與熱量，自動聚焦最新日期。\n[優化] AI 教練：新增剩餘熱量儀表板，提供分類明確的菜單與運動建議 (附影片連結)。\n[修正] 統一食品編輯介面，修復掃碼流程中斷問題。"
   },
   {
-    version: "V1.0.9.14",
+    version: "V1.0.10",
     date: "2025-12-30",
     content: "[新增] 資料庫備份與還原功能 (支援 Google Drive)。\n[修正] 分析圖表完全對齊，修復切換週期不聚焦問題。\n[修正] 首頁圓餅圖可顯示超過 100% 之數值。"
   },
@@ -535,14 +540,19 @@ const LOGS_ZH = [
 
 const LOGS_EN = [
   {
+    version: "V1.0.12",
+    date: "2026-01-06",
+    content: "[New] Analysis Stats: Customizable grid (Sort/Add/Delete). [New] Analysis Chart: Auto-fit dual-axis view with Custom Date Range support.\n[New] Home: Quick Activity Shortcuts & Custom Calendar (with Keyboard input).\n[Fix] Fixed Backup/Restore logic and minor UI glitches."
+  },
+  {
     version: "V1.0.11",
     date: "2026-01-05",
     content: "[New] Backup & Restore via JSON (Cross-device support).\n[Imp] Analysis Chart: Dual-axis for weight/calories, auto-scroll to latest date.\n[Imp] AI Coach: Added calorie dashboard and categorized suggestions with video links.\n[Fix] Unified food editor interface and fixed barcode flow issues."
   },
   {
-    version: "V1.0.9.14",
+    version: "V1.0.10",
     date: "2025-12-30",
-content: "[New] Return to the original location (support Google Drive).\n[Fix] Analysis charts perfectly aligned, fixed focus issue when switching periods.\n[Fix] Home pie chart can display values over 100%."
+    content: "[New] Return to the original location (support Google Drive).\n[Fix] Analysis charts perfectly aligned, fixed focus issue when switching periods.\n[Fix] Home pie chart can display values over 100%."
   },
   {
     version: "V1.0.9.10",
@@ -554,8 +564,88 @@ content: "[New] Return to the original location (support Google Drive).\n[Fix] A
     date: "2025-12-29",
     content: "[New] AI Coach now supports interactive chat and follow-up questions.\n[New] Analysis charts upgraded: 7/30 days switch, detailed statistics.\n[New] Food Editor displays AI analysis composition and suggestions.\n[Fix] Camera crop frame is now adjustable.\n[Fix] Multi-language support for all UI elements."
   }
+  , { version: '1.0.8', date: '2025-12-24', content: 'Full multi-language support (including AI); Added API Key application link; Optimized camera UI and scanning process; Expanded database fields.' },
+  { version: '1.0.7', date: '2025-12-23', content: 'Optimized editing interface (support portion adjustment); Fixed camera and AI model issues; Strengthened scanning and saving mechanism.' },
+  { version: '1.0.6', date: '2025-12-23', content: 'Added training goals and age calculation; Enhanced AI Coach suggestion logic; Optimized scanning function (support external database query); Food confirmation page revamped (separated baseline values).' },
+  { version: '1.0.5', date: '2025-12-22', content: 'Fixed crash issues caused by notifications; Optimized exercise calorie calculation formula; Added nutrient intake ratio chart.' },
+  { version: '1.0.4', date: '2025-12-21', content: 'UI/UX comprehensive optimization: Resolved language switching delay issues; Added album import function; AI coach suggestions stored separately; Sodium content unit corrected.' },
+  { version: '1.0.3', date: '2025-12-20', content: 'Added multi-language support; Added body fat percentage record; Trend analysis added year/month/week switch; AI logic optimization.' },
+  { version: '1.0.2', date: '2025-12-18', content: 'Fixed AI key invalidation issue, opened custom Key; Fixed barcode scanning; Optimized trend charts.' },
+  { version: '1.0.1', date: '2025-12-15', content: 'Basic features released: Diet recording, calorie calculation, personal profile, AI recognition, barcode scanning.' },
+];
+
+const LOGS_JP = [
+  {
+    version: "V1.0.12",
+    date: "2026-01-06",
+    content: "[新機能] 分析ページの統計ボックスで、自由に並べ替え、追加、削除できるようになりました（長押しで編集モードに移行します）。[アップグレード] 分析チャートに2軸表示（カロリー/体重/体脂肪）が統合され、「カスタム間隔」とさまざまな画面サイズに適応する自動スケーリングがサポートされるようになりました。[新機能] ホームページの「よく使うエクササイズ」ショートカット。カスタマイズされたカレンダーで、日付と正味カロリーのプレビューにキーボード入力がサポートされます。[修正] バックアップと復元ロジック（エクササイズ記録を含む）と一部のUI表示の問題を修正しました。",
+  },
+  {
+    version: "V1.0.11",
+    date: "2026-01-05",
+    content: "[新機能] データのバックアップと復元機能（JSON形式、デバイス間のサポート）。[最適化] 分析チャートのアップグレード：体重とカロリーの2軸表示、最新の日付に自動的にフォーカスします。[最適化] AIコーチ：カロリーダッシュボードを追加し、明確に分類されたメニューと運動の提案を提供します（ビデオリンク付き）。[修正] 食品編集インターフェースを統一し、スキャンフローの中断問題を修正しました。",
+  },
+  {
+    version: "V1.0.10",
+    date: "2025-12-30",
+    content: "[新機能] データベースのバックアップと復元機能（Googleドライブをサポート）。[修正] 分析チャートが完全に整列され、期間切り替え時のフォーカス問題を修正しました。[修正] ホームの円グラフが100％を超える値を表示できるようになりました。",
+  },
+  {
+    version: "V1.0.9.10",
+    date: "2025-12-30",
+    content: "[修正] 運動記録が編集と更新をサポートするようになりました。[修正] 分析チャートが完全に整列され、30日間のビューのスクロールをサポートし、最新の日付に自動的にフォーカスします。[修正] 体重折れ線グラフの配置問題が解決されました。[新機能] 日本語と韓国語のインターフェースサポートが追加されました。",
+  },
+  {
+    version: "V1.0.9",
+    date: "2025-12-29",
+    content: "[新機能] AIコーチがインタラクティブなチャットとフォローアップの質問をサポートするようになりました。[新機能] 分析チャートのアップグレード：7/30日切り替え、詳細な統計。[新機能] 食品編集ページにAI分析の構成と提案が表示されます。[修正] カメラのクロップフレームが調整可能になりました。[修正] すべてのUI要素で多言語サポートが提供されるようになりました。",
+  },
+  { version: '1.0.8', date: '2025-12-24', content: '完全な多言語サポート（AI を含む）、API キー アプリケーション リンクの追加、カメラ UI と QR コード スキャン プロセスの最適化、データベース フィールドの拡張。' },
+  { version: '1.0.7', date: '2025-12-23', content: '編集インターフェースの最適化（ポーション調整をサポート）、カメラと AI モデルの問題の修正、スキャンと保存メカニズムの強化。' },
+  { version: '1.0.6', date: '2025-12-23', content: 'トレーニング目標と年齢計算の追加、AI コーチの提案ロジックの強化、スキャン機能の最適化（外部データベース クエリをサポート）、食品確認ページの刷新（基準値の分離）。' },
+  { version: '1.0.5', date: '2025-12-22', content: '通知によるクラッシュ問題の修正、運動カロリー計算式の最適化、栄養素摂取比率チャートの追加。' },
+  { version: '1.0.4', date: '2025-12-21', content: 'UI/UX の包括的な最適化: 言語切り替えの遅延問題の解決、アルバムインポート機能の追加、AI コーチの提案を別々に保存、ナトリウム含有量の単位を修正。' },
+  { version: '1.0.3', date: '2025-12-20', content: '多言語サポートの追加、体脂肪率記録の追加、傾向分析に年/月/週の切り替えを追加、AI ロジックの最適化。' },
+  { version: '1.0.2', date: '2025-12-18', content: 'AI キーの無効化問題を修正し、カスタム キーを開放。バーコード スキャンを修正。傾向チャートを最適化。' },
+  { version: '1.0.1', date: '2025-12-15', content: '基本機能のリリース: 食事記録、カロリー計算、個人プロフィール、AI 認識、バーコード スキャン。' },
+];
+
+const LOGS_KO = [
+  {
+    version: "V1.0.12",
+    date: "2026-01-06",
+    content: "[신규] 분석 페이지 통계 상자에서 자유롭게 정렬, 추가, 삭제 가능 (길게 눌러 편집 모드로 전환). [업그레이드] 분석 차트에 2축 표시(칼로리/체중/체지방) 통합, 다양한 화면 크기에 적응하는 자동 스케일링 지원. [신규] 홈 페이지의 '자주 사용하는 운동' 바로가기. 맞춤형 달력에서 날짜 및 순 칼로리 미리보기에 키보드 입력 지원. [수정] 백업 및 복원 로직(운동 기록 포함) 및 일부 UI 표시 문제 수정."
+  },
+  {
+    version: "V1.0.11",
+    date: "2026-01-05",
+    content: "[신규] JSON 형식의 데이터 백업 및 복원 기능(장치 간 지원). [최적화] 분석 차트 업그레이드: 체중 및 칼로리 2축 표시, 최신 날짜에 자동 포커스. [최적화] AI 코치: 칼로리 대시보드 추가 및 명확하게 분류된 메뉴와 운동 제안 제공(비디오 링크 포함). [수정] 식품 편집 인터페이스 통합 및 스캔 흐름 중단 문제 수정."
+  },
+  {
+    version: "V1.0.10",
+    date: "2025-12-30",
+    content: "[신규] 데이터베이스 백업 및 복원 기능 (Google Drive 지원). [수정] 분석 차트가 완전히 정렬되고, 주기 전환 시 포커스 문제 수정. [수정] 홈 페이지 원형 차트가 100%를 초과하는 값을 표시할 수 있도록 수정."
+  },
+  {
+    version: "V1.0.9.10",
+    date: "2025-12-30",
+    content: "[수정] 운동 기록이 편집 및 업데이트를 지원하도록 수정.\n[수정] 분석 차트가 완전히 정렬되고, 30일 보기의 스크롤을 지원하며, 최신 날짜에 자동 포커스.\n[수정] 체중 선 그래프의 배치 문제 해결.\n[신규] 일본어와 한국어 인터페이스 지원."
+  },
+  {
+    version: "V1.0.9",
+    date: "2025-12-29",
+    content: "[신규] AI 코치가 대화형 채팅과 후속 질문을 지원하도록 수정.\n[신규] 분석 차트 업그레이드: 7/30일 전환, 상세 통계.\n[신규] 식품 편집 페이지에 AI 분석 구성 및 제안 표시.\n[수정] 카메라 자르기 프레임이 조정 가능하도록 수정.\n[수정] 모든 UI 요소에 다국어 지원 제공."
+  },
+  { version: '1.0.8', date: '2025-12-24', content: '전면 다국어 지원(IA 포함)；API Key 신청 링크 추가；카메라 UI 및 QR 코드 스캔 프로세스 최적화；데이터베이스 필드 확장。' },
+  { version: '1.0.7', date: '2025-12-23', content: '편집 인터페이스 최적화(분량 조정 지원)；카메라 및 AI 모델 문제 수정；스캔 및 저장 메커니즘 강화。' },
+  { version: '1.0.6', date: '2025-12-23', content: '트레이닝 목표 및 나이 계산 추가；AI 코치 제안 로직 강화；스캔 기능 최적화(외부 데이터베이스 쿼리 지원)；음식 확인 페이지 리뉴얼(기준치 분리)。' },
+  { version: '1.0.5', date: '2025-12-22', content: '알림으로 인한 충돌 문제 수정；운동 칼로리 계산식 최적화；영양소 섭취 비율 차트 추가。' },
+  { version: '1.0.4', date: '2025-12-21', content: 'UI/UX 전면 최적화: 언어 전환 지연 문제 해결, 앨범 가져오기 기능 추가, AI 코치 제안 별도 저장, 나트륨 함량 단위 수정。' },
+  { version: '1.0.3', date: '2025-12-20', content: '전면 다국어 지원(IA 포함)；API Key 신청 링크 추가；카메라 UI 및 QR 코드 스캔 프로세스 최적화；데이터베이스 필드 확장。' },
+  { version: '1.0.2', date: '2025-12-18', content: 'AI 키의 유효성 문제 수정 및 사용자 정의 키 해제；바코드 스캔 기능 수정；트렌드 차트 최적화。' },
+  { version: '1.0.1', date: '2025-12-15', content: '기본 기능 출시：식사 기록、칼로리 계산、개인 프로필、AI 인식、바코드 스캔。' },
 ];
 
 export const getVersionLogs = (lang: string) => {
-    return lang === 'zh-TW' ? LOGS_ZH : LOGS_EN;
+    return lang === 'zh-TW' ? LOGS_ZH : lang === 'ja' ? LOGS_JP : lang === 'ko' ? LOGS_KO : LOGS_EN;
 };
