@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// (前面 KEYS 和其他函式保持不變)
 const KEYS = {
   USER_SESSION: 'user_session',
   PROFILE: 'user_profile',
@@ -10,6 +9,7 @@ const KEYS = {
   WEIGHTS: 'weight_history',
   SETTINGS: 'app_settings',
   AI_ADVICE: 'ai_advice',
+  ANALYSIS_GRID: 'analysis_grid_layout', // [新增]
 };
 
 // --- 設定 ---
@@ -317,4 +317,22 @@ export const saveAIAdvice = async (type: 'RECIPE' | 'WORKOUT', advice: any) => {
 export const getAIAdvice = async () => {
   const data = await AsyncStorage.getItem(KEYS.AI_ADVICE);
   return data ? JSON.parse(data) : { RECIPE: null, WORKOUT: null };
+};
+
+// [新增] 分析頁面 Grid 佈局存取
+export const saveAnalysisGrid = async (gridSlots: any[]) => {
+  try {
+    await AsyncStorage.setItem(KEYS.ANALYSIS_GRID, JSON.stringify(gridSlots));
+  } catch (e) {
+    console.error("Failed to save analysis grid", e);
+  }
+};
+
+export const getAnalysisGrid = async () => {
+  try {
+    const data = await AsyncStorage.getItem(KEYS.ANALYSIS_GRID);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    return null;
+  }
 };
