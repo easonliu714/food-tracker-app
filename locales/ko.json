@@ -1,0 +1,7 @@
+{
+  "CFBundleDisplayName": "영양 추적",
+  "CFBundleName": "영양 추적",
+  "NSCameraUsageDescription": "$(PRODUCT_NAME)이 카메라를 사용하여 음식 사진을 찍고 바코드를 스캔할 수 있도록 허용합니다.",
+  "NSPhotoLibraryUsageDescription": "(PRODUCT_NAME)이 사진 앨범에 접근하여 음식 사진을 선택할 수 있도록 허용합니다.",
+  "NSMicrophoneUsageDescription": "이 애플리케이션은 마이크가 필요하지 않습니다."
+}
