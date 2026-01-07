@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
+  { code: 'zh-CN', label: '简体中文' }, // [新增]
   { code: 'en', label: 'English' },
   { code: 'ja', label: '日本語' },
   { code: 'ko', label: '한국어' },
@@ -137,6 +138,133 @@ export const TRANSLATIONS = {
     intensity_low: "低強度", intensity_medium: "中強度", intensity_high: "高強度",
     
     increase: "增加", decrease: "減少", no_change: "無變化"
+  },
+  // [新增] 簡體中文
+  'zh-CN': {
+    // Tab Titles
+    tab_home: "首页", tab_analysis: "分析", tab_ai_coach: "AI 教练", tab_settings: "设置",
+    
+    // General
+    welcome: "欢迎", save: "保存", cancel: "取消", delete: "删除", error: "错误", success: "成功", loading: "加载中...",
+    tip: "提示", save_success: "保存成功", invalid_input: "输入数值无效", settings: "设置", edit: "编辑",
+    close: "关闭", version_history: "版本记录", how_to_get_key: "如何获取 Key?", input_date: "输入日期",
+    
+    // Backup & Restore
+    data_backup: "数据备份与还原",
+    backup_db: "导出数据库 (备份)",
+    restore_db: "导入数据库 (还原)",
+    backup_desc: "将数据库文件导出至 Google Drive 或本地",
+    restore_desc: "从文件还原数据库 (将覆盖当前数据)",
+    restore_confirm_title: "确认还原？",
+    restore_confirm_msg: "这将完全覆盖当前的记录，且无法复原。请确认您选择的是正确的备份文件。",
+    restore_success_msg: "还原成功！请完全关闭并重启 App 以应用变更。",
+    
+    // API Guide
+    api_guide_title: "申请 Gemini API Key 步骤",
+    api_step_1: "1. 点击下方按钮前往 Google AI Studio。",
+    api_step_2: "2. 登录您的 Google 账号。",
+    api_step_3: "3. 点击 'Get API Key' 或 'Create API Key'。",
+    api_step_4: "4. 选择 'Create API key in new project'。",
+    api_step_5: "5. 复制生成的 Key 并贴回本 App。",
+    go_to_site: "前往申请网站",
+
+    // Home
+    body_metrics: "身体数值", record_metrics: "+ 记录", target_weight: "目标体重", target_body_fat: "目标体脂",
+    intake: "摄入", burned: "消耗", net_intake_pct: "净摄入 %", intake_target: "摄入/目标", 
+    quick_record: "常用食物", no_recent_foods: "暂无常用记录", exercise: "运动", quick_add_activity: "常用运动", today: "今天", confirm: "确认",
+    
+    // Actions
+    camera: "拍照", scan_barcode: "扫码", manual_input: "手输", gallery: "相册",
+    scan_hint: "请将条码对准框内", allow: "允许",
+    
+    // Meals
+    breakfast: "早餐", lunch: "午餐", dinner: "晚餐", afternoon_tea: "下午茶", late_night: "宵夜", snack: "点心", no_records: "尚无记录",
+    
+    // Nutrients
+    calories: "热量", protein: "蛋白质", fat: "脂肪", carbs: "碳水", sodium: "钠",
+    sugar: "糖", fiber: "膳食纤维", saturated_fat: "饱和脂肪", trans_fat: "反式脂肪", cholesterol: "胆固醇",
+    zinc: "锌", magnesium: "镁", iron: "铁",
+
+    // Analysis
+    trend_analysis: "数据分析",
+    chart_title_cal: "热量收支趋势",
+    chart_title_body: "体重与体脂趋势", calories_and_weight: "热量收支与体重体脂趋势",
+    week: "近7天", month: "近30天", avg_daily: "日均数值",
+    axis_l: "(左)", axis_r: "(右)", analysis: "分析", total: "总计",
+    pinch_to_zoom: "双指缩放图表", drag_to_move: "拖曳移动图表", tap_msg: "点击方块以选取/交换位置，按 X 删除。", done: "完成",
+    last_7_days: "最近 7 天", last_30_days: "最近 30 天", custom: "自定义区间",
+    avg_daily_intake: "日均摄入", avg_burned: "日均消耗", avg_bmr: "日均净摄入", net_intake: "净摄入",
+    total_time: "总运动时间", total_steps: "总步数", total_calories: "总消耗热量",
+    avg_weight: "平均体重", weight_change: "体重变化", avg_body_fat: "平均体脂", body_fat_change: "体脂变化",
+
+    // Profile & AI
+    profile: "个人资料", ai_settings: "AI 设置", basic_info: "基本资料", gender: "性别", male: "男", female: "女",
+    birth_date: "出生日期", height: "身高", weight: "体重", body_fat: "体脂率",
+    target_goals: "目标设定", training_goal: "训练目标", activity_level: "日常活动量", save_settings: "保存设置",
+    api_key_placeholder: "粘贴您的 API Key", get_api_key: "取得 API Key", test_key: "测试 Key", test_key_first: "请先测试 API Key", current_model: "当前模型", language: "语言", 
+    
+    lose_weight: "减重", lose_weight_desc: "热量赤字，专注减脂",
+    maintain: "维持", maintain_desc: "维持目前体重与体态",
+    gain_weight: "增重", gain_weight_desc: "热量盈余，专注增肌",
+    recomp: "体态重组", recomp_desc: "增肌同时减脂",
+    blood_sugar: "控制血糖", blood_sugar_desc: "稳定血糖波动",
+
+    sedentary: "久坐少动", sedentary_desc: "几乎不运动",
+    lightly_active: "轻度活动", lightly_active_desc: "每周 1-3 天",
+    moderately_active: "中度活动", moderately_active_desc: "每周 3-5 天",
+    very_active: "高度活动", very_active_desc: "每周 6-7 天",
+    extra_active: "极度活动", extra_active_desc: "体力工作",
+    target_date: "预计完成日",
+    days_remaining: "剩余天数",
+
+    // AI Coach UI
+    ai_coach: "AI 教练", ai_welcome_msg: "你好！我是你的专属营养与健身助手。\n请点击下方按钮，或直接输入问题。",
+    ask_ai_placeholder: "输入消息...",
+    meal_suggestions: "饮食建议", workout_suggestions: "运动建议",
+    cook_meal: "自备食材", store_meal: "便利商店",
+    home_workout: "居家无器材", gym_workout: "健身房/器材",
+    remaining: "剩余额度", daily_calorie_target: "目标",
+    
+    // AI Coach Prompts
+    coach_prompt_cook: "身为营养师，请提供一份适合我目前剩余热量的「自备食材烹饪」菜单。请包含：1.食材清单 2.详细烹饪步骤 3. 推荐的 YouTube 料理教学关键字或连结。请考量我的个人目标。",
+    coach_prompt_store: "身为营养师，请提供一份适合我目前剩余热量的「便利商店」外食组合（如 7-11 或全家）。请列出具体商品名称与预估热量。请考量我的个人目标。",
+    coach_prompt_home_workout: "身为健身教练，请提供一份适合我今日状态的「居家无器材」运动课表。请包含：1.动作名称 2.次数/组数 3.动作要点 4. 推荐的 YouTube 动作教学连结。",
+    coach_prompt_gym_workout: "身为健身教练，请提供一份适合我今日状态的「健身房/器材辅助」运动课表。请包含：1.器材名称 2.重量/组数建议 3.注意事项 4. 推荐的 YouTube 教学连结。",
+    
+    // Food Editor
+    ai_analysis: "AI 分析", analyzing: "AI 分析中...", composition: "食物组成", suggestion: "摄取建议",
+    food_name_placeholder: "输入名称或扫描条码", barcode_scanned: "已读取条码：",
+    local_db: "本地数据库", loaded: "已载入", downloaded: "已下载信息", read_failed: "读取失败",
+    scan_failed: "查无资料", scan_failed_msg: "无此商品，请选择：",
+    scan_ai_option: "拍照分析营养标示", manual_option: "手动输入", 
+    food_name: "食物名称", brand_placeholder: "品牌（选填）", brand: "品牌",
+    portion: "份量设定", portion_count: "份数", unit_weight: "单份重",
+    total_weight_input: "总重量", total_label: "总计",
+    switch_to_weight: "切换为总重输入", switch_to_serving: "切换为份数输入",
+    val_per_100g: "每100克含量", data_incomplete: "资料不完整", food_modified_msg: "数值已变更，要更新原始项目还是另存新档？",
+    save_as_new: "另存新档", update_original: "更新原始项目",
+
+    //app/barcode-product.tsx
+    product_not_found: "查无此商品", product_not_found_msg: "您可以选择以下方式：", unknown_product: "未知商品",
+    product_info: "商品信息", product_name: "商品名称", input_serving: "输入份量", input_gram: "输入克数",
+    serving_unit: "份量" , barcode: "条码",
+
+    // Activity Editor
+    record_activity: "记录运动", select_activity: "选择运动", custom_activity: "自定义运动", input_activity_name: "输入运动名称",
+    activity_intensity: "运动强度", activity_details: "详细数据", time_min: "时间 (分钟)", distance_km: "距离 (km)", steps: "步数",
+    floors: "楼层", est_calories: "预估消耗热量", feeling_notes: "运动感受 & 笔记", enter_notes: "输入笔记...",
+    data_incomplete_msg: "请选择运动项目，并至少输入一项数据", activity_name: "运动名称", category: "分类",
+    select_category_msg: "请选择运动类别...",
+    
+    cat_cardio: "有氧与耐力", cat_gym: "健身房", cat_sport: "球类与竞技", cat_life: "日常生活", cat_custom: "自定义",
+    act_walk: "散步", act_run_slow: "慢跑", act_run_fast: "快跑", act_cycling: "骑自行车", act_swim: "游泳", act_hike: "登山", act_jump_rope: "跳绳",
+    act_weight_training: "重量训练", act_powerlifting: "健力", act_yoga: "瑜珈", act_pilates: "普拉提", act_hiit: "HIIT", act_elliptical: "椭圆机",
+    act_basketball: "篮球", act_badminton: "羽毛球", act_tennis: "网球", act_soccer: "足球", act_baseball: "棒球",
+    act_housework: "做家事", act_gardening: "园艺", act_moving: "搬运",
+    
+    intensity_low: "低强度", intensity_medium: "中强度", intensity_high: "高强度",
+    
+    increase: "增加", decrease: "减少", no_change: "无变化"
   },
   'en': {
     // Tab Titles
