@@ -1,4 +1,7 @@
 {
   "CFBundleDisplayName": "營養追蹤",
-  "CFBundleName": "營養追蹤"
+  "CFBundleName": "營養追蹤",
+  "NSCameraUsageDescription": "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
+  "NSPhotoLibraryUsageDescription": "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。",
+  "NSMicrophoneUsageDescription": "此應用程式不需要使用麥克風。"
 }
