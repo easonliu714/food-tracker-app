@@ -6,7 +6,7 @@ const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  appName: '營養追蹤',
+  appName: 'Food Tracker', // [建議] 預設名稱改為英文，作為 Fallback
   appSlug: 'nutrition_tracker',
   logoUrl: 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663249409721/lBYRAahQjSJDLaqW.png',
   scheme: schemeFromBundleId,
@@ -19,31 +19,40 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   version: "1.0.4",
   orientation: "portrait",
-  icon: "./assets/images/icon.png",
-  scheme: env.scheme,
+  
+  // [圖示設定] 
+  icon: "./assets/images/icon.png", // iOS 與舊版 Android 使用
   userInterfaceStyle: "automatic",
-  // [修正] 暫時移除 newArchEnabled 以確保相容性，若確定 SDK54 模擬器支援可開啟
-  // newArchEnabled: true, 
+  
+  // [iOS 語系設定] 引入語系檔
+  locales: {
+    "zh-Hant": "./locales/zh-Hant.json",
+    "en": "./locales/en.json",
+    // 若有日韓語需求可在此新增
+    "ja": "./locales/ja.json",
+    "ko": "./locales/ko.json"
+  },
+
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       UIBackgroundModes: ["audio"],
-      NSCameraUsageDescription: "此應用程式需要使用相機來拍攝食物照片,以便進行營養分析。",
-      NSPhotoLibraryUsageDescription: "此應用程式需要存取您的相簿來選擇食物照片。",
-      NSMicrophoneUsageDescription: "此應用程式不需要使用麥克風。",
+      // 注意：這裡的權限說明是「預設值」(通常是英文)。
+      // 真正的多國語系文字會從 locales/*.json 中讀取並覆蓋這裡。
+      NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
+      NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
     },
   },
+  
   android: {
-    adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/images/android-icon-foreground.png",
-      backgroundImage: "./assets/images/android-icon-background.png",
-      monochromeImage: "./assets/images/android-icon-monochrome.png",
-    },
     package: env.androidPackage,
+    // [Android 圖示設定] 自適應圖示
+    adaptiveIcon: {
+      foregroundImage: "./assets/images/adaptive-icon.png", // 只有 Logo 主體，透明背景
+      backgroundColor: "#ffffff", // 背景色
+    },
     permissions: [
-      "POST_NOTIFICATIONS",
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
@@ -62,14 +71,31 @@ const config: ExpoConfig = {
       },
     ],
   },
+  
   web: {
     output: "static",
     favicon: "./assets/images/favicon.png",
   },
+  
   plugins: [
     "expo-router",
     "expo-localization",
-    "expo-sqlite", // <--- 請新增這一行
+    "expo-sqlite",
+    
+    // [Android App 名稱多語系 Plugin]
+    [
+      "@nabbra/expo-android-app-name-localization",
+      {
+        localizedAppNames: {
+          "zh-Hant": "營養追蹤", // 繁體中文名稱
+          "en": "Food Tracker",  // 英文名稱
+          "zh-CN": "营养追踪",   // 簡體中文
+          "ja": "栄養トラッカー", // 日文
+          "ko": "영양 추적기"    // 韓文
+        }
+      }
+    ],
+
     [
       "expo-notifications",
       {
@@ -77,18 +103,21 @@ const config: ExpoConfig = {
         "color": "#ffffff"
       }
     ],
+    
+    // [權限設定]
+    // 這裡設定的是「預設」語言。多語系會由 locales/zh-Hant.json 自動覆寫 iOS 的 Info.plist
     [
       "expo-camera",
       {
-        "cameraPermission": "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
-        "microphonePermission": "此應用程式不需要使用麥克風。",
+        "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
+        "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone.",
         "recordAudioAndroid": false,
       },
     ],
     [
       "expo-image-picker",
       {
-        "photosPermission": "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。",
+        "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
       },
     ],
     [
@@ -98,22 +127,23 @@ const config: ExpoConfig = {
         "imageWidth": 200,
         "resizeMode": "contain",
         "backgroundColor": "#ffffff",
-        "dark": {
-          "backgroundColor": "#000000",
-        },
       },
     ],
   ],
-  extra: {
-    eas: {
-      projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2"
-    }
-  },
   experiments: {
-    // [重要修正] 暫時關閉 React Compiler 以解決 react/compiler-runtime 錯誤
-    reactCompiler: false,
+    // [必要時可修正] 暫時關閉 React Compiler 以解決 react/compiler-runtime 錯誤
+    //reactCompiler: false,
     typedRoutes: true,
   },
+  extra: {
+    router: {
+      origin: false,
+    },
+    eas: {
+      projectId: "3487f8cc-8b3d-4260-9366-f08466601402",
+    },
+  },
+  owner: "easonliu714",
 };
 
 export default config;
