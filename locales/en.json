@@ -1,4 +1,7 @@
 {
   "CFBundleDisplayName": "Food Tracker",
-  "CFBundleName": "Food Tracker"
+  "CFBundleName": "Food Tracker",
+  "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
+  "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
+  "NSMicrophoneUsageDescription": "This app does not require microphone access."
 }
