@@ -1,0 +1,7 @@
+{
+  "CFBundleDisplayName": "栄養管理",
+  "CFBundleName": "栄養管理",
+  "NSCameraUsageDescription": "$(PRODUCT_NAME) がカメラを使って食べ物の写真を撮影したり、バーコードをスキャンしたりできるようにします。",
+  "NSPhotoLibraryUsageDescription": "$(PRODUCT_NAME) がフォトアルバムにアクセスして食べ物の写真を選択できるようにします。",
+  "NSMicrophoneUsageDescription": "このアプリケーションはマイクを必要としません。"
+}
