@@ -20,6 +20,8 @@ import * as DocumentPicker from 'expo-document-picker';
 
 // [FIX] 根據錯誤訊息，從 legacy 引入 FileSystem API
 import { cacheDirectory, writeAsStringAsync, readAsStringAsync, getInfoAsync, makeDirectoryAsync, copyAsync, documentDirectory } from 'expo-file-system/legacy';
+// [修改] 引入 grid 存取函式
+import { saveSettings, getSettings, getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -64,7 +66,7 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [修改] 備份功能：加入 activityLogs
+  // [修改] 備份功能：加入 activityLogs ,[新增] 讀取 Grid 設定
   const handleBackup = async () => {
       setLoading(true);
       try {
@@ -75,11 +77,16 @@ export default function ProfileScreen() {
           const metrics = await db.select().from(dailyMetrics);
           // [新增] 讀取運動紀錄
           const activities = await db.select().from(activityLogs);
-
+          // [新增] 讀取 Grid 設定
+          const gridLayout = await getAnalysisGrid();
+        
           const backupData = {
               version: 1,
               timestamp: new Date().toISOString(),
-              data: { users, foods, logs, metrics, activities }
+              data: { 
+                  users, foods, logs, metrics, activities,
+                  gridLayout // [新增] 寫入備份檔
+              }
           };
 
           // 2. 寫入暫存檔案 (使用 legacy API)
@@ -178,6 +185,11 @@ export default function ProfileScreen() {
                               createdAt: createdAt ? new Date(createdAt) : new Date(),
                               updatedAt: new Date()
                           }).where(eq(userProfiles.id, profileId));
+                      }
+
+                      // [新增] 7. 還原 Grid 設定
+                      if (backup.data.gridLayout) {
+                          await saveAnalysisGrid(backup.data.gridLayout);
                       }
 
                       Alert.alert(t('success', lang), t('restore_success_msg', lang));
