@@ -14,6 +14,8 @@ import { t, useLanguage } from "@/lib/i18n";
 import { db } from "@/lib/db"; 
 import { dailyMetrics, foodLogs, activityLogs, userProfiles } from "@/drizzle/schema";
 import { desc, gte, lte, and } from "drizzle-orm";
+// [新增] 引入存取函式
+import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage"; 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 32; // Card padding * 2
@@ -72,7 +74,7 @@ export default function AnalysisScreen() {
       avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0
   });
 
-  // Grid System State
+  // [修改] Grid System State
   const [gridSlots, setGridSlots] = useState<(StatKey | null)[]>([
     'avgIntake', 'avgBurned', 'avgNet', 
     'avgWeight', 'avgBodyFat', 'totalSteps',
@@ -274,7 +276,22 @@ export default function AnalysisScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [period, customStart, customEnd]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // [新增] 畫面載入時，讀取已儲存的佈局
+  useEffect(() => {
+      const loadGridSettings = async () => {
+          const savedSlots = await getAnalysisGrid();
+          if (savedSlots && Array.isArray(savedSlots) && savedSlots.length > 0) {
+              setGridSlots(savedSlots);
+          }
+      };
+      loadGridSettings();
+  }, []);
+
+  // [新增] 封裝儲存邏輯的 Helper
+  const updateAndSaveGrid = (newSlots: (StatKey | null)[]) => {
+      setGridSlots(newSlots);
+      saveAnalysisGrid(newSlots); // 自動儲存
+  };
 
   // Zoom Logic
   const onPinchEvent = (event: any) => {
@@ -292,6 +309,7 @@ export default function AnalysisScreen() {
       setIsEditMode(true);
   };
 
+  // [修改] Grid Interactions - 交換位置
   const handleGridPress = (index: number) => {
       if (!isEditMode) return;
       if (selectedSlotIndex === null) {
@@ -301,20 +319,27 @@ export default function AnalysisScreen() {
           const temp = newSlots[selectedSlotIndex];
           newSlots[selectedSlotIndex] = newSlots[index];
           newSlots[index] = temp;
-          setGridSlots(newSlots);
+          updateAndSaveGrid(newSlots); // [修改] 使用封裝函式
           setSelectedSlotIndex(null); 
       }
   };
 
+  // [修改] 刪除方塊
   const handleDeleteSlot = (index: number) => {
       const newSlots = [...gridSlots];
       newSlots[index] = null;
-      setGridSlots(newSlots);
+      updateAndSaveGrid(newSlots); // [修改] 使用封裝函式
   };
 
-  const handleAddPress = (index: number) => {
-      setTargetAddIndex(index);
-      setShowAddModal(true);
+  // [修改] 新增方塊
+  const selectStatToAdd = (key: StatKey) => {
+      if (targetAddIndex !== null) {
+          const newSlots = [...gridSlots];
+          newSlots[targetAddIndex] = key;
+          updateAndSaveGrid(newSlots); // [修改] 使用封裝函式
+          setShowAddModal(false);
+          setTargetAddIndex(null);
+      }
   };
 
   const selectStatToAdd = (key: StatKey) => {
