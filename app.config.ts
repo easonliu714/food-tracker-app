@@ -27,6 +27,7 @@ const config: ExpoConfig = {
   // [iOS 語系設定] 引入語系檔
   locales: {
     "zh-Hant": "./locales/zh-Hant.json",
+    "zh-ch": "./locales/zh-ch.json",
     "en": "./locales/en.json",
     // 若有日韓語需求可在此新增
     "ja": "./locales/ja.json",
