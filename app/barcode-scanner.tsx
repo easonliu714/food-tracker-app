@@ -8,6 +8,7 @@ import { t, useLanguage } from "@/lib/i18n";
 import { db } from "@/lib/db";
 import { foodItems } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
+import { desc } from "drizzle-orm"; // 記得引入 desc
 
 const { width } = Dimensions.get("window");
 const SCAN_SIZE = width * 0.7;
@@ -40,8 +41,13 @@ export default function BarcodeScannerScreen() {
 
     try {
         // 1. 優先查詢 SQLite 本機資料庫
-        const localItems = await db.select().from(foodItems).where(eq(foodItems.barcode, data)).limit(1);
-        
+        // [修改] 加入 orderBy(desc(foodItems.updatedAt)) 確保抓到最新的一筆
+        const localItems = await db.select()
+            .from(foodItems)
+            .where(eq(foodItems.barcode, data))
+            .orderBy(desc(foodItems.updatedAt)) 
+            .limit(1);
+      
         if (localItems.length > 0) {
             const localProd = localItems[0];
             const productData = {
