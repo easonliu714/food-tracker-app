@@ -542,8 +542,9 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            data={[]}             // ✅ [新增這行] 必須給予空陣列，避免 "reduce of undefined" 錯誤
-                            stackData={chartData} // ✅ 保留這行：這是主要的數據來源
+                            // 修正：產生與 stackData 長度相同的 dummy data，避免 reduce undefined 錯誤
+                            data={chartData.map(() => ({ value: 0 }))}
+                            stackData={chartData}
                             barWidth={barWidth}
                             spacing={spacing}
                             initialSpacing={10}
