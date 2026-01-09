@@ -4,14 +4,16 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
-// [修改] 暫時註解掉這一行，這是閃退的最大嫌疑犯
-// import "react-native-reanimated";
+import { View, ActivityIndicator, Platform } from "react-native";
+// [修正 1] 恢復 Reanimated 引入，這能解決分析頁面一直轉圈的問題
+import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { initDatabase } from "@/lib/db";
 import { Colors } from "@/constants/theme";
 import { SessionProvider } from "@/hooks/use-auth"; 
+// [修正 2] 引入 Health Connect 初始化函式
+import { initialize } from "react-native-health-connect";
 
 // 防止 Splash Screen 自動隱藏，直到資源載入完成
 SplashScreen.preventAutoHideAsync();
@@ -28,24 +30,31 @@ export default function RootLayout() {
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
-  // 1. 初始化資料庫
+  // 1. 初始化資料庫 & Health Connect
   useEffect(() => {
     async function prepare() {
       try {
+        // A. 初始化資料庫
         await initDatabase(); 
         console.log("Database initialized from RootLayout");
+
+        // B. [修正 2] 預先初始化 Health Connect (僅限 Android)
+        // 這能避免之後呼叫權限時發生 "lateinit property not initialized" 閃退
+        if (Platform.OS === 'android') {
+            const isInitialized = await initialize();
+            console.log("Health Connect Global Init:", isInitialized);
+        }
+
       } catch (e) {
-        // [修正 2] 捕捉錯誤並記錄，但不阻止 App 啟動流程
-        console.warn("DB Init Error:", e);
+        console.warn("Init Error:", e);
       } finally {
-        // 確保無論成功失敗，都標記為 Ready，避免卡死在 Splash Screen
         setDbReady(true); 
       }
     }
     prepare();
   }, []);
 
-  // 2. 隱藏 Splash Screen (當字型與 DB 都 OK 時)
+  // 2. 隱藏 Splash Screen
   useEffect(() => {
     if (loaded && dbReady) {
       SplashScreen.hideAsync();
@@ -72,7 +81,7 @@ export default function RootLayout() {
           
           {/* 其他功能頁面 */}
           <Stack.Screen name="camera" options={{ headerShown: false }} />
-          <Stack.Screen name="food-recognition" options={{ title: "識別結果" }} />
+          <Stack.Screen name="food-recognition" options={{ title: "識別結果" }} /> 
           <Stack.Screen name="barcode-scanner" options={{ headerShown: false }} />
           <Stack.Screen name="barcode-product" options={{ title: "產品詳情" }} />
           <Stack.Screen name="food-editor" options={{ headerShown: false }} />

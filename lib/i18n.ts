@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSettings, saveSettings } from './storage';
 import { create } from 'zustand';
+import { se } from 'date-fns/locale';
 
 export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
@@ -45,14 +46,18 @@ export const TRANSLATIONS = {
     body_metrics: "身體數值", record_metrics: "+ 紀錄", target_weight: "目標體重", target_body_fat: "目標體脂",
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動", today: "今天", confirm: "確認",
+    sleep: "睡眠",
     
+    // Water
+    water_intake: "喝水紀錄", tap_to_add_water: "點擊以新增喝水紀錄",
+
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
     scan_hint: "請將條碼對準框內",allow: "允許",
     
     // Meals
     breakfast: "早餐", lunch: "午餐", dinner: "晚餐", afternoon_tea: "下午茶", late_night: "宵夜", snack: "點心", no_records: "尚無紀錄",
-    
+
     // Nutrients
     calories: "熱量", protein: "蛋白質", fat: "脂肪", carbs: "碳水", sodium: "鈉",
     sugar: "糖", fiber: "膳食纖維", saturated_fat: "飽和脂肪", trans_fat: "反式脂肪", cholesterol: "膽固醇",
@@ -75,7 +80,8 @@ export const TRANSLATIONS = {
     birth_date: "出生日期", height: "身高", weight: "體重", body_fat: "體脂率",
     target_goals: "目標設定", training_goal: "訓練目標", activity_level: "日常活動量", save_settings: "儲存設定",
     api_key_placeholder: "貼上您的 API Key", get_api_key: "取得 API Key", test_key: "測試 Key", test_key_first: "請先測試 API Key", current_model: "當前模型", language: "語言", 
-    
+    notifications: "通知設定",
+
     lose_weight: "減重", lose_weight_desc: "熱量赤字，專注減脂",
     maintain: "維持", maintain_desc: "維持目前體重與體態",
     gain_weight: "增重", gain_weight_desc: "熱量盈餘，專注增肌",
@@ -175,7 +181,11 @@ export const TRANSLATIONS = {
     body_metrics: "身体数值", record_metrics: "+ 记录", target_weight: "目标体重", target_body_fat: "目标体脂",
     intake: "摄入", burned: "消耗", net_intake_pct: "净摄入 %", intake_target: "摄入/目标", 
     quick_record: "常用食物", no_recent_foods: "暂无常用记录", exercise: "运动", quick_add_activity: "常用运动", today: "今天", confirm: "确认",
-    
+    seep: "睡眠",
+
+    // Water
+    water_intake: "喝水记录", tap_to_add_water: "点击以新增喝水记录",
+
     // Actions
     camera: "拍照", scan_barcode: "扫码", manual_input: "手输", gallery: "相册",
     scan_hint: "请将条码对准框内", allow: "允许",

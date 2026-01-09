@@ -11,7 +11,8 @@ import {
   RefreshControl,
   Text,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -32,7 +33,6 @@ import { t, useLanguage } from "@/lib/i18n";
 import { db, getLatestTwoDailyMetrics, duplicateFoodLog, getFrequentActivities, getRangeStats } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 
-// [新增] 引入 Health Connect
 import { initHealthConnect, getHealthData } from "@/lib/health";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -60,12 +60,13 @@ export default function HomeScreen() {
   
   // 飲水狀態
   const [waterMl, setWaterMl] = useState(0);
-  const [waterGoal, setWaterGoal] = useState(2000); // [修改] 改為 State，動態計算
+  const [waterGoal, setWaterGoal] = useState(2000); 
   const WATER_CUP_SIZE = 500;
 
-  // [新增] Health Connect 顯示數據
+  // Health Connect 顯示數據
   const [healthSteps, setHealthSteps] = useState(0);
   const [healthSleep, setHealthSleep] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false); // [新增] 同步狀態
 
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
   const [targetWeight, setTargetWeight] = useState(0);
@@ -84,23 +85,58 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
-  // [新增] Health Connect 同步邏輯
-  const syncHealthData = async (dateStr: string) => {
+  // [新增] 安全的同步觸發器 (避免啟動崩潰)
+  const safeSyncHealth = async () => {
+      if (isSyncing) return;
+      setIsSyncing(true);
       try {
-          const authorized = await initHealthConnect();
-          if (!authorized) return;
+          const dateStr = format(currentDate, "yyyy-MM-dd");
+          // 僅同步當天或過去
+          if (new Date(dateStr) <= new Date()) {
+              await syncHealthData(dateStr);
+          }
+      } catch (e) {
+          console.log("Safe Sync Error:", e);
+      } finally {
+          setIsSyncing(false);
+      }
+  };
 
-          // 設定當天的開始與結束時間
+  // [修改] 暫時註解掉自動同步，避免啟動時原生模組未就緒導致閃退
+  // useEffect(() => {
+  //     const timer = setTimeout(() => {
+  //         safeSyncHealth();
+  //     }, 2000); 
+  //     return () => clearTimeout(timer);
+  // }, [currentDate]);
+
+
+  const syncHealthData = async (dateStr: string) => {
+      if (isSyncing) return;
+      setIsSyncing(true);
+      try {
+          // [修改] 直接呼叫我們強化過的 initHealthConnect
+          const authorized = await initHealthConnect();
+          
+          if (!authorized) {
+              Alert.alert(
+                  t('tip', lang), 
+                  "無法連結 Health Connect。\n請確認：\n1. 已安裝 Google Health Connect (或內建)\n2. 已賦予讀取權限",
+                  [{ text: "OK" }]
+              );
+              setIsSyncing(false);
+              return;
+          }
+
           const start = startOfDay(new Date(dateStr));
           const end = endOfDay(new Date(dateStr));
           
           const { steps, sleep } = await getHealthData(start, end);
           
-          // 1. 處理步數 (加總)
+          // 1. 處理步數
           const totalSteps = steps.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
           if (totalSteps > 0) {
               setHealthSteps(totalSteps);
-              // 同步到 activityLogs (作為一筆特殊紀錄，避免重複則先檢查)
               const existingSteps = await db.select().from(activityLogs).where(and(eq(activityLogs.date, dateStr), eq(activityLogs.activityName, "Daily Steps")));
               if (existingSteps.length > 0) {
                   await db.update(activityLogs).set({ steps: totalSteps, caloriesBurned: totalSteps * 0.04 }).where(eq(activityLogs.id, existingSteps[0].id));
@@ -111,14 +147,13 @@ export default function HomeScreen() {
                       activityName: "Daily Steps",
                       category: "walking",
                       durationMinutes: 0,
-                      caloriesBurned: totalSteps * 0.04, // 粗估 1步 0.04卡
+                      caloriesBurned: totalSteps * 0.04,
                       steps: totalSteps
                   });
               }
           }
 
-          // 2. 處理睡眠 (加總時數)
-          // SleepSession 通常包含 title, notes, startTime, endTime
+          // 2. 處理睡眠
           let totalSleepHours = 0;
           sleep.forEach((s: any) => {
               const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
@@ -128,7 +163,6 @@ export default function HomeScreen() {
           if (totalSleepHours > 0) {
               const fixedSleep = parseFloat(totalSleepHours.toFixed(1));
               setHealthSleep(fixedSleep);
-              // 同步到 dailyMetrics
               const existingMetrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
               if (existingMetrics.length > 0) {
                   await db.update(dailyMetrics).set({ sleepHours: fixedSleep }).where(eq(dailyMetrics.id, existingMetrics[0].id));
@@ -136,9 +170,15 @@ export default function HomeScreen() {
                   await db.insert(dailyMetrics).values({ date: dateStr, sleepHours: fixedSleep });
               }
           }
+          // 若成功讀取到資料
+          Alert.alert(t('success', lang), "Sync Completed");
 
-      } catch (e) {
-          console.log("Health Connect Sync Error (Expected on Simulator):", e);
+      } catch (e: any) {
+          console.log("Health Connect Sync Error:", e);
+          Alert.alert(t('error', lang), "Sync Failed: " + (e.message || "Unknown error"));
+      } finally {
+          setIsSyncing(false);
+          loadData(); 
       }
   };
 
@@ -149,13 +189,13 @@ export default function HomeScreen() {
     setDiffWeight(null);
     setDiffFat(null);
     setWaterMl(0);
-    setHealthSteps(0);
-    setHealthSleep(0);
+    // setHealthSteps(0); // 暫不重置，避免閃爍
+    // setHealthSleep(0);
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
 
-      // 1. 載入個人目標 & 計算飲水目標
+      // 1. 載入個人目標
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -169,18 +209,11 @@ export default function HomeScreen() {
         setTargetWeight(p.targetWeightKg || 0);
         setTargetBodyFat(p.targetBodyFat || 0);
         
-        // [新增] 動態計算飲水目標: 體重 * 33ml
         const dynamicWater = Math.round((p.currentWeightKg || 60) * 33);
         setWaterGoal(dynamicWater);
       }
 
-      // [新增] 嘗試同步 Health Connect 數據
-      // 注意: 僅當天或過去日期才同步
-      if (new Date(dateStr) <= new Date()) {
-         await syncHealthData(dateStr);
-      }
-
-      // 2. 身體數值 (包含體重、體脂、飲水、睡眠)
+      // 2. 身體數值
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
@@ -189,6 +222,8 @@ export default function HomeScreen() {
         setBodyFat(curF > 0 ? String(curF) : "");
         setWaterMl(metricsRes[0].waterMl || 0);
         if (metricsRes[0].sleepHours) setHealthSleep(metricsRes[0].sleepHours);
+      } else {
+          setHealthSleep(0);
       }
 
       const latestTwo = await getLatestTwoDailyMetrics();
@@ -229,9 +264,9 @@ export default function HomeScreen() {
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
       
-      // [新增] 如果 DB 中有步數紀錄，優先顯示 DB 的 (因為可能包含手動輸入或已同步)
       const stepLog = activityRes.find(a => a.activityName === "Daily Steps");
       if (stepLog && stepLog.steps) setHealthSteps(stepLog.steps);
+      else setHealthSteps(0);
 
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
@@ -303,7 +338,7 @@ export default function HomeScreen() {
       } catch(e) { console.error("Water update failed", e); }
   };
 
-  // --- 客製化月曆 Modal (保留原始邏輯) ---
+  // --- 客製化月曆 Modal ---
   const CustomCalendarModal = () => {
     const [viewDate, setViewDate] = useState(currentDate);
     const [monthStats, setMonthStats] = useState<Record<string, any>>({});
@@ -420,28 +455,64 @@ export default function HomeScreen() {
 
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
+  // [修改] 身體數值卡片：加大、恢復目標體脂、底部步數/睡眠
   const renderBodyMetricsCard = () => (
-    <ThemedView style={styles.card}>
-      <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:12}}><ThemedText type="defaultSemiBold">{t('body_metrics',lang)}</ThemedText><TouchableOpacity onPress={handleSaveMetrics}><ThemedText style={{color:theme.tint,fontSize:14}}>{t('record_metrics',lang)}</ThemedText></TouchableOpacity></View>
-      <View style={{flexDirection:'row',justifyContent:'space-between'}}>
-        <View>
-            <View style={{flexDirection:'row',alignItems:'center'}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>kg</ThemedText>{renderDiffBadge(diffWeight,'kg')}</View>
-            <View style={{flexDirection:'row',alignItems:'center',marginTop:8}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>%</ThemedText>{renderDiffBadge(diffFat,'%')}</View>
-        </View>
-        <View style={{justifyContent:'space-around',alignItems:'flex-end'}}>
-            <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)} {targetWeight} kg</ThemedText>
-            {/* [新增] 顯示步數與睡眠 */}
-            <View style={{flexDirection:'row', alignItems:'center', marginTop:4, gap:8}}>
-                <View style={{flexDirection:'row', alignItems:'center'}}><Ionicons name="footsteps" size={12} color="#FF9500"/><ThemedText style={{fontSize:12, marginLeft:2}}>{healthSteps}</ThemedText></View>
-                <View style={{flexDirection:'row', alignItems:'center'}}><Ionicons name="bed" size={12} color="#5856D6"/><ThemedText style={{fontSize:12, marginLeft:2}}>{healthSleep}h</ThemedText></View>
+    <ThemedView style={[styles.card, { paddingVertical: 20 }]}> 
+      <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
+          <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
+          
+          <View style={{flexDirection:'row', gap: 12}}>
+             {/* 同步按鈕 */}
+             <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{padding:4}}>
+                {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={20} color={theme.tint} />}
+             </TouchableOpacity>
+             {/* 紀錄按鈕 */}
+             <TouchableOpacity onPress={handleSaveMetrics}>
+                <ThemedText style={{color:theme.tint,fontSize:16, fontWeight:'600'}}>{t('record_metrics',lang)}</ThemedText>
+             </TouchableOpacity>
+          </View>
+      </View>
+
+      <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
+        {/* 左側：輸入區 */}
+        <View style={{gap: 12}}>
+            <View style={{flexDirection:'row',alignItems:'center'}}>
+                <ThemedText style={{width: 60, fontSize: 16}}>{t('weight', lang)}</ThemedText>
+                <TextInput style={[styles.metricInput,{color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                <ThemedText style={{fontSize:16}}>kg</ThemedText>
+                {renderDiffBadge(diffWeight,'kg')}
+            </View>
+            <View style={{flexDirection:'row',alignItems:'center'}}>
+                <ThemedText style={{width: 60, fontSize: 16}}>{t('body_fat', lang)}</ThemedText>
+                <TextInput style={[styles.metricInput,{color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                <ThemedText style={{fontSize:16}}>% </ThemedText>
+                {renderDiffBadge(diffFat,'%')}
             </View>
         </View>
+
+        {/* 右側：目標區 (恢復顯示) */}
+        <View style={{justifyContent:'center', alignItems:'flex-end', gap: 8}}>
+            <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)}: {targetWeight} kg</ThemedText>
+            <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)}: {targetBodyFat} %</ThemedText>
+        </View>
+      </View>
+
+      {/* 底部：Health Connect 數據 (步數 & 睡眠) */}
+      <View style={{borderTopWidth:1, borderColor:'#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+              <Ionicons name="footsteps" size={18} color="#FF9500"/>
+              <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSteps} {t('steps', lang) || "steps"}</ThemedText>
+          </View>
+          <View style={{height: '100%', width:1, backgroundColor:'#eee'}}/>
+          <View style={{flexDirection:'row', alignItems:'center'}}>
+              <Ionicons name="bed" size={18} color="#5856D6"/>
+              <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSleep} h {t('sleep', lang) || "sleep"}</ThemedText>
+          </View>
       </View>
     </ThemedView>
   );
 
   const renderWaterSection = () => {
-      // [修改] 使用動態目標
       const totalCups = Math.ceil(waterGoal / WATER_CUP_SIZE);
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
 

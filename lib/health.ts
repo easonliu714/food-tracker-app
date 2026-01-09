@@ -1,32 +1,66 @@
-import { initialize, requestPermission, readRecords } from 'react-native-health-connect';
+import {
+  initialize,
+  requestPermission,
+  readRecords,
+  getSdkStatus,
+  SdkAvailabilityStatus,
+} from "react-native-health-connect";
+import { Platform } from "react-native";
 
-export async function initHealthConnect() {
-  // 1. 初始化
-  const isInitialized = await initialize();
-  if (!isInitialized) return false;
+export const initHealthConnect = async () => {
+  if (Platform.OS !== "android") return false;
 
-  // 2. 請求權限
-  const permissions = [
-    { accessType: 'read', recordType: 'Steps' },
-    { accessType: 'read', recordType: 'SleepSession' },
-    { accessType: 'read', recordType: 'ExerciseSession' },
-  ];
-  
-  // 3. 執行授權流程
-  const granted = await requestPermission(permissions);
-  return granted;
-}
+  try {
+    // 1. 檢查 SDK 狀態
+    const status = await getSdkStatus();
+    if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
+      console.log("Health Connect SDK not available:", status);
+      return false;
+    }
 
-export async function getHealthData(startTime: Date, endTime: Date) {
-  // 讀取步數
-  const steps = await readRecords('Steps', {
-    timeRangeFilter: { operator: 'between', startTime: startTime.toISOString(), endTime: endTime.toISOString() }
-  });
+    // 2. 嘗試請求權限
+    // 由於 _layout.tsx 已經執行過 initialize()，這裡直接請求權限應該是安全的。
+    // 但為了保險，我們還是可以再 call 一次 initialize (它是冪等的，重複 call 沒關係)
+    await initialize(); 
 
-  // 讀取睡眠
-  const sleep = await readRecords('SleepSession', {
-    timeRangeFilter: { operator: 'between', startTime: startTime.toISOString(), endTime: endTime.toISOString() }
-  });
+    const permissions = [
+      { accessType: "read", recordType: "Steps" },
+      { accessType: "read", recordType: "SleepSession" },
+      { accessType: "read", recordType: "ExerciseSession" },
+    ] as const;
 
-  return { steps, sleep };
-}
+    const granted = await requestPermission(permissions);
+    return granted.length > 0;
+
+  } catch (e) {
+    console.error("Health Connect Init Error:", e);
+    return false;
+  }
+};
+
+export const getHealthData = async (startTime: Date, endTime: Date) => {
+  if (Platform.OS !== "android") return { steps: [], sleep: [] };
+
+  try {
+    const steps = await readRecords("Steps", {
+      timeRangeFilter: {
+        operator: "between",
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      },
+    });
+
+    const sleep = await readRecords("SleepSession", {
+      timeRangeFilter: {
+        operator: "between",
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      },
+    });
+
+    return { steps, sleep };
+  } catch (e) {
+    console.error("Fetch Health Data Error:", e);
+    return { steps: [], sleep: [] };
+  }
+};

@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { saveSettings, getSettings, getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
+import { saveSettings, getSettings, getAnalysisGrid } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
 import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs, reminderSettings } from "@/drizzle/schema"; 
@@ -17,6 +17,8 @@ import { format, isValid, differenceInDays } from "date-fns";
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Notifications from 'expo-notifications'; 
+// [修正] 引入 Notification 類型定義
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
 
 import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file-system/legacy';
 
@@ -58,7 +60,7 @@ export default function ProfileScreen() {
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
 
-  // [修改] 提醒設定狀態：包含新的 Start/End Time
+  // 提醒設定狀態：包含新的 Start/End Time
   const defaultTime = (h: number) => new Date(new Date().setHours(h, 0, 0, 0));
   const [reminders, setReminders] = useState({
       breakfast: { enabled: false, time: defaultTime(8) },
@@ -87,14 +89,24 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
+  // [修正] 初始化通知頻道 (Android 必須)
   useEffect(() => {
-    async function requestPermissions() {
+    async function initNotifications() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
         console.log('Notification permissions denied');
       }
+
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
     }
-    requestPermissions();
+    initNotifications();
   }, []);
 
   const handleBackup = async () => {
@@ -166,7 +178,9 @@ export default function ProfileScreen() {
                           const { id, createdAt, updatedAt, ...userData } = u;
                           await db.update(userProfiles).set({ ...userData, createdAt: new Date(createdAt), updatedAt: new Date() }).where(eq(userProfiles.id, profileId));
                       }
-                      if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
+                      
+                      // 移除 saveAnalysisGrid 恢復，因可能是舊版不相容
+                      // if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
                       
                       if (backup.data.reminders?.length) {
                          await db.delete(reminderSettings);
@@ -206,7 +220,6 @@ export default function ProfileScreen() {
           setTrainingGoal(p.goal || "maintain");
         }
 
-        // [修改] 載入提醒設定 (包含 Start/End Time)
         const reminderRes = await db.select().from(reminderSettings).limit(1);
         if (reminderRes.length > 0) {
             const r = reminderRes[0];
@@ -246,15 +259,24 @@ export default function ProfileScreen() {
     } else { Alert.alert(t('error', lang), res.error || "Invalid Key"); }
   };
 
-  // [修改] 排程通知函式：支援固定間隔邏輯
+  // [修正] 排程通知函式：支援固定間隔邏輯，並符合 Expo 通知規範
   const scheduleLocalNotifications = async () => {
       // 1. 取消所有舊通知
       await Notifications.cancelAllScheduledNotificationsAsync();
       
       const scheduleDaily = async (title: string, body: string, time: Date) => {
           await Notifications.scheduleNotificationAsync({
-              content: { title, body },
-              trigger: { hour: time.getHours(), minute: time.getMinutes(), repeats: true },
+              content: { 
+                  title, 
+                  body,
+                  sound: true
+              },
+              trigger: { 
+                  type: SchedulableTriggerInputTypes.DAILY,
+                  hour: time.getHours(), 
+                  minute: time.getMinutes(), 
+                  channelId: 'default' // 必須指定頻道
+              },
           });
       };
 
@@ -273,7 +295,7 @@ export default function ProfileScreen() {
           let currentMinutes = start.getHours() * 60 + start.getMinutes();
           const endMinutes = end.getHours() * 60 + end.getMinutes();
 
-          // 若結束時間小於開始時間，視為跨日，暫不支援跨日複雜排程，簡單處理為當日結束
+          // 若結束時間小於開始時間，暫不支援跨日，簡單略過
           if (endMinutes > currentMinutes) {
               // 迴圈排程每一個時間點
               while (currentMinutes <= endMinutes) {
@@ -283,9 +305,15 @@ export default function ProfileScreen() {
                   await Notifications.scheduleNotificationAsync({
                       content: { 
                           title: "Time to Move & Drink!", 
-                          body: "Stand up, stretch, and drink a glass of water." 
+                          body: "Stand up, stretch, and drink a glass of water.",
+                          sound: true
                       },
-                      trigger: { hour: h, minute: m, repeats: true },
+                      trigger: { 
+                          type: SchedulableTriggerInputTypes.DAILY,
+                          hour: h, 
+                          minute: m, 
+                          channelId: 'default' // 必須指定頻道
+                      },
                   });
                   
                   currentMinutes += intervalMins;
@@ -324,7 +352,7 @@ export default function ProfileScreen() {
         if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
         else await db.insert(userProfiles).values(profileData);
 
-        // [修改] 儲存提醒設定 (含 Start/End Time)
+        // 儲存提醒設定 (含 Start/End Time)
         const fmtTime = (d: Date) => format(d, 'HH:mm');
         const reminderData = {
             breakfastReminderEnabled: reminders.breakfast.enabled,
@@ -352,7 +380,6 @@ export default function ProfileScreen() {
   const onBirthDateChange = (event: any, selectedDate?: Date) => { setShowDatePicker(false); if (selectedDate) setBirthDate(selectedDate); };
   const onTargetDateChange = (event: any, selectedDate?: Date) => { setShowTargetDatePicker(false); if (selectedDate) setTargetDate(selectedDate); };
   
-  // [修改] 統一的時間變更處理器
   const onTimeChange = (type: 'breakfast'|'lunch'|'dinner'|'waterStart'|'waterEnd', event: any, date?: Date) => {
       setShowTimePicker(null);
       if (date) {
@@ -361,7 +388,6 @@ export default function ProfileScreen() {
           } else if (type === 'waterEnd') {
               setReminders(prev => ({...prev, water: {...prev.water, endTime: date}}));
           } else {
-              // Meal times
               setReminders(prev => ({...prev, [type]: {...prev[type as 'breakfast'], time: date}}));
           }
       }

@@ -1,18 +1,16 @@
+import * as SQLite from "expo-sqlite";
 import { drizzle } from "drizzle-orm/expo-sqlite";
-import { openDatabaseSync } from "expo-sqlite";
-// 1. 確保引入 desc 排序函式
 import { eq, and, gte, lte, desc, sql, asc } from "drizzle-orm"; 
-import * as schema from "../drizzle/schema";
 import { 
   userProfiles, foodItems, foodLogs, recipes, 
   reminderSettings, activityLogs, dailyMetrics 
 } from "../drizzle/schema";
 
 // 開啟本地資料庫檔案
-export const expoDb = openDatabaseSync("food_tracker.db");
+export const expoDb = SQLite.openDatabaseSync("food_tracker.db");
 
 // 初始化 Drizzle ORM
-export const db = drizzle(expoDb, { schema });
+export const db = drizzle(expoDb);
 
 // 定義目前資料庫版本，當 Schema 變更時需增加此數字
 const CURRENT_DB_VERSION = 1;
@@ -59,6 +57,8 @@ export async function initDatabase() {
           date TEXT NOT NULL,
           weight_kg REAL,
           body_fat_percentage REAL,
+          water_ml REAL DEFAULT 0,
+          sleep_hours REAL,
           note TEXT,
           created_at INTEGER
         );
@@ -70,7 +70,7 @@ export async function initDatabase() {
           barcode TEXT,
           base_amount REAL DEFAULT 100,
           base_unit TEXT DEFAULT 'g',
-          ai_summary TEXT, -- [新增] 儲存 AI 分析的組成與建議
+          ai_summary TEXT, 
           calories REAL NOT NULL,
           protein_g REAL DEFAULT 0,
           fat_g REAL DEFAULT 0,
@@ -162,36 +162,16 @@ export async function initDatabase() {
           dinner_reminder_enabled INTEGER DEFAULT 0,
           dinner_reminder_time TEXT,
           water_reminder_enabled INTEGER DEFAULT 0,
-          water_reminder_interval_minutes INTEGER DEFAULT 60
+          water_reminder_interval_minutes INTEGER DEFAULT 60,
+          water_reminder_start_time TEXT,
+          water_reminder_end_time TEXT
         );
       `);
     }
 
-    // 處理手動遷移：確保舊版本用戶也有新欄位
-    // 使用 try-catch 忽略 "duplicate column" 錯誤
-    const addColumn = async (table: string, columnDef: string) => {
-      try { await expoDb.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`); } catch (e) {}
-    };
-    
-    await addColumn("food_items", "ai_summary TEXT");
-    await addColumn("food_items", "barcode TEXT");
-    await addColumn("user_profiles", "birth_date TEXT");
-    await addColumn("user_profiles", "target_date TEXT");
-    // [新增] 飲水欄位遷移
-    await addColumn("daily_metrics", "water_ml REAL DEFAULT 0");
-    
-    // 詳細營養素欄位補全
-    const nutrients = [
-      "saturated_fat_g REAL DEFAULT 0", "trans_fat_g REAL DEFAULT 0", 
-      "sugar_g REAL DEFAULT 0", "fiber_g REAL DEFAULT 0", 
-      "cholesterol_mg REAL DEFAULT 0", "magnesium_mg REAL DEFAULT 0", 
-      "zinc_mg REAL DEFAULT 0", "iron_mg REAL DEFAULT 0"
-    ];
-
-    for (const nut of nutrients) {
-      await addColumn("food_items", nut);
-      await addColumn("food_logs", "total_" + nut);
-    }
+    // [Migration Fix] 針對舊用戶，手動檢查並新增缺少的欄位
+    // 這能解決 "no column named water_reminder_start_time" 的錯誤
+    await performMigrations();
 
     // 更新版本號
     await expoDb.execAsync(`PRAGMA user_version = ${CURRENT_DB_VERSION}`);
@@ -200,6 +180,69 @@ export async function initDatabase() {
   } catch (e) {
     console.error("[DB] Initialization failed:", e);
   }
+}
+
+// 簡易手動遷移函式
+async function performMigrations() {
+    try {
+        // 1. 檢查 reminder_settings 是否有 water_reminder_start_time
+        const reminderInfo = await expoDb.getAllAsync("PRAGMA table_info(reminder_settings)");
+        // @ts-ignore
+        const hasStartTime = reminderInfo.some((col: any) => col.name === 'water_reminder_start_time');
+        
+        if (!hasStartTime) {
+            console.log("[DB] Migrating: Adding water_reminder_start_time/end_time columns...");
+            await expoDb.execAsync(`
+                ALTER TABLE reminder_settings ADD COLUMN water_reminder_start_time TEXT;
+                ALTER TABLE reminder_settings ADD COLUMN water_reminder_end_time TEXT;
+            `);
+        }
+
+        // 2. 檢查 daily_metrics 是否有 sleep_hours
+        const metricInfo = await expoDb.getAllAsync("PRAGMA table_info(daily_metrics)");
+        // @ts-ignore
+        const hasSleep = metricInfo.some((col: any) => col.name === 'sleep_hours');
+        if (!hasSleep) {
+             console.log("[DB] Migrating: Adding sleep_hours to daily_metrics...");
+             await expoDb.execAsync(`ALTER TABLE daily_metrics ADD COLUMN sleep_hours REAL;`);
+        }
+        
+        // 3. 檢查 daily_metrics 是否有 water_ml
+        // @ts-ignore
+        const hasWater = metricInfo.some((col: any) => col.name === 'water_ml');
+        if (!hasWater) {
+             console.log("[DB] Migrating: Adding water_ml to daily_metrics...");
+             await expoDb.execAsync(`ALTER TABLE daily_metrics ADD COLUMN water_ml REAL DEFAULT 0;`);
+        }
+
+        // 4. 詳細營養素欄位補全 (針對 food_items 與 food_logs)
+        const itemInfo = await expoDb.getAllAsync("PRAGMA table_info(food_items)");
+        // @ts-ignore
+        const hasSatFat = itemInfo.some((col: any) => col.name === 'saturated_fat_g');
+        
+        if (!hasSatFat) {
+            console.log("[DB] Migrating: Adding detailed nutrients...");
+            const nutrients = [
+              "saturated_fat_g REAL DEFAULT 0", "trans_fat_g REAL DEFAULT 0", 
+              "sugar_g REAL DEFAULT 0", "fiber_g REAL DEFAULT 0", 
+              "cholesterol_mg REAL DEFAULT 0", "magnesium_mg REAL DEFAULT 0", 
+              "zinc_mg REAL DEFAULT 0", "iron_mg REAL DEFAULT 0"
+            ];
+            for (const nut of nutrients) {
+              try { await expoDb.execAsync(`ALTER TABLE food_items ADD COLUMN ${nut}`); } catch(e) {}
+              try { await expoDb.execAsync(`ALTER TABLE food_logs ADD COLUMN total_${nut.split(' ')[0]} REAL DEFAULT 0`); } catch(e) {}
+            }
+        }
+        
+        // 5. 確保 AI Summary 與 Barcode 存在
+        // @ts-ignore
+        if (!itemInfo.some((c:any) => c.name === 'ai_summary')) await expoDb.execAsync(`ALTER TABLE food_items ADD COLUMN ai_summary TEXT`);
+        // @ts-ignore
+        if (!itemInfo.some((c:any) => c.name === 'barcode')) await expoDb.execAsync(`ALTER TABLE food_items ADD COLUMN barcode TEXT`);
+
+    } catch (e) {
+        console.warn("[DB] Migration warning (ignore if columns exist):", e);
+    }
 }
 
 // =========================================================
@@ -229,14 +272,13 @@ export async function updateUserProfile(data: Partial<typeof userProfiles.$infer
     .where(eq(userProfiles.id, profile.id));
 }
 
-// [新增] 取得最近的兩筆身體數值 (用於比較差異)
 export async function getLatestTwoDailyMetrics() {
   const result = await db
     .select()
     .from(dailyMetrics)
     .orderBy(desc(dailyMetrics.date))
     .limit(2);
-  return result; // result[0] 為最新, result[1] 為前一筆
+  return result; 
 }
 
 // --- Food Items ---
@@ -246,13 +288,12 @@ export async function getFoodItemById(id: number) {
   return result[0] || null;
 }
 
-// 2. 修改 getFoodItemByBarcode 函式
 export async function getFoodItemByBarcode(barcode: string) {
   const result = await db
     .select()
     .from(foodItems)
     .where(eq(foodItems.barcode, barcode))
-    .orderBy(desc(foodItems.updatedAt)); // [新增] 強制依更新時間倒序排列，確保抓到最新的一筆
+    .orderBy(desc(foodItems.updatedAt)); 
   
   return result[0] || null;
 }
@@ -292,7 +333,6 @@ export async function createFoodLog(data: typeof foodLogs.$inferInsert) {
   return result[0].insertedId;
 }
 
-// [新增] 複製飲食紀錄 (產生一筆內容相同但時間為現在的新紀錄)
 export async function duplicateFoodLog(originalLogId: number) {
   const originalLog = await db.select().from(foodLogs).where(eq(foodLogs.id, originalLogId)).limit(1);
   if (!originalLog || originalLog.length === 0) return null;
@@ -301,7 +341,6 @@ export async function duplicateFoodLog(originalLogId: number) {
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
 
-  // 移除 ID 與 時間，建立新物件
   const { id, loggedAt, date, ...rest } = log;
   
   const result = await db.insert(foodLogs).values({
@@ -390,7 +429,6 @@ export async function deleteActivityLog(id: number) {
 }
 
 export async function getFrequentActivities(limit = 5) {
-  // 取得最近 30 天的運動紀錄來分析頻率
   const rawLogs = await db.select().from(activityLogs).orderBy(desc(activityLogs.date)).limit(100);
   
   const frequency: Record<string, number> = {};
@@ -400,9 +438,8 @@ export async function getFrequentActivities(limit = 5) {
     }
   });
 
-  // 排序取出前 N 名
   const sortedNames = Object.entries(frequency)
-    .sort((a, b) => b[1] - a[1]) // 頻率高到低
+    .sort((a, b) => b[1] - a[1]) 
     .slice(0, limit)
     .map(([name]) => name);
 
@@ -411,7 +448,6 @@ export async function getFrequentActivities(limit = 5) {
 
 // [新增] 取得指定日期範圍的每日統計 (供月曆與分析頁面使用)
 export async function getRangeStats(startDateStr: string, endDateStr: string) {
-  // 1. 取得範圍內的飲食紀錄
   const logs = await db.select({
     date: foodLogs.date,
     calories: foodLogs.totalCalories
@@ -419,7 +455,6 @@ export async function getRangeStats(startDateStr: string, endDateStr: string) {
   .from(foodLogs)
   .where(and(gte(foodLogs.date, startDateStr), lte(foodLogs.date, endDateStr)));
 
-  // 2. 取得範圍內的運動紀錄
   const activities = await db.select({
     date: activityLogs.date,
     caloriesBurned: activityLogs.caloriesBurned
@@ -427,10 +462,8 @@ export async function getRangeStats(startDateStr: string, endDateStr: string) {
   .from(activityLogs)
   .where(and(gte(activityLogs.date, startDateStr), lte(activityLogs.date, endDateStr)));
 
-  // 3. 合併資料
   const stats: Record<string, { intake: number, burned: number, net: number }> = {};
   
-  // 初始化 helper
   const updateStat = (date: string, type: 'intake'|'burned', val: number) => {
       if (!stats[date]) stats[date] = { intake: 0, burned: 0, net: 0 };
       stats[date][type] += val;

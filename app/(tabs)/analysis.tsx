@@ -138,9 +138,19 @@ export default function AnalysisScreen() {
           sodium: user.sodiumTargetMg || 2300
       });
 
-      const logs = await db.select().from(foodLogs).where(and(gte(foodLogs.date, startStr), lte(foodLogs.date, endStr)));
-      const acts = await db.select().from(activityLogs).where(and(gte(activityLogs.date, startStr), lte(activityLogs.date, endStr)));
-      const metrics = await db.select().from(dailyMetrics).where(and(gte(dailyMetrics.date, startStr), lte(dailyMetrics.date, endStr)));
+      // [關鍵修改] 增加 try...catch 避免資料庫查詢錯誤導致崩潰
+      let logs: any[] = [];
+      let acts: any[] = [];
+      let metrics: any[] = [];
+      
+      try {
+          logs = await db.select().from(foodLogs).where(and(gte(foodLogs.date, startStr), lte(foodLogs.date, endStr)));
+          acts = await db.select().from(activityLogs).where(and(gte(activityLogs.date, startStr), lte(activityLogs.date, endStr)));
+          metrics = await db.select().from(dailyMetrics).where(and(gte(dailyMetrics.date, startStr), lte(dailyMetrics.date, endStr)));
+      } catch (dbErr) {
+          console.error("DB Fetch Error (Analysis):", dbErr);
+          // 若失敗，保持空陣列繼續執行，避免卡死
+      }
 
       const dateMap = new Map();
       eachDayOfInterval({ start: new Date(startStr), end: new Date(endStr) }).forEach(d => {
