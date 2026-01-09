@@ -19,7 +19,9 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   version: "1.0.13", // [修改] 更新版本號
   orientation: "portrait",
-  
+  // 建議：直接給定一個固定的 scheme 名稱，比較穩定
+  scheme: "foodtracker", // 建議改成簡單的英文單字，全部小寫
+
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
   

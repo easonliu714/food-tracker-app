@@ -310,6 +310,9 @@ export const TRANSLATIONS = {
     body_metrics: "Body Metrics", record_metrics: "+ Record", target_weight: "Target Weight", target_body_fat: "Target Body Fat",
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target",
     quick_record: "Frequent Foods", no_recent_foods: "No Frequent Records", exercise: "Exercise", quick_add_activity: "Frequent Exercises", today: "Today", confirm: "Confirm",
+    seep: "Sleep",
+    // Water
+    water_intake: "Water Intake", tap_to_add_water: "Tap to add water intake",
     // Actions
     camera: "Camera", scan_barcode: "Scan", manual_input: "Manual Input", gallery: "Gallery",
     scan_hint: "Please align the barcode within the frame",allow: "Allow",
@@ -428,7 +431,10 @@ export const TRANSLATIONS = {
     body_metrics: "身体測定", record_metrics: "+ 記録", target_weight: "目標体重", target_body_fat: "目標体脂肪率",
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動", today: "今日", confirm: "確認",
-    
+    seep: "睡眠",
+
+    // Water
+    water_intake: "水分摂取", tap_to_add_water: "タップして水分摂取を追加",
     // Actions
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
     scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
@@ -553,6 +559,9 @@ export const TRANSLATIONS = {
     body_metrics: "신체 수치", record_metrics: "+ 기록", target_weight: "목표 체중", target_body_fat: "목표 체지방",
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동", today: "오늘", confirm: "확인",
+    seep: "수면",
+    // Water
+    water_intake: "수분 섭취", tap_to_add_water: "탭하여 수분 섭취 추가",
     // Actions
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",

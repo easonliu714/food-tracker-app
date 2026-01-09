@@ -305,6 +305,12 @@ export default function AnalysisScreen() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [period, customStart, customEnd]); // Remove zoom dependencies
 
+  // 監聽依賴變化，自動載入數據
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+  // ==========================================
+
   useEffect(() => {
       const loadGridSettings = async () => {
           const savedSlots = await getAnalysisGrid();
@@ -536,8 +542,8 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            data={chartData}
-                            stackData={chartData}
+                            // ❌ 刪除這一行： data={chartData}
+                            stackData={chartData} // ✅ 保留這一行：這是堆疊圖專用的
                             barWidth={barWidth}
                             spacing={spacing}
                             initialSpacing={10}
