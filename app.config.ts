@@ -6,7 +6,7 @@ const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  appName: 'Food Tracker', // [建議] 預設名稱改為英文，作為 Fallback
+  appName: 'Food Tracker',
   appSlug: 'nutrition_tracker',
   logoUrl: 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663249409721/lBYRAahQjSJDLaqW.png',
   scheme: schemeFromBundleId,
@@ -20,16 +20,13 @@ const config: ExpoConfig = {
   version: "1.0.4",
   orientation: "portrait",
   
-  // [圖示設定] 
-  icon: "./assets/images/icon.png", // iOS 與舊版 Android 使用
+  icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
   
-  // [iOS 語系設定] 引入語系檔
   locales: {
     "zh-Hant": "./locales/zh-Hant.json",
     "zh-ch": "./locales/zh-ch.json",
     "en": "./locales/en.json",
-    // 若有日韓語需求可在此新增
     "ja": "./locales/ja.json",
     "ko": "./locales/ko.json"
   },
@@ -39,28 +36,22 @@ const config: ExpoConfig = {
     bundleIdentifier: env.iosBundleId,
     infoPlist: {
       UIBackgroundModes: ["audio"],
-      // 注意：這裡的權限說明是「預設值」(通常是英文)。
-      // 真正的多國語系文字會從 locales/*.json 中讀取並覆蓋這裡。
       NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
       NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
-      // HealthKit (若未來需要 iOS 支援)
-      // NSHealthShareUsageDescription: "Allow $(PRODUCT_NAME) to access your health data for analysis.",
-      // NSHealthUpdateUsageDescription: "Allow $(PRODUCT_NAME) to update your health data.",
     },
   },
   
   android: {
     package: env.androidPackage,
-    // [Android 圖示設定] 自適應圖示
     adaptiveIcon: {
-      foregroundImage: "./assets/images/adaptive-icon.png", // 只有 Logo 主體，透明背景
-      backgroundColor: "#ffffff", // 背景色
+      foregroundImage: "./assets/images/adaptive-icon.png",
+      backgroundColor: "#ffffff",
     },
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
-      // [新增] Google Health Connect 權限
+      // [關鍵] Google Health Connect 權限
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
@@ -89,22 +80,10 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-    // [新增] Health Connect Plugin (確保 AndroidManifest 正確設定)
+    // [關鍵] Health Connect Plugin
     "react-native-health-connect",
     
-    // [Android App 名稱多語系 Plugin]
-    [
-      "@nabbra/expo-android-app-name-localization",
-      {
-        localizedAppNames: {
-          "zh-Hant": "營養追蹤", // 繁體中文名稱
-          "en": "Food Tracker",  // 英文名稱
-          "zh-CN": "营养追踪",   // 簡體中文
-          "ja": "栄養トラッカー", // 日文
-          "ko": "영양 추적기"    // 韓文
-        }
-      }
-    ],
+    // [已移除] 導致錯誤的 nabbra/expo-android-app-name-localization 已刪除
 
     [
       "expo-notifications",
@@ -114,8 +93,6 @@ const config: ExpoConfig = {
       }
     ],
     
-    // [權限設定]
-    // 這裡設定的是「預設」語言。多語系會由 locales/zh-Hant.json 自動覆寫 iOS 的 Info.plist
     [
       "expo-camera",
       {
@@ -141,8 +118,6 @@ const config: ExpoConfig = {
     ],
   ],
   experiments: {
-    // [必要時可修正] 暫時關閉 React Compiler 以解決 react/compiler-runtime 錯誤
-    //reactCompiler: false,
     typedRoutes: true,
   },
   extra: {
