@@ -77,6 +77,18 @@ const config: ExpoConfig = {
   },
   
   plugins: [
+    // [新增] 設定 Android 建置屬性 (解決 Health Connect 版本問題)
+    [
+      "expo-build-properties",
+      {
+        android: {
+          minSdkVersion: 26,     // Health Connect 要求最低 26
+          compileSdkVersion: 34, // 建議對應 Android 14
+          targetSdkVersion: 34,
+        },
+      },
+    ],
+    
     "expo-router",
     "expo-localization",
     "expo-sqlite",
@@ -125,10 +137,10 @@ const config: ExpoConfig = {
       origin: false,
     },
     eas: {
-      projectId: "3487f8cc-8b3d-4260-9366-f08466601402",
+      projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2",
     },
   },
-  owner: "easonliu714",
+  //owner: "easonliu714",
 };
 
 export default config;
