@@ -542,8 +542,8 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            // ❌ 刪除這一行： data={chartData}
-                            stackData={chartData} // ✅ 保留這一行：這是堆疊圖專用的
+                            data={[]}             // ✅ [新增這行] 必須給予空陣列，避免 "reduce of undefined" 錯誤
+                            stackData={chartData} // ✅ 保留這行：這是主要的數據來源
                             barWidth={barWidth}
                             spacing={spacing}
                             initialSpacing={10}
