@@ -43,6 +43,9 @@ const config: ExpoConfig = {
       // 真正的多國語系文字會從 locales/*.json 中讀取並覆蓋這裡。
       NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
       NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
+      // HealthKit (若未來需要 iOS 支援)
+      // NSHealthShareUsageDescription: "Allow $(PRODUCT_NAME) to access your health data for analysis.",
+      // NSHealthUpdateUsageDescription: "Allow $(PRODUCT_NAME) to update your health data.",
     },
   },
   
@@ -57,6 +60,10 @@ const config: ExpoConfig = {
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
+      // [新增] Google Health Connect 權限
+      "android.permission.health.READ_STEPS",
+      "android.permission.health.READ_SLEEP",
+      "android.permission.health.READ_EXERCISE",
     ],
     intentFilters: [
       {
@@ -82,6 +89,8 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-localization",
     "expo-sqlite",
+    // [新增] Health Connect Plugin (確保 AndroidManifest 正確設定)
+    "react-native-health-connect",
     
     // [Android App 名稱多語系 Plugin]
     [
