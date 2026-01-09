@@ -5,8 +5,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
-// [修正 1] 恢復 Reanimated 引入，確保 UI 動畫正常 (需確保 package.json 已安裝相關依賴)
-import "react-native-reanimated";
+// [修改] 暫時註解掉這一行，這是閃退的最大嫌疑犯
+// import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { initDatabase } from "@/lib/db";
