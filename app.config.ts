@@ -77,7 +77,10 @@ const config: ExpoConfig = {
   },
   
   plugins: [
-    // [新增] 設定 Android 建置屬性 (解決 Health Connect 版本問題)
+    // [新增] 1. 引入剛剛建立的 Lint 停用插件
+    "./plugins/withDisableLinting",
+
+    // [保留] 2. Android 建置屬性 (Health Connect 需要)
     [
       "expo-build-properties",
       {
