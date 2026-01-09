@@ -18,11 +18,14 @@ export const initHealthConnect = async () => {
       return false;
     }
 
-    // 2. 嘗試請求權限
-    // 由於 _layout.tsx 已經執行過 initialize()，這裡直接請求權限應該是安全的。
-    // 但為了保險，我們還是可以再 call 一次 initialize (它是冪等的，重複 call 沒關係)
-    await initialize(); 
+    // 2. 初始化 (關鍵：必須在使用前呼叫，且最好是在 User Interaction 期間)
+    const isInitialized = await initialize();
+    if (!isInitialized) {
+        console.log("Health Connect failed to initialize");
+        return false;
+    }
 
+    // 3. 請求權限
     const permissions = [
       { accessType: "read", recordType: "Steps" },
       { accessType: "read", recordType: "SleepSession" },
@@ -42,6 +45,7 @@ export const getHealthData = async (startTime: Date, endTime: Date) => {
   if (Platform.OS !== "android") return { steps: [], sleep: [] };
 
   try {
+    // 讀取步數
     const steps = await readRecords("Steps", {
       timeRangeFilter: {
         operator: "between",
@@ -50,6 +54,7 @@ export const getHealthData = async (startTime: Date, endTime: Date) => {
       },
     });
 
+    // 讀取睡眠
     const sleep = await readRecords("SleepSession", {
       timeRangeFilter: {
         operator: "between",
