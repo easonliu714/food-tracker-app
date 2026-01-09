@@ -55,6 +55,11 @@ export default function HomeScreen() {
   const [diffWeight, setDiffWeight] = useState<number | null>(null);
   const [diffFat, setDiffFat] = useState<number | null>(null);
   
+  // [新增] 飲水狀態
+  const [waterMl, setWaterMl] = useState(0);
+  const WATER_CUP_SIZE = 500;
+  const WATER_GOAL = 2000;
+
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
   const [targetWeight, setTargetWeight] = useState(0);
   const [targetBodyFat, setTargetBodyFat] = useState(0);
@@ -78,6 +83,7 @@ export default function HomeScreen() {
     setBodyFat("");
     setDiffWeight(null);
     setDiffFat(null);
+    setWaterMl(0);
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
@@ -97,13 +103,14 @@ export default function HomeScreen() {
         setTargetBodyFat(p.targetBodyFat || 0);
       }
 
-      // 2. 身體數值
+      // 2. 身體數值 (包含體重、體脂、飲水)
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
         const curF = metricsRes[0].bodyFatPercentage || 0;
         setWeight(curW > 0 ? String(curW) : "");
         setBodyFat(curF > 0 ? String(curF) : "");
+        setWaterMl(metricsRes[0].waterMl || 0); // [新增] 讀取飲水量
       }
 
       const latestTwo = await getLatestTwoDailyMetrics();
@@ -182,6 +189,37 @@ export default function HomeScreen() {
   };
   const deleteLog = (id: number) => {
       Alert.alert(t('delete', lang), "", [{ text: t('cancel', lang), style: "cancel" }, { text: t('delete', lang), style: "destructive", onPress: async () => { await db.delete(foodLogs).where(eq(foodLogs.id, id)); loadData(); }}]);
+  };
+
+  // [新增] 飲水控制函式
+  const addWater = async () => {
+      const newAmount = waterMl + WATER_CUP_SIZE;
+      setWaterMl(newAmount); // Optimistic update
+      
+      const dateStr = format(currentDate, "yyyy-MM-dd");
+      const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+      
+      try {
+          if(existing.length > 0) {
+              await db.update(dailyMetrics).set({ waterMl: newAmount }).where(eq(dailyMetrics.id, existing[0].id));
+          } else {
+              await db.insert(dailyMetrics).values({ date: dateStr, waterMl: newAmount });
+          }
+      } catch(e) { console.error("Water update failed", e); }
+  };
+  
+  const removeWater = async () => {
+      const newAmount = Math.max(0, waterMl - WATER_CUP_SIZE);
+      setWaterMl(newAmount);
+      
+      const dateStr = format(currentDate, "yyyy-MM-dd");
+      const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+
+      try {
+          if(existing.length > 0) {
+            await db.update(dailyMetrics).set({ waterMl: newAmount }).where(eq(dailyMetrics.id, existing[0].id));
+          }
+      } catch(e) { console.error("Water update failed", e); }
   };
 
   // --- 客製化月曆 Modal ---
@@ -280,13 +318,13 @@ export default function HomeScreen() {
                     {/* Footer - Modified Layout */}
                     <View style={{
                         flexDirection: 'row', 
-                        justifyContent: 'center', // 讓內容居中 (Today 按鈕)
+                        justifyContent: 'center', 
                         alignItems: 'center', 
                         marginTop: 10, 
                         paddingTop: 10, 
                         borderTopWidth: 1, 
                         borderColor: '#eee',
-                        position: 'relative' // 為了讓鍵盤按鈕絕對定位
+                        position: 'relative'
                     }}>
                         {/* 左側: 鍵盤輸入按鈕 */}
                         <TouchableOpacity 
@@ -382,6 +420,45 @@ export default function HomeScreen() {
     </ThemedView>
   );
 
+  // [新增] 飲水 UI 區塊
+  const renderWaterSection = () => {
+      const totalCups = Math.ceil(WATER_GOAL / WATER_CUP_SIZE);
+      const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
+
+      return (
+          <ThemedView style={styles.card}>
+              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
+                  <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
+                  <ThemedText style={{color: theme.tint}}>{waterMl} / {WATER_GOAL} ml</ThemedText>
+              </View>
+              
+              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 12, justifyContent:'center'}}>
+                  {Array.from({length: totalCups}).map((_, idx) => (
+                      <TouchableOpacity 
+                        key={idx} 
+                        onPress={addWater} 
+                        onLongPress={removeWater}
+                        style={{opacity: idx < currentCups ? 1 : 0.3}}
+                      >
+                          <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={32} color="#007AFF" />
+                      </TouchableOpacity>
+                  ))}
+                  {/* 若喝超過目標，顯示額外杯數 */}
+                  {currentCups > totalCups && (
+                       <View style={{flexDirection:'row', alignItems:'center'}}>
+                           <Ionicons name="add" size={20} color={theme.text}/>
+                           <Ionicons name="water" size={32} color="#007AFF" />
+                           <ThemedText style={{fontSize:12, fontWeight:'bold', position:'absolute', color:'white', left:10}}>+{currentCups - totalCups}</ThemedText>
+                       </View>
+                  )}
+              </View>
+              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:8}}>
+                  {t('tap_to_add_water', lang) || "Tap to add 500ml, Long press to remove"}
+              </ThemedText>
+          </ThemedView>
+      );
+  };
+
   const renderEnergySection = () => {
     const intakePct = targets.calories > 0 ? Math.min(intake.calories / targets.calories, 1) : 0;
     const net = intake.calories - burnedCalories;
@@ -427,6 +504,8 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         {renderBodyMetricsCard()}
+        {/* [新增] 插入飲水區塊 */}
+        {renderWaterSection()}
         {renderEnergySection()}
         {renderQuickAdd()}
         <View style={styles.recordSection}>
