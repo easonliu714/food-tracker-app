@@ -1,7 +1,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
-import { differenceInDays } from "date-fns";
+import { differenceInDays, subDays, format } from "date-fns";
 import * as FileSystem from 'expo-file-system';
+// [新增] 引入資料庫存取
+import { db } from "./db";
+import { foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
+import { gte, desc, eq } from "drizzle-orm";
 
 async function getModel() {
   const { apiKey, model } = await getSettings();
@@ -41,6 +45,53 @@ const getProfileContext = (profile: any) => {
     return `User Profile: Age ${age}, Gender: ${profile.gender || 'N/A'}, Goal: ${profile.goal || "Maintain"}${deadlineInfo}`;
 };
 
+// [新增] 獲取使用者近 7 日數據摘要
+async function getUserRecentStats() {
+    try {
+        const endDate = new Date();
+        const startDate = subDays(endDate, 7);
+        const startStr = format(startDate, "yyyy-MM-dd");
+
+        // 1. 飲食
+        const foods = await db.select().from(foodLogs).where(gte(foodLogs.date, startStr));
+        // 2. 運動
+        const activities = await db.select().from(activityLogs).where(gte(activityLogs.date, startStr));
+        // 3. 身體數值 & 飲水
+        const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, startStr)).orderBy(desc(dailyMetrics.date));
+
+        // 彙整數據
+        let statsStr = "Here is the user's data for the last 7 days:\n";
+        
+        // 每日摘要
+        const dailyMap = new Map();
+        foods.forEach(f => {
+            if(!dailyMap.has(f.date)) dailyMap.set(f.date, {cal:0, pro:0, fat:0, carb:0, items:[]});
+            const d = dailyMap.get(f.date);
+            d.cal += f.totalCalories || 0;
+            d.pro += f.totalProteinG || 0;
+            d.fat += f.totalFatG || 0;
+            d.carb += f.totalCarbsG || 0;
+            d.items.push(f.foodName);
+        });
+
+        dailyMap.forEach((val, date) => {
+            const metric = metrics.find(m => m.date === date);
+            const acts = activities.filter(a => a.date === date);
+            const burn = acts.reduce((acc, cur) => acc + (cur.caloriesBurned||0), 0);
+            const water = metric?.waterMl || 0;
+            const weight = metric?.weightKg ? `${metric.weightKg}kg` : "N/A";
+            const fat = metric?.bodyFatPercentage ? `${metric.bodyFatPercentage}%` : "N/A";
+
+            statsStr += `- [${date}]: Intake: ${Math.round(val.cal)}kcal (P:${Math.round(val.pro)}g, F:${Math.round(val.fat)}g, C:${Math.round(val.carb)}g). Burned: ${Math.round(burn)}kcal. Water: ${water}ml. Weight: ${weight}, Body Fat: ${fat}. Foods: ${val.items.slice(0,5).join(', ')}...\n`;
+        });
+
+        return statsStr;
+    } catch (e) {
+        console.error("Stats Error", e);
+        return "";
+    }
+}
+
 // [FIX] 強制格式化指令 (Strict Formatting)
 const formattingInstruction = `
 [FORMATTING RULES - STRICTLY FOLLOW]
@@ -56,6 +107,10 @@ const formattingInstruction = `
 export async function chatWithAI(history: any[], newMessage: string, profile: any, lang: string) {
     try {
         const model = await getModel();
+        
+        // [新增] 抓取統計資料
+        const recentStats = await getUserRecentStats();
+
         const chatHistory = history.map(h => ({
             role: h.role,
             parts: h.parts
@@ -71,7 +126,8 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
         if (profile) {
             const context = getProfileContext(profile);
             const status = `(Current Status: Remaining Calories: ${profile.remaining} kcal.)`;
-            systemInstruction = `${context}\n${status}\n`;
+            // [修改] 將統計資料加入 Prompt
+            systemInstruction = `${context}\n${status}\n\n[RECENT DATA]\n${recentStats}\n\n(Based on the data above, provide specific dietary and exercise advice.)\n`;
         }
         
         // 組合指令：系統上下文 + 格式要求 + 語言要求
