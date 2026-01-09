@@ -33,6 +33,7 @@ export const dailyMetrics = sqliteTable("daily_metrics", {
   date: text("date").notNull(), // Format: YYYY-MM-DD
   weightKg: real("weight_kg"),
   bodyFatPercentage: real("body_fat_percentage"),
+  waterMl: real("water_ml").default(0), // [新增] 飲水量
   note: text("note"),
   createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
