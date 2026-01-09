@@ -83,8 +83,8 @@ const config: ExpoConfig = {
       {
         android: {
           minSdkVersion: 26,     // Health Connect 要求最低 26
-          compileSdkVersion: 34, // 建議對應 Android 14
-          targetSdkVersion: 34,
+          compileSdkVersion: 35, // 建議對應 Android 15
+          targetSdkVersion: 35,
         },
       },
     ],
