@@ -177,6 +177,8 @@ export async function initDatabase() {
     await addColumn("food_items", "barcode TEXT");
     await addColumn("user_profiles", "birth_date TEXT");
     await addColumn("user_profiles", "target_date TEXT");
+    // [新增] 飲水欄位遷移
+    await addColumn("daily_metrics", "water_ml REAL DEFAULT 0");
     
     // 詳細營養素欄位補全
     const nutrients = [
