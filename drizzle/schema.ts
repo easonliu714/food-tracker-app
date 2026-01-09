@@ -6,13 +6,13 @@ export const userProfiles = sqliteTable("user_profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name"),
   gender: text("gender"), // male, female, other
-  birthDate: text("birth_date"), // YYYY-MM-DD (新增)
+  birthDate: text("birth_date"), // YYYY-MM-DD
   heightCm: real("height_cm"),
   currentWeightKg: real("current_weight_kg"),
   currentBodyFat: real("current_body_fat"),
   targetWeightKg: real("target_weight_kg"),
   targetBodyFat: real("target_body_fat"),
-  targetDate: text("target_date"), // [新增] 預計完成日 (YYYY-MM-DD)
+  targetDate: text("target_date"), // 預計完成日 (YYYY-MM-DD)
   activityLevel: text("activity_level"),
   goal: text("goal"), // lose_weight, maintain, gain_weight
   
@@ -33,7 +33,8 @@ export const dailyMetrics = sqliteTable("daily_metrics", {
   date: text("date").notNull(), // Format: YYYY-MM-DD
   weightKg: real("weight_kg"),
   bodyFatPercentage: real("body_fat_percentage"),
-  waterMl: real("water_ml").default(0), // [新增] 飲水量
+  waterMl: real("water_ml").default(0),
+  sleepHours: real("sleep_hours"), 
   note: text("note"),
   createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -43,13 +44,11 @@ export const foodItems = sqliteTable("food_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   brand: text("brand"),
-  barcode: text("barcode"), // 解決第1, 5點：確保 Barcode 關聯
+  barcode: text("barcode"),
   
-  // 解決第2, 3點：記錄單份重量
   baseAmount: real("base_amount").default(100), 
   baseUnit: text("base_unit").default("g"),
 
-  // 解決第4點：儲存 AI 分析結果 (組成與建議) 於產品庫
   aiSummary: text("ai_summary"), 
 
   // 基礎營養素
@@ -59,22 +58,22 @@ export const foodItems = sqliteTable("food_items", {
   carbsG: real("carbs_g").default(0),
   sodiumMg: real("sodium_mg").default(0),
   
-  // 新增詳細營養素
-  saturatedFatG: real("saturated_fat_g").default(0), // 飽和脂肪
-  transFatG: real("trans_fat_g").default(0),         // 反式脂肪
-  sugarG: real("sugar_g").default(0),               // 糖
-  fiberG: real("fiber_g").default(0),               // 纖維
-  cholesterolMg: real("cholesterol_mg").default(0), // 膽固醇 (mg)
-  magnesiumMg: real("magnesium_mg").default(0),     // 鎂 (mg)
-  zincMg: real("zinc_mg").default(0),               // 鋅 (mg)
-  ironMg: real("iron_mg").default(0),               // 鐵 (mg)
+  // 詳細營養素
+  saturatedFatG: real("saturated_fat_g").default(0), 
+  transFatG: real("trans_fat_g").default(0),         
+  sugarG: real("sugar_g").default(0),               
+  fiberG: real("fiber_g").default(0),               
+  cholesterolMg: real("cholesterol_mg").default(0), 
+  magnesiumMg: real("magnesium_mg").default(0),     
+  zincMg: real("zinc_mg").default(0),               
+  ironMg: real("iron_mg").default(0),               
   
   isUserCreated: integer("is_user_created", { mode: "boolean" }).default(true),
   source: text("source").default("manual"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
 
-/// ==================== Food Logs (飲食紀錄) ====================
+// ==================== Food Logs (飲食紀錄) ====================
 export const foodLogs = sqliteTable("food_logs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   date: text("date").notNull(),
@@ -88,7 +87,6 @@ export const foodLogs = sqliteTable("food_logs", {
   servingAmount: real("serving_amount"),
   unitWeightG: real("unit_weight_g"),
   
-  // 實際攝取總量
   totalWeightG: real("total_weight_g"), 
   totalCalories: real("total_calories"),
   totalProteinG: real("total_protein_g"),
@@ -96,7 +94,6 @@ export const foodLogs = sqliteTable("food_logs", {
   totalCarbsG: real("total_carbs_g"),
   totalSodiumMg: real("total_sodium_mg"),
   
-  // 新增詳細營養素紀錄 (Snapshot)
   totalSaturatedFatG: real("total_saturated_fat_g").default(0),
   totalTransFatG: real("total_trans_fat_g").default(0),
   totalSugarG: real("total_sugar_g").default(0),
@@ -110,7 +107,7 @@ export const foodLogs = sqliteTable("food_logs", {
   aiAnalysisLog: text("ai_analysis_log"),
 });
 
-// ==================== Recipes (食譜 - 從原本結構遷移) ====================
+// ==================== Recipes ====================
 export const recipes = sqliteTable("recipes", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
@@ -125,7 +122,7 @@ export const recipes = sqliteTable("recipes", {
   totalFatG: real("total_fat_g"),
   mealType: text("meal_type"),
   dietaryPreference: text("dietary_preference"),
-  ingredients: text("ingredients"), // JSON string or text
+  ingredients: text("ingredients"), 
   instructions: text("instructions"),
   createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(strftime('%s', 'now'))`),
 });
@@ -133,14 +130,20 @@ export const recipes = sqliteTable("recipes", {
 // ==================== Reminder Settings (提醒設定) ====================
 export const reminderSettings = sqliteTable("reminder_settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id"), // 保留欄位但不強制關聯，單機版通常只有一個用戶
+  userId: integer("user_id"), 
+  
+  // 固定時間提醒 (鬧鐘模式)
   breakfastReminderEnabled: integer("breakfast_reminder_enabled", { mode: "boolean" }).default(false),
-  breakfastReminderTime: text("breakfast_reminder_time"),
+  breakfastReminderTime: text("breakfast_reminder_time"), // HH:mm
   lunchReminderEnabled: integer("lunch_reminder_enabled", { mode: "boolean" }).default(false),
   lunchReminderTime: text("lunch_reminder_time"),
   dinnerReminderEnabled: integer("dinner_reminder_enabled", { mode: "boolean" }).default(false),
   dinnerReminderTime: text("dinner_reminder_time"),
+  
+  // 間隔提醒 (久坐/喝水模式)
   waterReminderEnabled: integer("water_reminder_enabled", { mode: "boolean" }).default(false),
+  waterReminderStartTime: text("water_reminder_start_time"), // [新增] 開始時間 HH:mm
+  waterReminderEndTime: text("water_reminder_end_time"),     // [新增] 結束時間 HH:mm
   waterReminderIntervalMinutes: integer("water_reminder_interval_minutes").default(60),
 });
 

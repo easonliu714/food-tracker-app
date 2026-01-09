@@ -5,8 +5,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
-// [移除] 暫時移除這行以避免 Worklets 版本衝突導致崩潰
-// import "react-native-reanimated";
+// [修正 1] 恢復 Reanimated 引入，確保 UI 動畫正常 (需確保 package.json 已安裝相關依賴)
+import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { initDatabase } from "@/lib/db";
@@ -33,10 +33,13 @@ export default function RootLayout() {
     async function prepare() {
       try {
         await initDatabase(); 
-        setDbReady(true); // 標記 DB 已準備好
         console.log("Database initialized from RootLayout");
       } catch (e) {
+        // [修正 2] 捕捉錯誤並記錄，但不阻止 App 啟動流程
         console.warn("DB Init Error:", e);
+      } finally {
+        // 確保無論成功失敗，都標記為 Ready，避免卡死在 Splash Screen
+        setDbReady(true); 
       }
     }
     prepare();

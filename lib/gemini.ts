@@ -2,7 +2,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSettings } from "./storage";
 import { differenceInDays, subDays, format } from "date-fns";
 import * as FileSystem from 'expo-file-system';
-// [新增] 引入資料庫存取
 import { db } from "./db";
 import { foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 import { gte, desc, eq } from "drizzle-orm";
@@ -11,7 +10,6 @@ async function getModel() {
   const { apiKey, model } = await getSettings();
   if (!apiKey) throw new Error("API Key not found");
   const genAI = new GoogleGenerativeAI(apiKey);
-  // 使用 gemini-1.5-flash，速度快且支援長文本
   return genAI.getGenerativeModel({ model: model || "gemini-flash-latest" });
 }
 
@@ -45,7 +43,7 @@ const getProfileContext = (profile: any) => {
     return `User Profile: Age ${age}, Gender: ${profile.gender || 'N/A'}, Goal: ${profile.goal || "Maintain"}${deadlineInfo}`;
 };
 
-// [新增] 獲取使用者近 7 日數據摘要
+// [修改] 獲取使用者近 7 日數據摘要 (包含睡眠)
 async function getUserRecentStats() {
     try {
         const endDate = new Date();
@@ -56,7 +54,7 @@ async function getUserRecentStats() {
         const foods = await db.select().from(foodLogs).where(gte(foodLogs.date, startStr));
         // 2. 運動
         const activities = await db.select().from(activityLogs).where(gte(activityLogs.date, startStr));
-        // 3. 身體數值 & 飲水
+        // 3. 身體數值 & 飲水 & [新增] 睡眠
         const metrics = await db.select().from(dailyMetrics).where(gte(dailyMetrics.date, startStr)).orderBy(desc(dailyMetrics.date));
 
         // 彙整數據
@@ -81,8 +79,10 @@ async function getUserRecentStats() {
             const water = metric?.waterMl || 0;
             const weight = metric?.weightKg ? `${metric.weightKg}kg` : "N/A";
             const fat = metric?.bodyFatPercentage ? `${metric.bodyFatPercentage}%` : "N/A";
+            // [新增] 睡眠顯示
+            const sleep = metric?.sleepHours ? `${metric.sleepHours}h` : "N/A";
 
-            statsStr += `- [${date}]: Intake: ${Math.round(val.cal)}kcal (P:${Math.round(val.pro)}g, F:${Math.round(val.fat)}g, C:${Math.round(val.carb)}g). Burned: ${Math.round(burn)}kcal. Water: ${water}ml. Weight: ${weight}, Body Fat: ${fat}. Foods: ${val.items.slice(0,5).join(', ')}...\n`;
+            statsStr += `- [${date}]: Intake: ${Math.round(val.cal)}kcal (P:${Math.round(val.pro)}g, F:${Math.round(val.fat)}g, C:${Math.round(val.carb)}g). Burned: ${Math.round(burn)}kcal. Water: ${water}ml. Sleep: ${sleep}. Weight: ${weight}, Body Fat: ${fat}. Foods: ${val.items.slice(0,5).join(', ')}...\n`;
         });
 
         return statsStr;
@@ -92,7 +92,7 @@ async function getUserRecentStats() {
     }
 }
 
-// [FIX] 強制格式化指令 (Strict Formatting)
+// 強制格式化指令
 const formattingInstruction = `
 [FORMATTING RULES - STRICTLY FOLLOW]
 1. **TABLES**: You MUST use Markdown Tables for any list of items, ingredients, or equipment.
@@ -108,7 +108,7 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
     try {
         const model = await getModel();
         
-        // [新增] 抓取統計資料
+        // 抓取統計資料
         const recentStats = await getUserRecentStats();
 
         const chatHistory = history.map(h => ({
@@ -118,7 +118,7 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
 
         const chat = model.startChat({
             history: chatHistory,
-            generationConfig: { maxOutputTokens: 8192 }, // 確保長篇回覆不被截斷
+            generationConfig: { maxOutputTokens: 8192 },
         });
 
         let systemInstruction = "";
@@ -126,11 +126,9 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
         if (profile) {
             const context = getProfileContext(profile);
             const status = `(Current Status: Remaining Calories: ${profile.remaining} kcal.)`;
-            // [修改] 將統計資料加入 Prompt
-            systemInstruction = `${context}\n${status}\n\n[RECENT DATA]\n${recentStats}\n\n(Based on the data above, provide specific dietary and exercise advice.)\n`;
+            systemInstruction = `${context}\n${status}\n\n[RECENT DATA]\n${recentStats}\n\n(Based on the data above, provide specific dietary and exercise advice. Consider sleep and water intake as well.)\n`;
         }
         
-        // 組合指令：系統上下文 + 格式要求 + 語言要求
         const langInstruction = `(IMPORTANT: Reply in ${lang} language only. Ensure all generated search links and keywords are also in ${lang}.)`;
         const finalMessage = `${systemInstruction}${formattingInstruction}${langInstruction}\n\n${newMessage}`;
         
@@ -142,7 +140,6 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
     }
 }
 
-// 圖像分析
 export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
   try {
     const model = await getModel();
@@ -186,7 +183,6 @@ export async function analyzeFoodImage(base64Image: string, lang: string, profil
   }
 }
 
-// 文字分析
 export async function analyzeFoodText(foodName: string, lang: string, profile?: any) {
     try {
       const model = await getModel();

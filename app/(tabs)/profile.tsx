@@ -1,30 +1,36 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Platform } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Switch, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { saveSettings, getSettings } from "@/lib/storage";
+import { saveSettings, getSettings, getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
-// [修正] 引入 activityLogs
-import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs } from "@/drizzle/schema"; 
+import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs, reminderSettings } from "@/drizzle/schema"; 
 import { eq } from "drizzle-orm";
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format, isValid, differenceInDays } from "date-fns";
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Notifications from 'expo-notifications'; 
 
-// [FIX] 根據錯誤訊息，從 legacy 引入 FileSystem API
-import { cacheDirectory, writeAsStringAsync, readAsStringAsync, getInfoAsync, makeDirectoryAsync, copyAsync, documentDirectory } from 'expo-file-system/legacy';
-// [修改] 引入 grid 存取函式
-import { saveSettings, getSettings, getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
+import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file-system/legacy';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
+
+// 設定通知行為，確保在前景時也能顯示通知
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -52,6 +58,21 @@ export default function ProfileScreen() {
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
 
+  // [修改] 提醒設定狀態：包含新的 Start/End Time
+  const defaultTime = (h: number) => new Date(new Date().setHours(h, 0, 0, 0));
+  const [reminders, setReminders] = useState({
+      breakfast: { enabled: false, time: defaultTime(8) },
+      lunch: { enabled: false, time: defaultTime(12) },
+      dinner: { enabled: false, time: defaultTime(18) },
+      water: { 
+          enabled: false, 
+          startTime: defaultTime(9), // 預設 09:00
+          endTime: defaultTime(21),  // 預設 21:00
+          interval: 60 
+      }
+  });
+  const [showTimePicker, setShowTimePicker] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [testingKey, setTestingKey] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -66,34 +87,36 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [修改] 備份功能：加入 activityLogs ,[新增] 讀取 Grid 設定
+  useEffect(() => {
+    async function requestPermissions() {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Notification permissions denied');
+      }
+    }
+    requestPermissions();
+  }, []);
+
   const handleBackup = async () => {
       setLoading(true);
       try {
-          // 1. 讀取所有資料表
           const users = await db.select().from(userProfiles);
           const foods = await db.select().from(foodItems);
           const logs = await db.select().from(foodLogs);
           const metrics = await db.select().from(dailyMetrics);
-          // [新增] 讀取運動紀錄
           const activities = await db.select().from(activityLogs);
-          // [新增] 讀取 Grid 設定
           const gridLayout = await getAnalysisGrid();
+          const reminders = await db.select().from(reminderSettings);
         
           const backupData = {
               version: 1,
               timestamp: new Date().toISOString(),
-              data: { 
-                  users, foods, logs, metrics, activities,
-                  gridLayout // [新增] 寫入備份檔
-              }
+              data: { users, foods, logs, metrics, activities, gridLayout, reminders }
           };
 
-          // 2. 寫入暫存檔案 (使用 legacy API)
           const fileUri = cacheDirectory + `food_tracker_backup_${Date.now()}.json`;
           await writeAsStringAsync(fileUri, JSON.stringify(backupData));
 
-          // 3. 分享
           if (await Sharing.isAvailableAsync()) {
               await Sharing.shareAsync(fileUri, {
                   mimeType: 'application/json',
@@ -110,16 +133,12 @@ export default function ProfileScreen() {
       }
   };
 
-  // [修改] 還原功能：修正日期轉換 (含 UserProfile) 與 activityLogs 處理
   const handleRestore = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
           if (result.canceled) return;
-          
           const file = result.assets[0];
           setLoading(true);
-          
-          // 使用 legacy API 讀取
           const content = await readAsStringAsync(file.uri);
           const backup = JSON.parse(content);
           
@@ -132,82 +151,35 @@ export default function ProfileScreen() {
               { text: t('cancel', lang), style: "cancel" },
               { text: t('restore_db', lang), style: "destructive", onPress: async () => {
                   try {
-                      // 1. 清空舊資料
                       await db.delete(foodLogs);
                       await db.delete(foodItems);
                       await db.delete(dailyMetrics);
-                      await db.delete(activityLogs); // [新增] 清空運動紀錄
+                      await db.delete(activityLogs);
                       
-                      // 2. 還原 Food Items (需轉換 updatedAt)
-                      if (backup.data.foods?.length) {
-                          const cleanFoods = backup.data.foods.map((f: any) => ({
-                              ...f,
-                              updatedAt: f.updatedAt ? new Date(f.updatedAt) : new Date(),
-                          }));
-                          await db.insert(foodItems).values(cleanFoods);
-                      }
-
-                      // 3. 還原 Food Logs (需轉換 loggedAt)
-                      if (backup.data.logs?.length) {
-                          const cleanLogs = backup.data.logs.map((l: any) => ({
-                              ...l,
-                              loggedAt: l.loggedAt ? new Date(l.loggedAt) : new Date(),
-                          }));
-                          await db.insert(foodLogs).values(cleanLogs);
-                      }
-
-                      // 4. 還原 Metrics (需轉換 createdAt)
-                      if (backup.data.metrics?.length) {
-                          const cleanMetrics = backup.data.metrics.map((m: any) => ({
-                              ...m,
-                              createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
-                          }));
-                          await db.insert(dailyMetrics).values(cleanMetrics);
-                      }
-
-                      // 5. 還原 Activity Logs (需轉換 loggedAt)
-                      if (backup.data.activities?.length) {
-                          const cleanActivities = backup.data.activities.map((a: any) => ({
-                              ...a,
-                              loggedAt: a.loggedAt ? new Date(a.loggedAt) : new Date(),
-                          }));
-                          await db.insert(activityLogs).values(cleanActivities);
-                      }
+                      if (backup.data.foods?.length) await db.insert(foodItems).values(backup.data.foods.map((f:any)=>({...f, updatedAt: new Date(f.updatedAt)})));
+                      if (backup.data.logs?.length) await db.insert(foodLogs).values(backup.data.logs.map((l:any)=>({...l, loggedAt: new Date(l.loggedAt)})));
+                      if (backup.data.metrics?.length) await db.insert(dailyMetrics).values(backup.data.metrics.map((m:any)=>({...m, createdAt: new Date(m.createdAt)})));
+                      if (backup.data.activities?.length) await db.insert(activityLogs).values(backup.data.activities.map((a:any)=>({...a, loggedAt: new Date(a.loggedAt)})));
                       
-                      // 6. 還原 User Profile (修正 TypeError: value.getTime is not a function)
                       if (backup.data.users?.length && profileId) {
                           const u = backup.data.users[0];
-                          const { id, createdAt, updatedAt, ...userData } = u; // 移除 ID 和 時間字串
-                          
-                          await db.update(userProfiles).set({
-                              ...userData,
-                              // 關鍵修正：將 JSON 字串轉回 Date 物件
-                              createdAt: createdAt ? new Date(createdAt) : new Date(),
-                              updatedAt: new Date()
-                          }).where(eq(userProfiles.id, profileId));
+                          const { id, createdAt, updatedAt, ...userData } = u;
+                          await db.update(userProfiles).set({ ...userData, createdAt: new Date(createdAt), updatedAt: new Date() }).where(eq(userProfiles.id, profileId));
                       }
-
-                      // [新增] 7. 還原 Grid 設定
-                      if (backup.data.gridLayout) {
-                          await saveAnalysisGrid(backup.data.gridLayout);
+                      if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
+                      
+                      if (backup.data.reminders?.length) {
+                         await db.delete(reminderSettings);
+                         await db.insert(reminderSettings).values(backup.data.reminders);
                       }
 
                       Alert.alert(t('success', lang), t('restore_success_msg', lang));
-                  } catch(e) {
-                      console.error(e);
-                      Alert.alert("Restore Error", String(e));
-                  } finally {
-                      setLoading(false);
-                  }
+                  } catch(e) { console.error(e); Alert.alert("Restore Error", String(e)); } finally { setLoading(false); }
               }}
             ]
           );
 
-      } catch (e: any) {
-          console.error("Restore Error:", e);
-          Alert.alert(t('error', lang), "Restore failed: " + e.message);
-          setLoading(false);
-      }
+      } catch (e: any) { console.error("Restore Error:", e); Alert.alert(t('error', lang), "Restore failed"); setLoading(false); }
   };
 
   useEffect(() => {
@@ -222,16 +194,8 @@ export default function ProfileScreen() {
           const p = result[0];
           setProfileId(p.id);
           setGender((p.gender as "male"|"female") || "male");
-          
-          if (p.birthDate) {
-            const d = new Date(p.birthDate);
-            if (isValid(d)) setBirthDate(d);
-          }
-
-          if (p.targetDate) {
-              const td = new Date(p.targetDate);
-              if (isValid(td)) setTargetDate(td);
-          }
+          if (p.birthDate && isValid(new Date(p.birthDate))) setBirthDate(new Date(p.birthDate));
+          if (p.targetDate && isValid(new Date(p.targetDate))) setTargetDate(new Date(p.targetDate));
           
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
@@ -241,11 +205,30 @@ export default function ProfileScreen() {
           setActivityLevel(p.activityLevel || "sedentary");
           setTrainingGoal(p.goal || "maintain");
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
+
+        // [修改] 載入提醒設定 (包含 Start/End Time)
+        const reminderRes = await db.select().from(reminderSettings).limit(1);
+        if (reminderRes.length > 0) {
+            const r = reminderRes[0];
+            const parseTime = (tStr: string | null, defaultH: number) => {
+               const d = new Date();
+               if(tStr) { const [h,m] = tStr.split(':'); d.setHours(parseInt(h), parseInt(m), 0, 0); }
+               else { d.setHours(defaultH, 0, 0, 0); }
+               return d;
+            };
+            setReminders({
+                breakfast: { enabled: !!r.breakfastReminderEnabled, time: parseTime(r.breakfastReminderTime, 8) },
+                lunch: { enabled: !!r.lunchReminderEnabled, time: parseTime(r.lunchReminderTime, 12) },
+                dinner: { enabled: !!r.dinnerReminderEnabled, time: parseTime(r.dinnerReminderTime, 18) },
+                water: { 
+                    enabled: !!r.waterReminderEnabled, 
+                    startTime: parseTime(r.waterReminderStartTime, 9),
+                    endTime: parseTime(r.waterReminderEndTime, 21),
+                    interval: r.waterReminderIntervalMinutes || 60 
+                }
+            });
+        }
+      } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     load();
   }, [isAuthenticated]);
@@ -260,9 +243,55 @@ export default function ProfileScreen() {
       const bestMatch = res.models.find(m => m.includes('flash')) || res.models[0];
       if (bestMatch) setSelectedModel(bestMatch);
       Alert.alert(t('success', lang), "API Key OK");
-    } else {
-      Alert.alert(t('error', lang), res.error || "Invalid Key");
-    }
+    } else { Alert.alert(t('error', lang), res.error || "Invalid Key"); }
+  };
+
+  // [修改] 排程通知函式：支援固定間隔邏輯
+  const scheduleLocalNotifications = async () => {
+      // 1. 取消所有舊通知
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      
+      const scheduleDaily = async (title: string, body: string, time: Date) => {
+          await Notifications.scheduleNotificationAsync({
+              content: { title, body },
+              trigger: { hour: time.getHours(), minute: time.getMinutes(), repeats: true },
+          });
+      };
+
+      // 2. 排程用餐提醒
+      if (reminders.breakfast.enabled) await scheduleDaily("Breakfast Time!", "Don't forget to log your breakfast.", reminders.breakfast.time);
+      if (reminders.lunch.enabled) await scheduleDaily("Lunch Time!", "Have a healthy lunch and log it!", reminders.lunch.time);
+      if (reminders.dinner.enabled) await scheduleDaily("Dinner Time!", "Log your dinner to keep track.", reminders.dinner.time);
+      
+      // 3. 排程喝水/久坐提醒 (區間內循環)
+      if (reminders.water.enabled && reminders.water.interval > 0) {
+          const start = reminders.water.startTime;
+          const end = reminders.water.endTime;
+          const intervalMins = reminders.water.interval;
+
+          // 計算 Start 到 End 的總分鐘數
+          let currentMinutes = start.getHours() * 60 + start.getMinutes();
+          const endMinutes = end.getHours() * 60 + end.getMinutes();
+
+          // 若結束時間小於開始時間，視為跨日，暫不支援跨日複雜排程，簡單處理為當日結束
+          if (endMinutes > currentMinutes) {
+              // 迴圈排程每一個時間點
+              while (currentMinutes <= endMinutes) {
+                  const h = Math.floor(currentMinutes / 60);
+                  const m = currentMinutes % 60;
+                  
+                  await Notifications.scheduleNotificationAsync({
+                      content: { 
+                          title: "Time to Move & Drink!", 
+                          body: "Stand up, stretch, and drink a glass of water." 
+                      },
+                      trigger: { hour: h, minute: m, repeats: true },
+                  });
+                  
+                  currentMinutes += intervalMins;
+              }
+          }
+      }
   };
 
   const handleSave = async () => {
@@ -271,20 +300,14 @@ export default function ProfileScreen() {
         await saveSettings({ apiKey, model: selectedModel, language: lang });
         const w = parseFloat(currentWeight) || 60;
         const h = parseInt(heightCm) || 170;
-        
         const safeBirth = isValid(birthDate) ? birthDate : new Date(1990, 0, 1);
         const today = new Date();
         let age = today.getFullYear() - safeBirth.getFullYear();
         const m = today.getMonth() - safeBirth.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) {
-            age--;
-        }
+        if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) age--;
         
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
-        const activityMap: Record<string, number> = {
-            'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55,
-            'very_active': 1.725, 'extra_active': 1.9
-        };
+        const activityMap: Record<string, number> = { 'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55, 'very_active': 1.725, 'extra_active': 1.9 };
         const tdee = bmr * (activityMap[activityLevel] || 1.2);
         
         let targetCal = tdee;
@@ -292,38 +315,56 @@ export default function ProfileScreen() {
         else if (trainingGoal === 'gain_weight') targetCal += 300;
 
         const profileData = {
-            gender, 
-            birthDate: format(safeBirth, "yyyy-MM-dd"),
-            heightCm: h, 
-            currentWeightKg: w, 
-            currentBodyFat: parseFloat(bodyFat) || null,
-            targetWeightKg: parseFloat(targetWeight) || null, 
-            targetBodyFat: parseFloat(targetBodyFat) || null,
-            targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null,
-            activityLevel, 
-            goal: trainingGoal, 
-            dailyCalorieTarget: Math.round(targetCal), 
-            updatedAt: new Date()
+            gender, birthDate: format(safeBirth, "yyyy-MM-dd"), heightCm: h, currentWeightKg: w, 
+            currentBodyFat: parseFloat(bodyFat) || null, targetWeightKg: parseFloat(targetWeight) || null, 
+            targetBodyFat: parseFloat(targetBodyFat) || null, targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null,
+            activityLevel, goal: trainingGoal, dailyCalorieTarget: Math.round(targetCal), updatedAt: new Date()
         };
 
-        if (profileId) {
-            await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
-        } else {
-            await db.insert(userProfiles).values(profileData);
-        }
+        if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
+        else await db.insert(userProfiles).values(profileData);
+
+        // [修改] 儲存提醒設定 (含 Start/End Time)
+        const fmtTime = (d: Date) => format(d, 'HH:mm');
+        const reminderData = {
+            breakfastReminderEnabled: reminders.breakfast.enabled,
+            breakfastReminderTime: fmtTime(reminders.breakfast.time),
+            lunchReminderEnabled: reminders.lunch.enabled,
+            lunchReminderTime: fmtTime(reminders.lunch.time),
+            dinnerReminderEnabled: reminders.dinner.enabled,
+            dinnerReminderTime: fmtTime(reminders.dinner.time),
+            waterReminderEnabled: reminders.water.enabled,
+            waterReminderStartTime: fmtTime(reminders.water.startTime),
+            waterReminderEndTime: fmtTime(reminders.water.endTime),
+            waterReminderIntervalMinutes: reminders.water.interval,
+        };
+        
+        await db.delete(reminderSettings);
+        await db.insert(reminderSettings).values(reminderData);
+        
+        await scheduleLocalNotifications();
+
         Alert.alert(t('save_settings', lang), t('success', lang));
     } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } 
     finally { setLoading(false); }
   };
 
-  const onBirthDateChange = (event: any, selectedDate?: Date) => {
-      setShowDatePicker(false);
-      if (selectedDate) setBirthDate(selectedDate);
-  };
-
-  const onTargetDateChange = (event: any, selectedDate?: Date) => {
-      setShowTargetDatePicker(false);
-      if (selectedDate) setTargetDate(selectedDate);
+  const onBirthDateChange = (event: any, selectedDate?: Date) => { setShowDatePicker(false); if (selectedDate) setBirthDate(selectedDate); };
+  const onTargetDateChange = (event: any, selectedDate?: Date) => { setShowTargetDatePicker(false); if (selectedDate) setTargetDate(selectedDate); };
+  
+  // [修改] 統一的時間變更處理器
+  const onTimeChange = (type: 'breakfast'|'lunch'|'dinner'|'waterStart'|'waterEnd', event: any, date?: Date) => {
+      setShowTimePicker(null);
+      if (date) {
+          if (type === 'waterStart') {
+              setReminders(prev => ({...prev, water: {...prev.water, startTime: date}}));
+          } else if (type === 'waterEnd') {
+              setReminders(prev => ({...prev, water: {...prev.water, endTime: date}}));
+          } else {
+              // Meal times
+              setReminders(prev => ({...prev, [type]: {...prev[type as 'breakfast'], time: date}}));
+          }
+      }
   };
 
   if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems: 'center'}]}><ActivityIndicator size="large"/></View>;
@@ -334,9 +375,7 @@ export default function ProfileScreen() {
         <ThemedText type="title">{t('profile', lang)}</ThemedText>
         <Pressable onPress={() => setShowLangPicker(true)} style={styles.langBtn}>
             <Ionicons name="language" size={20} color={tintColor} />
-            <ThemedText style={{marginLeft: 4, color: tintColor, fontWeight:'bold'}}>
-                {LANGUAGES.find(l => l.code === lang)?.label || 'Language'}
-            </ThemedText>
+            <ThemedText style={{marginLeft: 4, color: tintColor, fontWeight:'bold'}}>{LANGUAGES.find(l => l.code === lang)?.label || 'Language'}</ThemedText>
         </Pressable>
       </View>
 
@@ -361,6 +400,86 @@ export default function ProfileScreen() {
                     <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
                 </Pressable>
             </View>
+         </View>
+
+         {/* Notification Settings */}
+         <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
+             <ThemedText type="subtitle" style={{marginBottom:12}}>🔔 {t('notifications', lang) || "Notifications"}</ThemedText>
+             
+             {/* Breakfast */}
+             <View style={styles.reminderRow}>
+                 <View style={{flexDirection:'row', alignItems:'center'}}>
+                     <Switch value={reminders.breakfast.enabled} onValueChange={v => setReminders(p => ({...p, breakfast:{...p.breakfast, enabled:v}}))} trackColor={{true: tintColor}}/>
+                     <ThemedText style={{marginLeft:8}}>{t('breakfast', lang)}</ThemedText>
+                 </View>
+                 <Pressable onPress={()=>setShowTimePicker('breakfast')} disabled={!reminders.breakfast.enabled}>
+                     <ThemedText style={{color: reminders.breakfast.enabled ? tintColor : '#999'}}>{format(reminders.breakfast.time, 'HH:mm')}</ThemedText>
+                 </Pressable>
+             </View>
+             {showTimePicker === 'breakfast' && <DateTimePicker value={reminders.breakfast.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('breakfast', e, d)} />}
+
+             {/* Lunch */}
+             <View style={styles.reminderRow}>
+                 <View style={{flexDirection:'row', alignItems:'center'}}>
+                     <Switch value={reminders.lunch.enabled} onValueChange={v => setReminders(p => ({...p, lunch:{...p.lunch, enabled:v}}))} trackColor={{true: tintColor}}/>
+                     <ThemedText style={{marginLeft:8}}>{t('lunch', lang)}</ThemedText>
+                 </View>
+                 <Pressable onPress={()=>setShowTimePicker('lunch')} disabled={!reminders.lunch.enabled}>
+                     <ThemedText style={{color: reminders.lunch.enabled ? tintColor : '#999'}}>{format(reminders.lunch.time, 'HH:mm')}</ThemedText>
+                 </Pressable>
+             </View>
+             {showTimePicker === 'lunch' && <DateTimePicker value={reminders.lunch.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('lunch', e, d)} />}
+
+             {/* Dinner */}
+             <View style={styles.reminderRow}>
+                 <View style={{flexDirection:'row', alignItems:'center'}}>
+                     <Switch value={reminders.dinner.enabled} onValueChange={v => setReminders(p => ({...p, dinner:{...p.dinner, enabled:v}}))} trackColor={{true: tintColor}}/>
+                     <ThemedText style={{marginLeft:8}}>{t('dinner', lang)}</ThemedText>
+                 </View>
+                 <Pressable onPress={()=>setShowTimePicker('dinner')} disabled={!reminders.dinner.enabled}>
+                     <ThemedText style={{color: reminders.dinner.enabled ? tintColor : '#999'}}>{format(reminders.dinner.time, 'HH:mm')}</ThemedText>
+                 </Pressable>
+             </View>
+             {showTimePicker === 'dinner' && <DateTimePicker value={reminders.dinner.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('dinner', e, d)} />}
+
+             {/* Water / Move (Interval) */}
+             <View style={{marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: '#f0f0f0'}}>
+                 <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: 12}}>
+                     <View style={{flexDirection:'row', alignItems:'center'}}>
+                        <Switch value={reminders.water.enabled} onValueChange={v => setReminders(p => ({...p, water:{...p.water, enabled:v}}))} trackColor={{true: tintColor}}/>
+                        <ThemedText style={{marginLeft:8}}>💧 {t('water_move', lang) || "Water & Move"}</ThemedText>
+                     </View>
+                 </View>
+                 
+                 {reminders.water.enabled && (
+                     <View style={{paddingLeft: 10}}>
+                         <View style={[styles.rowBetween, {marginBottom:8}]}>
+                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('interval', lang) || "Interval (min)"}</ThemedText>
+                             <TextInput 
+                                style={{borderBottomWidth:1, borderColor: '#ccc', width: 50, textAlign:'center', color: textColor}} 
+                                value={String(reminders.water.interval)} 
+                                keyboardType="numeric"
+                                onChangeText={t => setReminders(p => ({...p, water:{...p.water, interval: parseInt(t)||60}}))}
+                             />
+                         </View>
+                         <View style={styles.rowBetween}>
+                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('start_time', lang) || "Start Time"}</ThemedText>
+                             <Pressable onPress={()=>setShowTimePicker('waterStart')}>
+                                <ThemedText style={{color:tintColor}}>{format(reminders.water.startTime, 'HH:mm')}</ThemedText>
+                             </Pressable>
+                         </View>
+                         <View style={[styles.rowBetween, {marginTop: 8}]}>
+                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('end_time', lang) || "End Time"}</ThemedText>
+                             <Pressable onPress={()=>setShowTimePicker('waterEnd')}>
+                                <ThemedText style={{color:tintColor}}>{format(reminders.water.endTime, 'HH:mm')}</ThemedText>
+                             </Pressable>
+                         </View>
+                     </View>
+                 )}
+             </View>
+
+             {showTimePicker === 'waterStart' && <DateTimePicker value={reminders.water.startTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterStart', e, d)} />}
+             {showTimePicker === 'waterEnd' && <DateTimePicker value={reminders.water.endTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterEnd', e, d)} />}
          </View>
 
          {/* Backup & Restore Section */}
@@ -580,5 +699,7 @@ const styles = StyleSheet.create({
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   langBtn: { flexDirection: 'row', alignItems: 'center', padding: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 20 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
-  modalContent: { padding: 20, borderRadius: 16 }
+  modalContent: { padding: 20, borderRadius: 16 },
+  reminderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f0f0f0' },
+  rowBetween: { flexDirection:'row', justifyContent:'space-between', alignItems:'center'}
 });

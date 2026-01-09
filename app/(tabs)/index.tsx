@@ -15,11 +15,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
-import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isValid, parse } from "date-fns";
+import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, isSameDay, isValid, parse, startOfDay, endOfDay } from "date-fns";
 import { zhTW, enUS, ja, ko, fr, ru } from "date-fns/locale"; 
 import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-gifted-charts";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import DateTimePicker from "@react-native-community/datetimepicker"; 
 
@@ -31,6 +31,9 @@ import { t, useLanguage } from "@/lib/i18n";
 
 import { db, getLatestTwoDailyMetrics, duplicateFoodLog, getFrequentActivities, getRangeStats } from "@/lib/db";
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
+
+// [新增] 引入 Health Connect
+import { initHealthConnect, getHealthData } from "@/lib/health";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
@@ -55,10 +58,14 @@ export default function HomeScreen() {
   const [diffWeight, setDiffWeight] = useState<number | null>(null);
   const [diffFat, setDiffFat] = useState<number | null>(null);
   
-  // [新增] 飲水狀態
+  // 飲水狀態
   const [waterMl, setWaterMl] = useState(0);
+  const [waterGoal, setWaterGoal] = useState(2000); // [修改] 改為 State，動態計算
   const WATER_CUP_SIZE = 500;
-  const WATER_GOAL = 2000;
+
+  // [新增] Health Connect 顯示數據
+  const [healthSteps, setHealthSteps] = useState(0);
+  const [healthSleep, setHealthSleep] = useState(0);
 
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
   const [targetWeight, setTargetWeight] = useState(0);
@@ -77,6 +84,64 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
+  // [新增] Health Connect 同步邏輯
+  const syncHealthData = async (dateStr: string) => {
+      try {
+          const authorized = await initHealthConnect();
+          if (!authorized) return;
+
+          // 設定當天的開始與結束時間
+          const start = startOfDay(new Date(dateStr));
+          const end = endOfDay(new Date(dateStr));
+          
+          const { steps, sleep } = await getHealthData(start, end);
+          
+          // 1. 處理步數 (加總)
+          const totalSteps = steps.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
+          if (totalSteps > 0) {
+              setHealthSteps(totalSteps);
+              // 同步到 activityLogs (作為一筆特殊紀錄，避免重複則先檢查)
+              const existingSteps = await db.select().from(activityLogs).where(and(eq(activityLogs.date, dateStr), eq(activityLogs.activityName, "Daily Steps")));
+              if (existingSteps.length > 0) {
+                  await db.update(activityLogs).set({ steps: totalSteps, caloriesBurned: totalSteps * 0.04 }).where(eq(activityLogs.id, existingSteps[0].id));
+              } else {
+                  await db.insert(activityLogs).values({
+                      date: dateStr,
+                      loggedAt: new Date(),
+                      activityName: "Daily Steps",
+                      category: "walking",
+                      durationMinutes: 0,
+                      caloriesBurned: totalSteps * 0.04, // 粗估 1步 0.04卡
+                      steps: totalSteps
+                  });
+              }
+          }
+
+          // 2. 處理睡眠 (加總時數)
+          // SleepSession 通常包含 title, notes, startTime, endTime
+          let totalSleepHours = 0;
+          sleep.forEach((s: any) => {
+              const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
+              totalSleepHours += durationMs / (1000 * 60 * 60);
+          });
+          
+          if (totalSleepHours > 0) {
+              const fixedSleep = parseFloat(totalSleepHours.toFixed(1));
+              setHealthSleep(fixedSleep);
+              // 同步到 dailyMetrics
+              const existingMetrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+              if (existingMetrics.length > 0) {
+                  await db.update(dailyMetrics).set({ sleepHours: fixedSleep }).where(eq(dailyMetrics.id, existingMetrics[0].id));
+              } else {
+                  await db.insert(dailyMetrics).values({ date: dateStr, sleepHours: fixedSleep });
+              }
+          }
+
+      } catch (e) {
+          console.log("Health Connect Sync Error (Expected on Simulator):", e);
+      }
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     setWeight("");
@@ -84,11 +149,13 @@ export default function HomeScreen() {
     setDiffWeight(null);
     setDiffFat(null);
     setWaterMl(0);
+    setHealthSteps(0);
+    setHealthSleep(0);
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
 
-      // 1. 載入個人目標
+      // 1. 載入個人目標 & 計算飲水目標
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -101,16 +168,27 @@ export default function HomeScreen() {
         });
         setTargetWeight(p.targetWeightKg || 0);
         setTargetBodyFat(p.targetBodyFat || 0);
+        
+        // [新增] 動態計算飲水目標: 體重 * 33ml
+        const dynamicWater = Math.round((p.currentWeightKg || 60) * 33);
+        setWaterGoal(dynamicWater);
       }
 
-      // 2. 身體數值 (包含體重、體脂、飲水)
+      // [新增] 嘗試同步 Health Connect 數據
+      // 注意: 僅當天或過去日期才同步
+      if (new Date(dateStr) <= new Date()) {
+         await syncHealthData(dateStr);
+      }
+
+      // 2. 身體數值 (包含體重、體脂、飲水、睡眠)
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
         const curF = metricsRes[0].bodyFatPercentage || 0;
         setWeight(curW > 0 ? String(curW) : "");
         setBodyFat(curF > 0 ? String(curF) : "");
-        setWaterMl(metricsRes[0].waterMl || 0); // [新增] 讀取飲水量
+        setWaterMl(metricsRes[0].waterMl || 0);
+        if (metricsRes[0].sleepHours) setHealthSleep(metricsRes[0].sleepHours);
       }
 
       const latestTwo = await getLatestTwoDailyMetrics();
@@ -150,6 +228,10 @@ export default function HomeScreen() {
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
+      
+      // [新增] 如果 DB 中有步數紀錄，優先顯示 DB 的 (因為可能包含手動輸入或已同步)
+      const stepLog = activityRes.find(a => a.activityName === "Daily Steps");
+      if (stepLog && stepLog.steps) setHealthSteps(stepLog.steps);
 
       const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
       const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
@@ -191,7 +273,6 @@ export default function HomeScreen() {
       Alert.alert(t('delete', lang), "", [{ text: t('cancel', lang), style: "cancel" }, { text: t('delete', lang), style: "destructive", onPress: async () => { await db.delete(foodLogs).where(eq(foodLogs.id, id)); loadData(); }}]);
   };
 
-  // [新增] 飲水控制函式
   const addWater = async () => {
       const newAmount = waterMl + WATER_CUP_SIZE;
       setWaterMl(newAmount); // Optimistic update
@@ -222,14 +303,11 @@ export default function HomeScreen() {
       } catch(e) { console.error("Water update failed", e); }
   };
 
-  // --- 客製化月曆 Modal ---
+  // --- 客製化月曆 Modal (保留原始邏輯) ---
   const CustomCalendarModal = () => {
     const [viewDate, setViewDate] = useState(currentDate);
     const [monthStats, setMonthStats] = useState<Record<string, any>>({});
-    
-    // 快速切換年份月份的 Picker
     const [showYearMonthPicker, setShowYearMonthPicker] = useState(false);
-    // 手動輸入日期的 Modal
     const [showInputModal, setShowInputModal] = useState(false);
     const [inputDateStr, setInputDateStr] = useState("");
 
@@ -271,25 +349,17 @@ export default function HomeScreen() {
         <Modal visible={showCalendarModal} animationType="slide" transparent>
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.cardBackground, height: '70%'}]}>
-                    {/* Header: Clickable Month/Year */}
                     <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', padding:10}}>
                         <TouchableOpacity onPress={()=>setViewDate(subMonths(viewDate, 1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
-                        
                         <TouchableOpacity onPress={() => setShowYearMonthPicker(true)} style={{flexDirection:'row', alignItems:'center'}}>
-                            <ThemedText type="subtitle" style={{marginRight: 4}}>
-                                {format(viewDate, "yyyy MMMM", {locale: dateLocale})}
-                            </ThemedText>
+                            <ThemedText type="subtitle" style={{marginRight: 4}}>{format(viewDate, "yyyy MMMM", {locale: dateLocale})}</ThemedText>
                             <Ionicons name="caret-down" size={16} color={theme.icon}/>
                         </TouchableOpacity>
-                        
                         <TouchableOpacity onPress={()=>setViewDate(addMonths(viewDate, 1))}><Ionicons name="chevron-forward" size={24} color={theme.text}/></TouchableOpacity>
                     </View>
-
-                    {/* Week headers */}
                     <View style={{flexDirection:'row', justifyContent:'space-around', borderBottomWidth:1, borderColor:'#eee', paddingBottom:8}}>
                         {['S','M','T','W','T','F','S'].map((d,i)=>(<ThemedText key={i} style={{width: 40, textAlign:'center', color: theme.icon, fontWeight:'bold'}}>{d}</ThemedText>))}
                     </View>
-
                     <ScrollView>
                         {weeks.map((week, wIdx) => (
                             <View key={wIdx} style={{flexDirection:'row', justifyContent:'space-around', marginVertical: 8}}>
@@ -314,71 +384,16 @@ export default function HomeScreen() {
                             </View>
                         ))}
                     </ScrollView>
-
-                    {/* Footer - Modified Layout */}
-                    <View style={{
-                        flexDirection: 'row', 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        marginTop: 10, 
-                        paddingTop: 10, 
-                        borderTopWidth: 1, 
-                        borderColor: '#eee',
-                        position: 'relative'
-                    }}>
-                        {/* 左側: 鍵盤輸入按鈕 */}
-                        <TouchableOpacity 
-                            onPress={() => setShowInputModal(true)} 
-                            style={{
-                                position: 'absolute', 
-                                left: 10, 
-                                padding: 10
-                            }}
-                        >
-                            <Ionicons name="keypad-outline" size={24} color={theme.tint} />
-                        </TouchableOpacity>
-
-                        {/* 中間: 回到今日按鈕 */}
-                        <TouchableOpacity onPress={() => {
-                            const today = new Date();
-                            setCurrentDate(today);
-                            setViewDate(today);
-                            setShowCalendarModal(false);
-                        }} style={{
-                            padding: 10, 
-                            flexDirection:'row', 
-                            alignItems:'center'
-                        }}>
-                            <Ionicons name="today-outline" size={18} color={theme.tint} style={{marginRight: 6}}/>
-                            <ThemedText style={{color: theme.tint, fontWeight:'bold', fontSize: 16}}>{t('today', lang) || "Today"}</ThemedText>
-                        </TouchableOpacity>
+                    <View style={{flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: '#eee', position: 'relative'}}>
+                        <TouchableOpacity onPress={() => setShowInputModal(true)} style={{position: 'absolute', left: 10, padding: 10}}><Ionicons name="keypad-outline" size={24} color={theme.tint} /></TouchableOpacity>
+                        <TouchableOpacity onPress={() => { const today = new Date(); setCurrentDate(today); setViewDate(today); setShowCalendarModal(false); }} style={{padding: 10, flexDirection:'row', alignItems:'center'}}><Ionicons name="today-outline" size={18} color={theme.tint} style={{marginRight: 6}}/><ThemedText style={{color: theme.tint, fontWeight:'bold', fontSize: 16}}>{t('today', lang) || "Today"}</ThemedText></TouchableOpacity>
                     </View>
-
-                    {/* 內層: 年月選擇器 Modal */}
-                    {showYearMonthPicker && (
-                        <DateTimePicker 
-                            value={viewDate} 
-                            mode="date" 
-                            display="spinner"
-                            onChange={(e, d) => {
-                                setShowYearMonthPicker(false);
-                                if (d) setViewDate(d);
-                            }} 
-                        />
-                    )}
-
-                    {/* 內層: 手動輸入日期 Modal */}
+                    {showYearMonthPicker && <DateTimePicker value={viewDate} mode="date" display="spinner" onChange={(e, d) => { setShowYearMonthPicker(false); if (d) setViewDate(d); }} />}
                     <Modal visible={showInputModal} transparent animationType="fade">
                         <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} style={styles.modalOverlay}>
                             <View style={[styles.modalContent, {backgroundColor: 'white', height: 'auto', padding: 20}]}>
                                 <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_date', lang)}</ThemedText>
-                                <TextInput 
-                                    style={{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:10, fontSize:16, marginBottom:16}}
-                                    placeholder="YYYY-MM-DD"
-                                    value={inputDateStr}
-                                    onChangeText={setInputDateStr}
-                                    keyboardType="numbers-and-punctuation"
-                                />
+                                <TextInput style={{borderWidth:1, borderColor:'#ccc', borderRadius:8, padding:10, fontSize:16, marginBottom:16}} placeholder="YYYY-MM-DD" value={inputDateStr} onChangeText={setInputDateStr} keyboardType="numbers-and-punctuation" />
                                 <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
                                     <TouchableOpacity onPress={()=>setShowInputModal(false)}><ThemedText>{t('cancel', lang)}</ThemedText></TouchableOpacity>
                                     <TouchableOpacity onPress={handleManualInput}><ThemedText style={{color:theme.tint, fontWeight:'bold'}}>{t('confirm', lang)}</ThemedText></TouchableOpacity>
@@ -386,14 +401,12 @@ export default function HomeScreen() {
                             </View>
                         </KeyboardAvoidingView>
                     </Modal>
-
                 </View>
             </View>
         </Modal>
     );
   };
 
-  // Render Functions
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <TouchableOpacity onPress={() => setCurrentDate(addDays(currentDate, -1))}><Ionicons name="chevron-back" size={24} color={theme.text}/></TouchableOpacity>
@@ -415,21 +428,28 @@ export default function HomeScreen() {
             <View style={{flexDirection:'row',alignItems:'center'}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>kg</ThemedText>{renderDiffBadge(diffWeight,'kg')}</View>
             <View style={{flexDirection:'row',alignItems:'center',marginTop:8}}><TextInput style={[styles.metricInput,{color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/><ThemedText>%</ThemedText>{renderDiffBadge(diffFat,'%')}</View>
         </View>
-        <View style={{justifyContent:'space-around',alignItems:'flex-end'}}><ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)} {targetWeight} kg</ThemedText><ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)} {targetBodyFat} %</ThemedText></View>
+        <View style={{justifyContent:'space-around',alignItems:'flex-end'}}>
+            <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)} {targetWeight} kg</ThemedText>
+            {/* [新增] 顯示步數與睡眠 */}
+            <View style={{flexDirection:'row', alignItems:'center', marginTop:4, gap:8}}>
+                <View style={{flexDirection:'row', alignItems:'center'}}><Ionicons name="footsteps" size={12} color="#FF9500"/><ThemedText style={{fontSize:12, marginLeft:2}}>{healthSteps}</ThemedText></View>
+                <View style={{flexDirection:'row', alignItems:'center'}}><Ionicons name="bed" size={12} color="#5856D6"/><ThemedText style={{fontSize:12, marginLeft:2}}>{healthSleep}h</ThemedText></View>
+            </View>
+        </View>
       </View>
     </ThemedView>
   );
 
-  // [新增] 飲水 UI 區塊
   const renderWaterSection = () => {
-      const totalCups = Math.ceil(WATER_GOAL / WATER_CUP_SIZE);
+      // [修改] 使用動態目標
+      const totalCups = Math.ceil(waterGoal / WATER_CUP_SIZE);
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
 
       return (
           <ThemedView style={styles.card}>
               <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
                   <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
-                  <ThemedText style={{color: theme.tint}}>{waterMl} / {WATER_GOAL} ml</ThemedText>
+                  <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
               </View>
               
               <View style={{flexDirection:'row', flexWrap:'wrap', gap: 12, justifyContent:'center'}}>
@@ -443,7 +463,6 @@ export default function HomeScreen() {
                           <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={32} color="#007AFF" />
                       </TouchableOpacity>
                   ))}
-                  {/* 若喝超過目標，顯示額外杯數 */}
                   {currentCups > totalCups && (
                        <View style={{flexDirection:'row', alignItems:'center'}}>
                            <Ionicons name="add" size={20} color={theme.text}/>
@@ -504,7 +523,6 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         {renderBodyMetricsCard()}
-        {/* [新增] 插入飲水區塊 */}
         {renderWaterSection()}
         {renderEnergySection()}
         {renderQuickAdd()}

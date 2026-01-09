@@ -4,7 +4,7 @@ import { create } from 'zustand';
 
 export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
-  { code: 'zh-CN', label: '简体中文' }, // [新增]
+  { code: 'zh-CN', label: '简体中文' },
   { code: 'en', label: 'English' },
   { code: 'ja', label: '日本語' },
   { code: 'ko', label: '한국어' },
@@ -137,7 +137,10 @@ export const TRANSLATIONS = {
     
     intensity_low: "低強度", intensity_medium: "中強度", intensity_high: "高強度",
     
-    increase: "增加", decrease: "減少", no_change: "無變化"
+    increase: "增加", decrease: "減少", no_change: "無變化",
+
+    // Interval / Reminder
+    interval: "間隔 (分)", start_time: "開始時間", end_time: "結束時間", water_move: "喝水/久坐", water: "喝水"
   },
   // [新增] 簡體中文
   'zh-CN': {
@@ -264,7 +267,10 @@ export const TRANSLATIONS = {
     
     intensity_low: "低强度", intensity_medium: "中强度", intensity_high: "高强度",
     
-    increase: "增加", decrease: "减少", no_change: "无变化"
+    increase: "增加", decrease: "减少", no_change: "无变化",
+
+    // Interval / Reminder
+    interval: "间隔 (分)", start_time: "开始时间", end_time: "结束时间", water_move: "喝水/久坐", water: "喝水"
   },
   'en': {
     // Tab Titles
@@ -376,8 +382,10 @@ export const TRANSLATIONS = {
 
     intensity_low: "Low Intensity", intensity_medium: "Medium Intensity", intensity_high: "High Intensity",
 
-    increase: "Increase", decrease: "Decrease", no_change: "No Change"
+    increase: "Increase", decrease: "Decrease", no_change: "No Change",
 
+    // Interval / Reminder
+    interval: "Interval (min)", start_time: "Start Time", end_time: "End Time", water_move: "Water & Move", water: "Water"
   },
   'ja': {
     tab_home: "ホーム", tab_analysis: "分析", tab_ai_coach: "AIコーチ", tab_settings: "設定",
@@ -502,7 +510,10 @@ export const TRANSLATIONS = {
     
     intensity_low: "低", intensity_medium: "中", intensity_high: "高",
 
-    increase: "増加", decrease: "減少", no_change: "変化なし"
+    increase: "増加", decrease: "減少", no_change: "変化なし",
+
+    // Interval / Reminder
+    interval: "間隔 (分)", start_time: "開始", end_time: "終了", water_move: "水分/活動", water: "水分"
   },
   'ko': {
     // Tab Titles
@@ -620,7 +631,10 @@ export const TRANSLATIONS = {
     
     intensity_low: "저", intensity_medium: "중", intensity_high: "고",
     
-    increase: "증가", decrease: "감소", no_change: "변화 없음"
+    increase: "증가", decrease: "감소", no_change: "변화 없음",
+
+    // Interval / Reminder
+    interval: "간격 (분)", start_time: "시작 시간", end_time: "종료 시간", water_move: "수분/활동", water: "수분"
   }
 };
 
@@ -659,6 +673,11 @@ export const setAppLanguage = (lang: string) => {
 
 const LOGS_ZH = [
   {
+    version: "V1.0.13",
+    date: "2026-01-09",
+    content: "[新增] 整合 Google Health Connect：自動同步步數與睡眠數據。\n[新增] 智慧提醒系統：支援自訂用餐時間提醒，以及久坐/喝水間隔提醒 (可設定起訖時間)。\n[優化] 飲水目標改為依體重動態計算。\n[優化] AI 分析新增參考睡眠品質數據。\n[修正] 系統穩定性優化與動畫庫崩潰修復。"
+  },
+  {
     version: "V1.0.12",
     date: "2026-01-06",
     content: "[新增] 分析頁面統計方塊支援自由排序、新增與刪除 (長按進入編輯模式)。\n[升級] 分析圖表整合雙軸顯示 (熱量/體重/體脂)，支援「自訂區間」與自動縮放適配螢幕。\n[新增] 首頁「常用運動」快捷鍵；客製化月曆支援鍵盤輸入日期與淨熱量預覽。\n[修正] 修復備份還原邏輯 (含運動紀錄) 及部分 UI 顯示問題。"
@@ -694,6 +713,11 @@ const LOGS_ZH = [
 ];
 
 const LOGS_EN = [
+  {
+    version: "V1.0.13",
+    date: "2026-01-09",
+    content: "[New] Google Health Connect Integration: Auto-sync steps and sleep data.\n[New] Smart Reminder System: Custom meal alerts and interval-based water/sedentary reminders (with start/end time).\n[Imp] Dynamic water goal based on weight.\n[Imp] AI analysis now includes sleep quality data.\n[Fix] System stability improvements and animation library crash fixes."
+  },
   {
     version: "V1.0.12",
     date: "2026-01-06",
@@ -731,6 +755,11 @@ const LOGS_EN = [
 
 const LOGS_JP = [
   {
+    version: "V1.0.13",
+    date: "2026-01-09",
+    content: "[新機能] Google Health Connect連携：歩数と睡眠データを自動同期。\n[新機能] スマート通知システム：食事リマインダーと水分補給/座りすぎ防止の間隔リマインダー（開始/終了時間設定可）。\n[改善] 体重に基づいた動的な水分摂取目標。\n[改善] AI分析に睡眠データの参照を追加。\n[修正] システムの安定性向上とアニメーションライブラリのクラッシュ修正。"
+  },
+  {
     version: "V1.0.12",
     date: "2026-01-06",
     content: "[新機能] 分析ページの統計ボックスで、自由に並べ替え、追加、削除できるようになりました（長押しで編集モードに移行します）。[アップグレード] 分析チャートに2軸表示（カロリー/体重/体脂肪）が統合され、「カスタム間隔」とさまざまな画面サイズに適応する自動スケーリングがサポートされるようになりました。[新機能] ホームページの「よく使うエクササイズ」ショートカット。カスタマイズされたカレンダーで、日付と正味カロリーのプレビューにキーボード入力がサポートされます。[修正] バックアップと復元ロジック（エクササイズ記録を含む）と一部のUI表示の問題を修正しました。",
@@ -766,6 +795,11 @@ const LOGS_JP = [
 ];
 
 const LOGS_KO = [
+  {
+    version: "V1.0.13",
+    date: "2026-01-09",
+    content: "[신규] Google Health Connect 통합: 걸음 수 및 수면 데이터 자동 동기화.\n[신규] 스마트 알림 시스템: 식사 시간 알림 및 간격 기반 수분/활동 알림 (시작/종료 시간 설정 가능).\n[개선] 체중 기반 동적 수분 섭취 목표.\n[개선] 수면 데이터를 포함한 AI 분석.\n[수정] 시스템 안정성 향상 및 애니메이션 라이브러리 충돌 수정."
+  },
   {
     version: "V1.0.12",
     date: "2026-01-06",
