@@ -44,14 +44,15 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
 
     const healthConnectPackageName = "com.google.android.apps.healthdata";
     
-    // 檢查是否已存在
+    // 檢查是否已存在 (修正：檢查 android:name)
     const hasQuery = manifest.queries.some(q => 
-      q.package && q.package.some(p => p.$ && p.$.name === healthConnectPackageName)
+      q.package && q.package.some(p => p.$ && p.$["android:name"] === healthConnectPackageName)
     );
 
     if (!hasQuery) {
+      // 修正：屬性名稱必須包含 android: 前綴，否則建置會失敗
       manifest.queries.push({
-        package: [{ $: { name: healthConnectPackageName } }]
+        package: [{ $: { "android:name": healthConnectPackageName } }]
       });
     }
 
