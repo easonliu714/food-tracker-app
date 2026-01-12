@@ -92,6 +92,66 @@ export default function AnalysisScreen() {
   const [zoomScale, setZoomScale] = useState(1);
   const [chartScrollable, setChartScrollable] = useState(false); 
 
+  // [Helper] 插值與縮放函數
+  // dataArray: 原始數據 (例如 70.5, 0, 71.0)
+  // scalingFactor: 縮放倍率 (例如 25 倍，將 70 放大成 1750 以匹配卡路里軸高度)
+  const interpolateAndScaleData = (dataArray: number[], color: string, scalingFactor: number) => {
+      const result: any[] = [];
+      const len = dataArray.length;
+
+      // 找出所有有數值的 index
+      const validIndices: number[] = [];
+      dataArray.forEach((val, idx) => {
+          if (val > 0) validIndices.push(idx);
+      });
+
+      if (validIndices.length === 0) {
+          return dataArray.map(() => ({ value: 0, hideDataPoint: true, dataPointText: '' }));
+      }
+
+      for (let i = 0; i < len; i++) {
+          const currentVal = dataArray[i];
+
+          if (currentVal > 0) {
+              // 有數值：放大 value 以匹配高度，但顯示原始數值文字
+              result.push({
+                  value: currentVal * scalingFactor, // [關鍵] 視覺高度放大
+                  dataPointText: String(currentVal), // [關鍵] 顯示原始數值
+                  textColor: color,
+                  textShiftY: -12, 
+                  textFontSize: 10,
+                  dataPointColor: color,
+                  hideDataPoint: false
+              });
+          } else {
+              // 無數值：計算插值並放大
+              const prevIdx = validIndices.filter(idx => idx < i).pop();
+              const nextIdx = validIndices.find(idx => idx > i);
+
+              let calculatedVal = 0;
+
+              if (prevIdx !== undefined && nextIdx !== undefined) {
+                  const startVal = dataArray[prevIdx];
+                  const endVal = dataArray[nextIdx];
+                  const steps = nextIdx - prevIdx;
+                  const stepVal = (endVal - startVal) / steps;
+                  calculatedVal = startVal + (stepVal * (i - prevIdx));
+              } else if (prevIdx !== undefined) {
+                  calculatedVal = dataArray[prevIdx];
+              } else if (nextIdx !== undefined) {
+                  calculatedVal = dataArray[nextIdx];
+              }
+
+              result.push({
+                  value: calculatedVal * scalingFactor, // [關鍵] 視覺高度放大
+                  hideDataPoint: true, 
+                  dataPointText: ''    
+              });
+          }
+      }
+      return result;
+  };
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -173,22 +233,15 @@ export default function AnalysisScreen() {
           }
       });
 
-      const newChartData = [];
-      const wData: any[] = [];
-      const fData: any[] = [];
-      
+      // 1. 先遍歷一次數據找出最大最小值，以決定座標軸
       let maxCal = 2000, minCal = -500;
-      let minWeight = 1000, maxWeight = 0; 
+      let minWeight = 1000, maxWeight = 60; 
       let minBodyFat = 100, maxBodyFat = 0;
 
-      let sumIntake = 0, countIntake = 0, sumBurned = 0, countBurned = 0, sumNet = 0;
-      let sumBMR = 0, sumDuration = 0, sumSteps = 0;
-      let sumWeight = 0, countWeight = 0, sumBodyFat = 0, countBodyFat = 0;
-      let sumPro = 0, sumFat = 0, sumCarb = 0, sumSod = 0;
+      // 用來暫存數據進行統計
+      const tempSortedData = Array.from(dateMap.values()).sort((a:any, b:any) => a.date.getTime() - b.date.getTime());
 
-      const sortedData = Array.from(dateMap.values()).sort((a:any, b:any) => a.date.getTime() - b.date.getTime());
-      
-      sortedData.forEach((d: any, idx: number) => {
+      tempSortedData.forEach((d: any) => {
           if (d.intake > maxCal) maxCal = d.intake;
           if (-d.burned < minCal) minCal = -d.burned;
 
@@ -200,6 +253,37 @@ export default function AnalysisScreen() {
               if (d.bodyFat < minBodyFat) minBodyFat = d.bodyFat;
               if (d.bodyFat > maxBodyFat) maxBodyFat = d.bodyFat;
           }
+      });
+
+      const finalMaxCal = Math.ceil(maxCal / 500) * 500;
+      const finalMinCal = Math.floor(minCal / 500) * 500;
+      
+      const yMinW = minWeight === 1000 ? 0 : Math.max(0, Math.floor(minWeight - 5));
+      const yMaxW = maxWeight === 0 ? 100 : Math.ceil(maxWeight + 5);
+      
+      setAxisConfig({
+          maxCal: finalMaxCal, minCal: finalMinCal, 
+          maxWeight: yMaxW, minWeight: yMinW
+      });
+
+      // 2. 計算縮放倍率 (Scaling Factor)
+      // 目標：讓 Weight 的數值 (例如 80) 在視覺上能對齊 Calorie 的高度 (例如 2500)
+      // 如果 maxCal = 2500, maxWeight = 100, 則倍率 = 25
+      const scalingFactor = finalMaxCal / yMaxW;
+
+      // 3. 生成圖表數據
+      const newChartData: any[] = [];
+      const rawWeights: number[] = [];
+      const rawBodyFats: number[] = [];
+      
+      let sumIntake = 0, countIntake = 0, sumBurned = 0, countBurned = 0, sumNet = 0;
+      let sumBMR = 0, sumDuration = 0, sumSteps = 0;
+      let sumWeight = 0, countWeight = 0, sumBodyFat = 0, countBodyFat = 0;
+      let sumPro = 0, sumFat = 0, sumCarb = 0, sumSod = 0;
+
+      tempSortedData.forEach((d: any, idx: number) => {
+          rawWeights.push(d.weight || 0);
+          rawBodyFats.push(d.bodyFat || 0);
 
           const currentWeight = d.weight || user.currentWeightKg || 60; 
           const bmr = (10 * currentWeight) + (6.25 * baseHeight) - (5 * baseAge) + (isMale ? 5 : -161);
@@ -212,7 +296,6 @@ export default function AnalysisScreen() {
           if (d.bodyFat > 0) { sumBodyFat += d.bodyFat; countBodyFat++; }
 
           newChartData.push({
-              // [修復] 加入 value 屬性，即使是堆疊圖，主物件也需要有一個數值避免計算錯誤
               value: d.intake, 
               stacks: [
                   { value: d.intake, color: '#34C759', marginBottom: 1 },
@@ -230,51 +313,13 @@ export default function AnalysisScreen() {
           });
       });
 
-      const finalMaxCal = Math.ceil(maxCal / 500) * 500;
-      const finalMinCal = Math.floor(minCal / 500) * 500;
-      
-      const yMinW = minWeight === 1000 ? 0 : Math.max(0, Math.floor(minWeight - 2));
-      const yMaxW = maxWeight === 0 ? 100 : Math.ceil(maxWeight + 2);
-      
-      setAxisConfig({
-          maxCal: finalMaxCal, minCal: finalMinCal, 
-          maxWeight: yMaxW, minWeight: yMinW
-      });
-
-      sortedData.forEach((d: any) => {
-          if (d.weight > 0) {
-              wData.push({ 
-                  value: d.weight, 
-                  dataPointText: String(d.weight), 
-                  textShiftY: -6, 
-                  textColor: weightColor,
-                  dataPointColor: weightColor
-              });
-          }
-          else {
-              // [修復] 絕對不要在 lineData 中放入 { value: null }，這會導致 reduce 錯誤
-              // 改為 value: 0 並隱藏該點，保持 array 長度一致
-              wData.push({ value: 0, hideDataPoint: true, dataPointText: '' });
-          }
-
-          if (d.bodyFat > 0) {
-              fData.push({ 
-                  value: d.bodyFat, 
-                  dataPointText: String(d.bodyFat), 
-                  textColor: secondaryColor,
-                  textShiftY: -6,
-                  dataPointColor: secondaryColor
-              });
-          }
-          else {
-               // [修復] 同上，避免 null
-              fData.push({ value: 0, hideDataPoint: true, dataPointText: '' });
-          }
-      });
+      // 4. 生成折線數據 (套用插值與縮放)
+      const interpolatedWeights = interpolateAndScaleData(rawWeights, weightColor, scalingFactor);
+      const interpolatedBodyFats = interpolateAndScaleData(rawBodyFats, secondaryColor, scalingFactor);
 
       setChartData(newChartData);
-      setLineDataWeight(wData);
-      setLineDataFat(fData);
+      setLineDataWeight(interpolatedWeights);
+      setLineDataFat(interpolatedBodyFats);
 
       setSummaryValues({
           avgIntake: countIntake > 0 ? Math.round(sumIntake / countIntake) : 0,
@@ -523,8 +568,6 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            // [修復] 移除 data 屬性，只使用 stackData
-                            // 內部的 stackData 已確保包含 value 和 stacks，且 lineData 不含 null
                             stackData={chartData}
                             barWidth={barWidth}
                             spacing={spacing}
@@ -546,35 +589,37 @@ export default function AnalysisScreen() {
                             }}
 
                             showLine
+                            connectPoints={true} 
+                            
                             lineData={lineDataWeight}
                             lineConfig={{ 
                                 color: weightColor, 
                                 thickness: 3, 
-                                curved: false, // [建議] 暫時關閉曲線，因資料不連續時容易導致 crash
+                                curved: false, 
                                 hideDataPoints: false, 
                                 dataPointsColor: weightColor,
-                                textFontSize: 9, 
-                                textShiftY: -5, 
+                                textFontSize: 10, 
+                                textShiftY: -12, // 調整文字位置
                                 textColor: weightColor, 
-                                zIndex: 10, 
-                                isSecondary: true 
+                                zIndex: 100,
+                                // [重要] 移除 isSecondary: true，因為我們已經手動將數值放大到主軸的範圍
+                                // 這樣線條才會乖乖畫在我們計算好的高度，對齊右側刻度
                             }}
                             
                             lineData2={lineDataFat}
                             lineConfig2={{ 
                                 color: secondaryColor, 
                                 thickness: 3, 
-                                curved: false, // [建議] 同上
+                                curved: false, 
                                 hideDataPoints: false, 
                                 dataPointsColor: secondaryColor, 
-                                textFontSize: 9, 
-                                textShiftY: -5, 
+                                textFontSize: 10, 
+                                textShiftY: -12, 
                                 textColor: secondaryColor, 
-                                zIndex: 10, 
-                                isSecondary: true 
+                                zIndex: 100, 
+                                // 同上
                             }}
                             
-                            connectPoints={false} 
                             xAxisThickness={1}
                             xAxisColor={'#ddd'}
                             rulesColor={'#eee'}
@@ -584,6 +629,12 @@ export default function AnalysisScreen() {
                             scrollable={chartScrollable}
                             renderTooltip={renderTooltip}
                         />
+                         {/* [新增] 提示文字區域 */}
+                        <View style={{marginTop: 10, alignItems: 'center'}}>
+                            <ThemedText style={{fontSize: 10, color: '#888'}}>
+                                {t('pinch_to_zoom', lang)} • {t('drag_to_move', lang)}
+                            </ThemedText>
+                        </View>
                     </View>
                 </PinchGestureHandler>
             ) : <ThemedText>No Data</ThemedText>}

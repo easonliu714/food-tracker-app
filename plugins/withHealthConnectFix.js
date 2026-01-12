@@ -1,6 +1,3 @@
-type: uploaded file
-fileName: easonliu714/food-tracker-app/food-tracker-app-c4b2101b572d8ca53d500d4e0a581334d01aa52b/plugins/withHealthConnectFix.js
-fullContent:
 const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins');
 
 module.exports = function withHealthConnectFix(config) {
