@@ -1,49 +1,58 @@
 const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins');
 
 module.exports = function withHealthConnectFix(config) {
-  // 1. 修正 MainActivity (解決閃退與權限回傳空值問題)
+  // 1. 修正 MainActivity (解決閃退、權限空值、引用衝突問題)
   config = withMainActivity(config, async (config) => {
     let src = config.modResults.contents;
 
-    // A. 加入 Import
-    if (!src.includes('dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate')) {
-      // 確保有 package 宣告，插在 package 下方或檔案最前面
-      if (src.includes('package ')) {
-        src = src.replace(
-          /package\s+[\w.]+/,
-          `$&
-import android.os.Bundle
-import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
-        );
-      } else {
-         src = `import android.os.Bundle
-import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate
-` + src;
-      }
+    // 取得 package 宣告行，作為插入點
+    const packageMatch = src.match(/package\s+[\w.]+/);
+    if (!packageMatch) {
+        return config; 
+    }
+    const packageLine = packageMatch[0];
+
+    // 定義我們需要確保存在的 imports
+    const neededImports = [
+        'android.os.Bundle',
+        'dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate'
+    ];
+
+    // 檢查並收集尚未存在的 imports
+    let importsToAdd = [];
+    for (const imp of neededImports) {
+        if (!src.includes(`import ${imp}`)) {
+            importsToAdd.push(`import ${imp}`);
+        }
     }
 
-    // B. 注入 Permission Delegate
+    // 如果有缺少的 imports，插入在 package 宣告下方
+    if (importsToAdd.length > 0) {
+        src = src.replace(
+            packageLine,
+            `${packageLine}\n${importsToAdd.join('\n')}`
+        );
+    }
+
+    // 注入 Permission Delegate
     const delegateCode = `HealthConnectPermissionDelegate.setPermissionDelegate(this)`;
 
+    // 確保不會重複注入 delegate 程式碼
     if (!src.includes(delegateCode)) {
-      // 情況 1: MainActivity 已有 onCreate 方法 -> 插在 super.onCreate 之後
       if (src.includes('fun onCreate')) {
+        // 情況 A: 已經有 onCreate
         if (src.includes('super.onCreate(savedInstanceState)')) {
           src = src.replace(
             'super.onCreate(savedInstanceState)',
-            `super.onCreate(savedInstanceState)
-    ${delegateCode}`
+            `super.onCreate(savedInstanceState)\n    ${delegateCode}`
           );
         } else {
-          // 有 onCreate 但沒 super (罕見)，插在函式開頭
-          src = src.replace(/fun\s+onCreate\s*\([^)]*\)\s*\{/, `$&
-    ${delegateCode}`);
+          // 有 onCreate 但沒 super (罕見)
+          src = src.replace(/fun\s+onCreate\s*\([^)]*\)\s*\{/, `$& \n    ${delegateCode}`);
         }
-      } 
-      // 情況 2: MainActivity 沒有 onCreate 方法 (Expo 預設模版常見情況) -> 手動建立 onCreate
-      else {
+      } else {
+        // 情況 B: 沒有 onCreate (Expo 預設模版常見)，手動建立
         // 尋找 class MainActivity ... { 的結尾 (最後一個 })
-        // 我們要在 class 內部的最後面插入 onCreate
         const lastBraceIndex = src.lastIndexOf('}');
         if (lastBraceIndex !== -1) {
           const onCreateMethod = `
