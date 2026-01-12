@@ -53,7 +53,7 @@ const config: ExpoConfig = {
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
-      // [關鍵] Google Health Connect 權限宣告
+      // Google Health Connect 權限宣告
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
@@ -70,6 +70,11 @@ const config: ExpoConfig = {
         ],
         category: ["BROWSABLE", "DEFAULT"],
       },
+      // [新增] 必須宣告此 Intent Filter，Health Connect 才能正確回調並顯示權限視窗
+      {
+        action: "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE",
+        category: ["DEFAULT"],
+      }
     ],
   },
   
@@ -79,13 +84,8 @@ const config: ExpoConfig = {
   },
   
   plugins: [
-    // 0. 加入我們新增的修復插件 (請確保路徑正確)
     "./plugins/withHealthConnectFix",
-
-    // 1. Lint 停用插件 (如你專案中有此檔案)
     "./plugins/withDisableLinting",
-
-    // 2. Android 建置屬性 (Health Connect 必須設定 minSdk 26+)
     [
       "expo-build-properties",
       {
@@ -96,13 +96,10 @@ const config: ExpoConfig = {
         },
       },
     ],
-    
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-    // Health Connect 插件
     "react-native-health-connect",
-
     [
       "expo-notifications",
       {
@@ -110,7 +107,6 @@ const config: ExpoConfig = {
         "color": "#ffffff"
       }
     ],
-    
     [
       "expo-camera",
       {

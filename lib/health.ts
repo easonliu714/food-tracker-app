@@ -2,83 +2,117 @@ import {
   initialize,
   requestPermission,
   readRecords,
+  getGrantedPermissions,
   getSdkStatus,
   SdkAvailabilityStatus,
-} from "react-native-health-connect";
-import { Platform } from "react-native";
+} from 'react-native-health-connect';
+import { Permission } from 'react-native-health-connect/lib/typescript/types';
 
-export const initHealthConnect = async () => {
-  // Health Connect 僅支援 Android
-  if (Platform.OS !== "android") return false;
+// 定義需要的權限列表
+const PERMISSIONS: Permission[] = [
+  { accessType: 'read', recordType: 'Steps' },
+  { accessType: 'read', recordType: 'SleepSession' },
+  { accessType: 'read', recordType: 'ExerciseSession' },
+];
 
+/**
+ * 初始化並請求權限
+ * @returns boolean 是否成功連結
+ */
+export async function connectHealthConnect(): Promise<boolean> {
   try {
-    // 1. 檢查 SDK 狀態
+    console.log("[HealthConnect] Checking SDK status...");
     const status = await getSdkStatus();
-    if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
-      console.log("Health Connect SDK not available:", status);
+    console.log(`[HealthConnect] SDK Status: ${status}`);
+
+    if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE) {
+      console.error("[HealthConnect] SDK Unavailable on this device.");
       return false;
     }
 
-    // 2. 初始化 Health Connect
-    // 注意：initialize 會回傳 boolean 承諾
-    const isInitialized = await initialize();
-    if (!isInitialized) {
-        console.log("Health Connect failed to initialize");
-        return false;
+    if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
+      console.error("[HealthConnect] Provider update required.");
+      // 這裡通常需要引導使用者去 Play Store 更新，但暫時回傳 false
+      return false;
     }
 
-    // 3. 請求權限
-    // 定義我們要讀取的資料類型
-    const permissions = [
-      { accessType: "read", recordType: "Steps" },
-      { accessType: "read", recordType: "SleepSession" },
-      { accessType: "read", recordType: "ExerciseSession" },
-    ] as const;
+    console.log("[HealthConnect] Initializing...");
+    const isInitialized = await initialize();
+    console.log(`[HealthConnect] Initialized result: ${isInitialized}`);
 
-    const granted = await requestPermission(permissions);
-    
-    // 只要有拿到任何權限，我們就當作成功 (雖然嚴格來說應該檢查是否包含我們需要的)
-    return granted.length > 0;
+    if (!isInitialized) {
+        console.error("[HealthConnect] Initialize returned false. Check logs/manifest.");
+        // 注意：有些設備即使 initialize 回傳 false，仍可繼續請求權限，視版本而定，
+        // 但通常 false 代表無法與服務溝通 (例如 package visibility 問題)
+        // 我們這裡不直接 return false，嘗試繼續往下跑跑看，或觀察 log
+    }
 
-  } catch (e) {
-    console.error("Health Connect Init Error:", e);
+    console.log("[HealthConnect] Requesting permissions...");
+    // 請求權限
+    const granted = await requestPermission(PERMISSIONS);
+    console.log("[HealthConnect] Permissions requested. Granted list:", JSON.stringify(granted));
+
+    // 再次確認權限
+    const permissions = await getGrantedPermissions();
+    console.log("[HealthConnect] Final Granted Permissions:", JSON.stringify(permissions));
+
+    // 只要有任何一個權限被允許，我們就視為成功
+    const isSuccess = permissions.length > 0;
+    return isSuccess;
+
+  } catch (e: any) {
+    console.error("[HealthConnect] Connection Error:", e);
+    if (e && e.message) {
+        console.error("[HealthConnect] Error Message:", e.message);
+    }
     return false;
   }
-};
+}
 
-export const getHealthData = async (startTime: Date, endTime: Date) => {
-  // 非 Android 平台直接回傳空陣列，避免錯誤
-  if (Platform.OS !== "android") return { steps: [], sleep: [] };
-
+/**
+ * 讀取今日步數
+ */
+export async function readTodaySteps(): Promise<number> {
   try {
-    // 讀取步數
-    // readRecords 回傳格式為 { records: Array, pageToken: string }
-    const stepsResult = await readRecords("Steps", {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    const result = await readRecords('Steps', {
       timeRangeFilter: {
-        operator: "between",
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
+        operator: 'between',
+        startTime: today.toISOString(),
+        endTime: now.toISOString(),
       },
     });
 
-    // 讀取睡眠
-    const sleepResult = await readRecords("SleepSession", {
-      timeRangeFilter: {
-        operator: "between",
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-      },
-    });
-
-    // [關鍵修正] 這裡必須回傳 .records 陣列，否則外部使用 .reduce 會報錯
-    return { 
-        steps: stepsResult.records || [], 
-        sleep: sleepResult.records || [] 
-    };
-
+    // 加總所有步數紀錄
+    const totalSteps = result.reduce((sum, record) => sum + record.count, 0);
+    console.log(`[HealthConnect] Read Steps: ${totalSteps}`);
+    return totalSteps;
   } catch (e) {
-    console.error("Fetch Health Data Error:", e);
-    // 發生錯誤時回傳空陣列，保證 App 不會崩潰
-    return { steps: [], sleep: [] };
+    console.error("[HealthConnect] Read Steps Error:", e);
+    return 0;
   }
-};
+}
+
+/**
+ * 讀取今日燃燒卡路里 (從運動紀錄)
+ * 注意：這只是 Active Calories，BMR 需要另外算
+ */
+export async function readTodayCaloriesBurned(): Promise<number> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+
+    // 這裡我們只讀取 ExerciseSession，有些 App 會寫入 TotalCaloriesBurned
+    // 這裡示範讀取運動期間的熱量
+    // 實務上 Health Connect 有 'TotalCaloriesBurned' record type，但需要額外權限
+    // 這裡暫時回傳 0 或依需求擴充
+    return 0;
+  } catch (e) {
+    console.error("[HealthConnect] Read Calories Error:", e);
+    return 0;
+  }
+}
