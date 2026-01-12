@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Vibration } from "react-native";
+import { useState, useEffect, useCallback } from "react";
+import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Vibration } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart } from "react-native-gifted-charts";
-import { format, subDays, addDays, differenceInDays, eachDayOfInterval } from "date-fns";
+import { format, subDays, differenceInDays, eachDayOfInterval } from "date-fns";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
-import { GestureHandlerRootView, PinchGestureHandler, State } from "react-native-gesture-handler";
+import { GestureHandlerRootView, PinchGestureHandler } from "react-native-gesture-handler";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -13,11 +13,11 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { t, useLanguage } from "@/lib/i18n";
 import { db } from "@/lib/db"; 
 import { dailyMetrics, foodLogs, activityLogs, userProfiles } from "@/drizzle/schema";
-import { desc, gte, lte, and } from "drizzle-orm";
+import { gte, lte, and } from "drizzle-orm";
 import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage"; 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 32; // Card padding * 2
+const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 32;
 
 // 定義所有可用的統計項目
 type StatKey = 'avgIntake' | 'avgBurned' | 'avgNet' | 'avgBMR' | 'totalDuration' | 'totalSteps' | 'avgWeight' | 'avgBodyFat' | 'avgPro' | 'avgFat' | 'avgCarb' | 'avgSod';
@@ -47,8 +47,8 @@ export default function AnalysisScreen() {
       icon: useThemeColor({}, "icon"),
       warn: '#FF3B30'
   };
-  const secondaryColor = '#AF52DE'; // 體脂顏色 (紫色)
-  const weightColor = '#007AFF';    // 體重顏色 (藍色)
+  const secondaryColor = '#AF52DE'; // 體脂顏色
+  const weightColor = '#007AFF';    // 體重顏色
 
   // 週期狀態
   const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
@@ -73,7 +73,7 @@ export default function AnalysisScreen() {
       avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0
   });
 
-  // [新增] 用於紅字比對的目標狀態
+  // 目標狀態
   const [goals, setGoals] = useState({
       calories: 2000, protein: 0, fat: 0, carbs: 0, sodium: 2300
   });
@@ -92,10 +92,10 @@ export default function AnalysisScreen() {
 
   // 座標軸與圖表設定
   const [axisConfig, setAxisConfig] = useState({
-      maxCal: 2500, minCal: -500, maxWeight: 100, minWeight: 0, yAxisLabelTexts: ['0', '25', '50', '75', '100']
+      maxCal: 2500, minCal: -500, maxWeight: 100, minWeight: 0
   });
   
-  // 圖表縮放 (Fit to Screen)
+  // 圖表縮放
   const [barWidth, setBarWidth] = useState(16);
   const [spacing, setSpacing] = useState(24);
   const [zoomScale, setZoomScale] = useState(1);
@@ -122,13 +122,13 @@ export default function AnalysisScreen() {
       setZoomScale(1); 
       setChartScrollable(false); 
 
+      // 取得使用者資料
       const userRes = await db.select().from(userProfiles).limit(1);
       const user = userRes[0] || {};
       const baseHeight = user.heightCm || 170;
       const baseAge = user.birthDate ? (new Date().getFullYear() - new Date(user.birthDate).getFullYear()) : 30;
       const isMale = user.gender === 'male';
 
-      // [新增] 設定目標值供比對
       const cal = user.dailyCalorieTarget || 2000;
       setGoals({
           calories: cal,
@@ -138,7 +138,6 @@ export default function AnalysisScreen() {
           sodium: user.sodiumTargetMg || 2300
       });
 
-      // [關鍵修改] 增加 try...catch 避免資料庫查詢錯誤導致崩潰
       let logs: any[] = [];
       let acts: any[] = [];
       let metrics: any[] = [];
@@ -149,8 +148,12 @@ export default function AnalysisScreen() {
           metrics = await db.select().from(dailyMetrics).where(and(gte(dailyMetrics.date, startStr), lte(dailyMetrics.date, endStr)));
       } catch (dbErr) {
           console.error("DB Fetch Error (Analysis):", dbErr);
-          // 若失敗，保持空陣列繼續執行，避免卡死
       }
+
+      // 安全檢查
+      if (!logs) logs = [];
+      if (!acts) acts = [];
+      if (!metrics) metrics = [];
 
       const dateMap = new Map();
       eachDayOfInterval({ start: new Date(startStr), end: new Date(endStr) }).forEach(d => {
@@ -188,7 +191,6 @@ export default function AnalysisScreen() {
       const fData: any[] = [];
       
       let maxCal = 2000, minCal = -500;
-      // [新增] 動態計算體重極值
       let minWeight = 1000, maxWeight = 0; 
       let minBodyFat = 100, maxBodyFat = 0;
 
@@ -203,7 +205,6 @@ export default function AnalysisScreen() {
           if (d.intake > maxCal) maxCal = d.intake;
           if (-d.burned < minCal) minCal = -d.burned;
 
-          // 收集極值 (排除 0)
           if (d.weight > 0) {
               if (d.weight < minWeight) minWeight = d.weight;
               if (d.weight > maxWeight) maxWeight = d.weight;
@@ -213,7 +214,6 @@ export default function AnalysisScreen() {
               if (d.bodyFat > maxBodyFat) maxBodyFat = d.bodyFat;
           }
 
-          // BMR 計算需要體重，若當天無體重則暫用最近一次或預設
           const currentWeight = d.weight || user.currentWeightKg || 60; 
           const bmr = (10 * currentWeight) + (6.25 * baseHeight) - (5 * baseAge) + (isMale ? 5 : -161);
           
@@ -244,18 +244,15 @@ export default function AnalysisScreen() {
       const finalMaxCal = Math.ceil(maxCal / 500) * 500;
       const finalMinCal = Math.floor(minCal / 500) * 500;
       
-      // [修改] 設定動態 Y 軸範圍 (給予緩衝空間)
       const yMinW = minWeight === 1000 ? 0 : Math.max(0, Math.floor(minWeight - 2));
       const yMaxW = maxWeight === 0 ? 100 : Math.ceil(maxWeight + 2);
       
       setAxisConfig({
           maxCal: finalMaxCal, minCal: finalMinCal, 
-          maxWeight: yMaxW, minWeight: yMinW, // 新增 minWeight
-          yAxisLabelTexts: [] // 自動生成
+          maxWeight: yMaxW, minWeight: yMinW
       });
 
-      // [修改] 處理折線圖資料 - 不再插值，無資料則斷開 (value: null)
-      sortedData.forEach((d: any, i: number) => {
+      sortedData.forEach((d: any) => {
           if (d.weight > 0) {
               wData.push({ 
                   value: d.weight, 
@@ -266,7 +263,7 @@ export default function AnalysisScreen() {
               });
           }
           else {
-              wData.push({ value: null }); // 斷點
+              wData.push({ value: null });
           }
 
           if (d.bodyFat > 0) {
@@ -279,7 +276,7 @@ export default function AnalysisScreen() {
               });
           }
           else {
-              fData.push({ value: null }); // 斷點
+              fData.push({ value: null });
           }
       });
 
@@ -302,15 +299,18 @@ export default function AnalysisScreen() {
           avgSod: countIntake > 0 ? Math.round(sumSod / countIntake) : 0,
       });
 
-    } catch (e) { console.error(e); } finally { setLoading(false); }
-  }, [period, customStart, customEnd]); // Remove zoom dependencies
+    } catch (e) { 
+      console.error("Analysis Load Error:", e);
+    } finally { 
+      setLoading(false);
+    }
+  }, [period, customStart, customEnd]);
 
-  // 監聽依賴變化，自動載入數據
   useEffect(() => {
     loadData();
   }, [loadData]);
-  // ==========================================
 
+  // Grid Storage
   useEffect(() => {
       const loadGridSettings = async () => {
           const savedSlots = await getAnalysisGrid();
@@ -326,22 +326,19 @@ export default function AnalysisScreen() {
       saveAnalysisGrid(newSlots);
   };
 
-  // [修改] 修正縮放閃退問題
   const onPinchEvent = (event: any) => {
       const scale = event.nativeEvent.scale;
-      // 增加邊界檢查，避免 scale 為 NaN 或無限大
       if (!scale || isNaN(scale)) return;
 
       const newScale = Math.max(0.5, Math.min(zoomScale * scale, 3.0)); 
       
-      // 計算新的 barWidth，並加上保護機制
       const newBarWidth = Math.max(4, Math.min(50, barWidth * scale)); 
       const newSpacing = Math.max(2, Math.min(40, spacing * scale));
       
       setZoomScale(newScale);
       setBarWidth(newBarWidth);
       setSpacing(newSpacing);
-      setChartScrollable(newScale > 1.2); // 只有放大才允許滾動
+      setChartScrollable(newScale > 1.2); 
   };
 
   const handleGridLongPress = () => {
@@ -421,13 +418,11 @@ export default function AnalysisScreen() {
       );
   };
 
-  // [修改] Render Grid Item 加入紅字警示
   const renderGridItem = (key: StatKey | null, index: number) => {
       const statDef = key ? ALL_STATS.find(s => s.key === key) : null;
       const val = key ? summaryValues[key] : 0;
       const isSelected = selectedSlotIndex === index;
 
-      // 判斷是否超過目標
       let isOver = false;
       if (key === 'avgIntake' && goals.calories > 0 && val > goals.calories) isOver = true;
       if (key === 'avgPro' && goals.protein > 0 && val > goals.protein) isOver = true;
@@ -457,7 +452,6 @@ export default function AnalysisScreen() {
                   <>
                     <ThemedText style={{fontSize: 10, color: '#888', marginBottom: 4}}>{t(statDef.labelKey, lang) || statDef.labelKey}</ThemedText>
                     <View style={{flexDirection: 'row', alignItems: 'baseline'}}>
-                        {/* 若超過目標顯示紅色 */}
                         <ThemedText style={{fontSize: 15, fontWeight: 'bold', color: isOver ? theme.warn : (statDef.color || theme.text)}}>{val}</ThemedText>
                         <ThemedText style={{fontSize: 9, marginLeft: 2, color: '#888'}}>{statDef.unit}</ThemedText>
                     </View>
@@ -497,7 +491,6 @@ export default function AnalysisScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={{padding: 16}} scrollEnabled={true}>
-        {/* Header */}
         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 16}}>
              <ThemedText type="title">{t('analysis', lang)}</ThemedText>
              {isEditMode && (
@@ -507,7 +500,6 @@ export default function AnalysisScreen() {
              )}
         </View>
         
-        {/* Period Selector */}
         <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
             {['week', 'month', 'custom'].map((p) => (
                 <TouchableOpacity key={p} onPress={() => setPeriod(p as any)} style={{flex: 1, paddingVertical: 6, alignItems:'center', borderRadius:6, backgroundColor: period === p ? theme.tint : 'transparent'}}>
@@ -520,13 +512,11 @@ export default function AnalysisScreen() {
 
         {renderCustomRangePicker()}
 
-        {/* 1. 統計方塊區 (Grid System) */}
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
         <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
             {gridSlots.map((key, index) => renderGridItem(key, index))}
         </View>
 
-        {/* 2. 整合圖表 */}
         <ThemedView style={styles.chartCard}>
             <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                 <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
@@ -542,7 +532,7 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            // 修正：產生與 stackData 長度相同的 dummy data，避免 reduce undefined 錯誤
+                            // 修正：提供與 chartData 長度相同的 dummy data，避免 crash
                             data={chartData.map(() => ({ value: 0 }))}
                             stackData={chartData}
                             barWidth={barWidth}
@@ -559,7 +549,6 @@ export default function AnalysisScreen() {
                             secondaryYAxisConfig={{
                                 showYAxisIndices: true,
                                 yAxisTextStyle: {color: weightColor, fontSize: 10},
-                                // [修改] 動態設定最大最小值
                                 maxValue: axisConfig.maxWeight,
                                 minValue: axisConfig.minWeight,
                                 noOfSections: 5,
@@ -574,7 +563,7 @@ export default function AnalysisScreen() {
                                 hideDataPoints: false, 
                                 dataPointsColor: weightColor,
                                 textFontSize: 9, 
-                                textShiftY: -5, // 調整文字位置 
+                                textShiftY: -5, 
                                 textColor: weightColor, 
                                 zIndex: 10, 
                                 isSecondary: true 
@@ -594,7 +583,7 @@ export default function AnalysisScreen() {
                                 isSecondary: true 
                             }}
                             
-                            connectPoints={false} // [修改] 斷點不連線
+                            connectPoints={false} 
                             xAxisThickness={1}
                             xAxisColor={'#ddd'}
                             rulesColor={'#eee'}
@@ -609,7 +598,6 @@ export default function AnalysisScreen() {
             ) : <ThemedText>No Data</ThemedText>}
         </ThemedView>
 
-        {/* Modal: Add Stat */}
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={()=>setShowAddModal(false)}>
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.card}]}>

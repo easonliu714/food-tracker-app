@@ -17,10 +17,10 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.13", // [修改] 更新版本號
+  version: "1.0.13", 
   orientation: "portrait",
-  // 建議：直接給定一個固定的 scheme 名稱，比較穩定
-  scheme: "foodtracker", // 建議改成簡單的英文單字，全部小寫
+  // 固定 Scheme 名稱，方便喚起
+  scheme: "foodtracker", 
 
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
@@ -53,7 +53,7 @@ const config: ExpoConfig = {
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
-      // [關鍵] Google Health Connect 權限
+      // [關鍵] Google Health Connect 權限宣告
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
@@ -79,16 +79,16 @@ const config: ExpoConfig = {
   },
   
   plugins: [
-    // [新增] 1. 引入剛剛建立的 Lint 停用插件
+    // 1. Lint 停用插件 (如你專案中有此檔案)
     "./plugins/withDisableLinting",
 
-    // [保留] 2. Android 建置屬性 (Health Connect 需要)
+    // 2. Android 建置屬性 (Health Connect 必須設定 minSdk 26+)
     [
       "expo-build-properties",
       {
         android: {
-          minSdkVersion: 26,     // Health Connect 要求最低 26
-          compileSdkVersion: 35, // 建議對應 Android 15
+          minSdkVersion: 26,     
+          compileSdkVersion: 35, 
           targetSdkVersion: 35,
         },
       },
@@ -97,10 +97,8 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-    // [關鍵] Health Connect Plugin
+    // Health Connect 插件
     "react-native-health-connect",
-    
-    // [已移除] 導致錯誤的 nabbra/expo-android-app-name-localization 已刪除
 
     [
       "expo-notifications",
@@ -145,7 +143,6 @@ const config: ExpoConfig = {
       projectId: "e7eda4dd-d630-4f8d-8b68-34e211c164f2",
     },
   },
-  //owner: "easonliu714",
 };
 
 export default config;

@@ -20,7 +20,7 @@ import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, getDay, a
 import { zhTW, enUS, ja, ko, fr, ru } from "date-fns/locale"; 
 import { Ionicons } from "@expo/vector-icons";
 import { PieChart } from "react-native-gifted-charts";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import DateTimePicker from "@react-native-community/datetimepicker"; 
 
@@ -268,9 +268,25 @@ export default function HomeScreen() {
       if (stepLog && stepLog.steps) setHealthSteps(stepLog.steps);
       else setHealthSteps(0);
 
-      const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
-      const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
-      setRecentFoods(uniqueRecents);
+      // [修改前] 這是最近紀錄 (Chronological)
+      // const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
+      // const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
+      // setRecentFoods(uniqueRecents);
+
+      // [修改後] 這是常用食物 (Most Frequent) - 依出現次數排序
+      const frequentFoodsRes = await db
+        .select({
+          foodName: foodLogs.foodName,
+          count: sql`count(${foodLogs.id})`.as('count'),
+          // 為了讓 UI 可以 clone，我們取該食物最近一次的 log ID
+          id: sql`max(${foodLogs.id})`.mapWith(Number).as('id'),
+        })
+        .from(foodLogs)
+        .groupBy(foodLogs.foodName)
+        .orderBy(desc(sql`count`))
+        .limit(5);
+
+      setRecentFoods(frequentFoodsRes);
 
       const acts = await getFrequentActivities();
       setFrequentActivities(acts);
