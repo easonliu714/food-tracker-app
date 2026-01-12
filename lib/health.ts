@@ -7,74 +7,64 @@ import {
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 import { Permission } from 'react-native-health-connect/lib/typescript/types';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 
-// 定義需要的權限列表
 const PERMISSIONS: Permission[] = [
   { accessType: 'read', recordType: 'Steps' },
   { accessType: 'read', recordType: 'SleepSession' },
   { accessType: 'read', recordType: 'ExerciseSession' },
 ];
 
-/**
- * 初始化並請求權限 (對應首頁的 initHealthConnect)
- * @returns boolean 是否成功連結
- */
 export async function initHealthConnect(): Promise<boolean> {
-  // iOS 不支援 Health Connect
   if (Platform.OS !== 'android') return false;
 
   try {
-    console.log("[HealthConnect] Checking SDK status...");
+    // 1. 檢查 SDK 狀態
     const status = await getSdkStatus();
-    console.log(`[HealthConnect] SDK Status: ${status}`);
-
-    if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE) {
-      console.error("[HealthConnect] SDK Unavailable on this device.");
+    if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
+      // [除錯] 彈出狀態碼
+      Alert.alert("Debug", `SDK Status Unavailable: ${status}\n(1=Unavail, 2=UpdateRequired, 3=Available)`);
       return false;
     }
 
-    if (status === SdkAvailabilityStatus.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) {
-      console.error("[HealthConnect] Provider update required.");
-      return false;
-    }
-
-    console.log("[HealthConnect] Initializing...");
+    // 2. 初始化
     const isInitialized = await initialize();
-    console.log(`[HealthConnect] Initialized result: ${isInitialized}`);
+    if (!isInitialized) {
+        // [除錯] 初始化失敗
+        Alert.alert("Debug", "Health Connect Initialize returned FALSE");
+        return false;
+    }
 
-    // 注意：即使 initialize 回傳 false，有時仍可請求權限 (視 SDK 版本與狀態)
-
-    console.log("[HealthConnect] Requesting permissions...");
-    const granted = await requestPermission(PERMISSIONS);
-    console.log("[HealthConnect] Permissions requested. Granted list:", JSON.stringify(granted));
-
-    // 再次確認權限
-    const permissions = await getGrantedPermissions();
-    console.log("[HealthConnect] Final Granted Permissions:", JSON.stringify(permissions));
-
-    // 只要有任何一個權限被允許，我們就視為成功
-    const isSuccess = permissions.length > 0;
-    return isSuccess;
+    // 3. 請求權限
+    try {
+        const granted = await requestPermission(PERMISSIONS);
+        
+        // [除錯] 顯示拿到的權限數量
+        if (granted.length === 0) {
+            // 嘗試再次確認權限 (有時候 requestPermission 回傳空但實際上有權限)
+            const checkAgain = await getGrantedPermissions();
+            if (checkAgain.length === 0) {
+                Alert.alert("Debug", "Permission Request returned EMPTY list.\n(Delegate issue or User cancelled)");
+                return false;
+            }
+            return true;
+        }
+        return true;
+    } catch (permError: any) {
+        Alert.alert("Debug", `Request Permission Error: ${permError.message}`);
+        return false;
+    }
 
   } catch (e: any) {
-    console.error("[HealthConnect] Connection Error:", e);
+    Alert.alert("Debug", `Init Error: ${e.message}`);
     return false;
   }
 }
 
-/**
- * 讀取指定範圍的健康數據 (對應首頁的 getHealthData)
- * @param start 開始時間
- * @param end 結束時間
- */
 export async function getHealthData(start: Date, end: Date) {
   if (Platform.OS !== 'android') return { steps: [], sleep: [] };
 
   try {
-    console.log(`[HealthConnect] Fetching data from ${start.toISOString()} to ${end.toISOString()}`);
-    
-    // 讀取步數
     const stepsResult = await readRecords('Steps', {
       timeRangeFilter: {
         operator: 'between',
@@ -83,7 +73,6 @@ export async function getHealthData(start: Date, end: Date) {
       },
     });
 
-    // 讀取睡眠
     const sleepResult = await readRecords('SleepSession', {
       timeRangeFilter: {
         operator: 'between',
@@ -92,19 +81,16 @@ export async function getHealthData(start: Date, end: Date) {
       },
     });
 
-    console.log(`[HealthConnect] Fetched ${stepsResult.length} step records and ${sleepResult.length} sleep records.`);
-
     return {
-      steps: stepsResult,
-      sleep: sleepResult
+      steps: stepsResult.records || [],
+      sleep: sleepResult.records || []
     };
 
-  } catch (e) {
-    console.error("[HealthConnect] Read Data Error:", e);
-    // 發生錯誤時回傳空陣列，避免首頁崩潰
+  } catch (e: any) {
+    Alert.alert("Debug", `Read Data Error: ${e.message}`);
     return { steps: [], sleep: [] };
   }
 }
 
-// 為了相容性保留舊函數名稱 (選用)
+// 相容舊名稱
 export const connectHealthConnect = initHealthConnect;

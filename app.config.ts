@@ -19,7 +19,6 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   version: "1.0.13", 
   orientation: "portrait",
-  // 固定 Scheme 名稱，方便喚起
   scheme: "foodtracker", 
 
   icon: "./assets/images/icon.png",
@@ -53,7 +52,6 @@ const config: ExpoConfig = {
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
-      // Google Health Connect 權限宣告
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
@@ -70,11 +68,8 @@ const config: ExpoConfig = {
         ],
         category: ["BROWSABLE", "DEFAULT"],
       },
-      // [新增] 必須宣告此 Intent Filter，Health Connect 才能正確回調並顯示權限視窗
-      {
-        action: "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE",
-        category: ["DEFAULT"],
-      }
+      // [修正] 移除這裡的 Health Connect Intent Filter
+      // 因為 Expo 會自動加前綴導致錯誤，我們改用 Plugin 注入
     ],
   },
   
