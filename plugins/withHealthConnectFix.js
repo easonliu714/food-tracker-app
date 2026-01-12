@@ -1,10 +1,13 @@
-const { withMainActivity } = require('@expo/config-plugins');
+type: uploaded file
+fileName: easonliu714/food-tracker-app/food-tracker-app-c4b2101b572d8ca53d500d4e0a581334d01aa52b/plugins/withHealthConnectFix.js
+fullContent:
+const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins');
 
 module.exports = function withHealthConnectFix(config) {
-  return withMainActivity(config, async (config) => {
+  // 1. 修正 MainActivity (解決閃退問題)
+  config = withMainActivity(config, async (config) => {
     let src = config.modResults.contents;
 
-    // 1. 添加必要的 Import
     if (!src.includes('dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate')) {
       src = src.replace(
         /package\s+[\w.]+/,
@@ -13,10 +16,7 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
       );
     }
 
-    // 2. 在 onCreate 中註冊 Permission Delegate
-    // 檢查是否已存在，避免重複添加
     if (!src.includes('HealthConnectPermissionDelegate.setPermissionDelegate(this)')) {
-      // 尋找 super.onCreate(savedInstanceState) 並在之後插入
       if (src.includes('super.onCreate(savedInstanceState)')) {
         src = src.replace(
           'super.onCreate(savedInstanceState)',
@@ -24,7 +24,6 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
     HealthConnectPermissionDelegate.setPermissionDelegate(this)`
         );
       } else {
-        // 如果找不到 super.onCreate (罕見)，嘗試在 onCreate 函數開頭插入
         const onCreateRegex = /fun\s+onCreate\s*\([^)]*\)\s*\{/;
         if (onCreateRegex.test(src)) {
             src = src.replace(onCreateRegex, `$&
@@ -36,4 +35,31 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
     config.modResults.contents = src;
     return config;
   });
+
+  // 2. 修正 AndroidManifest.xml (解決無法連結/無提示問題)
+  // Android 11+ 需要設定 <queries> 才能看見 Health Connect App
+  config = withAndroidManifest(config, async (config) => {
+    const manifest = config.modResults.manifest;
+
+    if (!manifest.queries) {
+      manifest.queries = [];
+    }
+
+    const healthConnectPackageName = "com.google.android.apps.healthdata";
+    
+    // 檢查是否已存在
+    const hasQuery = manifest.queries.some(q => 
+      q.package && q.package.some(p => p.$ && p.$.name === healthConnectPackageName)
+    );
+
+    if (!hasQuery) {
+      manifest.queries.push({
+        package: [{ $: { name: healthConnectPackageName } }]
+      });
+    }
+
+    return config;
+  });
+
+  return config;
 };

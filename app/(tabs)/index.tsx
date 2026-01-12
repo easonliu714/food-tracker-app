@@ -61,7 +61,7 @@ export default function HomeScreen() {
   // 飲水狀態
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(2000); 
-  const WATER_CUP_SIZE = 500;
+  const WATER_CUP_SIZE = 250;
 
   // Health Connect 顯示數據
   const [healthSteps, setHealthSteps] = useState(0);
@@ -539,7 +539,7 @@ export default function HomeScreen() {
                   <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
               </View>
               
-              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 12, justifyContent:'center'}}>
+              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 2, justifyContent:'center'}}>
                   {Array.from({length: totalCups}).map((_, idx) => (
                       <TouchableOpacity 
                         key={idx} 

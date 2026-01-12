@@ -19,7 +19,6 @@ import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 32;
 
-// 定義所有可用的統計項目
 type StatKey = 'avgIntake' | 'avgBurned' | 'avgNet' | 'avgBMR' | 'totalDuration' | 'totalSteps' | 'avgWeight' | 'avgBodyFat' | 'avgPro' | 'avgFat' | 'avgCarb' | 'avgSod';
 
 const ALL_STATS: { key: StatKey; labelKey: string; unit: string; color?: string }[] = [
@@ -47,25 +46,21 @@ export default function AnalysisScreen() {
       icon: useThemeColor({}, "icon"),
       warn: '#FF3B30'
   };
-  const secondaryColor = '#AF52DE'; // 體脂顏色
-  const weightColor = '#007AFF';    // 體重顏色
+  const secondaryColor = '#AF52DE';
+  const weightColor = '#007AFF';
 
-  // 週期狀態
   const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
   const [loading, setLoading] = useState(true);
 
-  // 自訂日期範圍狀態
   const [customStart, setCustomStart] = useState(subDays(new Date(), 7));
   const [customEnd, setCustomEnd] = useState(new Date());
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
-  // 數據狀態
   const [chartData, setChartData] = useState<any[]>([]); 
   const [lineDataWeight, setLineDataWeight] = useState<any[]>([]); 
   const [lineDataFat, setLineDataFat] = useState<any[]>([]); 
   
-  // 統計數值
   const [summaryValues, setSummaryValues] = useState<Record<StatKey, number>>({
       avgIntake: 0, avgBurned: 0, avgNet: 0, avgBMR: 0,
       totalDuration: 0, totalSteps: 0,
@@ -73,12 +68,10 @@ export default function AnalysisScreen() {
       avgPro: 0, avgFat: 0, avgCarb: 0, avgSod: 0
   });
 
-  // 目標狀態
   const [goals, setGoals] = useState({
       calories: 2000, protein: 0, fat: 0, carbs: 0, sodium: 2300
   });
 
-  // Grid System State
   const [gridSlots, setGridSlots] = useState<(StatKey | null)[]>([
     'avgIntake', 'avgBurned', 'avgNet', 
     'avgWeight', 'avgBodyFat', 'totalSteps',
@@ -90,18 +83,15 @@ export default function AnalysisScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [targetAddIndex, setTargetAddIndex] = useState<number | null>(null);
 
-  // 座標軸與圖表設定
   const [axisConfig, setAxisConfig] = useState({
       maxCal: 2500, minCal: -500, maxWeight: 100, minWeight: 0
   });
   
-  // 圖表縮放
   const [barWidth, setBarWidth] = useState(16);
   const [spacing, setSpacing] = useState(24);
   const [zoomScale, setZoomScale] = useState(1);
   const [chartScrollable, setChartScrollable] = useState(false); 
 
-  // 載入數據
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -112,7 +102,6 @@ export default function AnalysisScreen() {
 
       const daysDiff = differenceInDays(new Date(endStr), new Date(startStr)) + 1;
 
-      // Fit to Screen 計算
       const calculatedWidth = Math.floor((VISIBLE_CHART_WIDTH - 20) / (1.6 * daysDiff - 0.6));
       const finalBarWidth = Math.max(4, Math.min(30, calculatedWidth));
       const finalSpacing = Math.max(2, Math.floor(finalBarWidth * 0.6));
@@ -122,7 +111,6 @@ export default function AnalysisScreen() {
       setZoomScale(1); 
       setChartScrollable(false); 
 
-      // 取得使用者資料
       const userRes = await db.select().from(userProfiles).limit(1);
       const user = userRes[0] || {};
       const baseHeight = user.heightCm || 170;
@@ -150,7 +138,6 @@ export default function AnalysisScreen() {
           console.error("DB Fetch Error (Analysis):", dbErr);
       }
 
-      // 安全檢查
       if (!logs) logs = [];
       if (!acts) acts = [];
       if (!metrics) metrics = [];
@@ -225,6 +212,8 @@ export default function AnalysisScreen() {
           if (d.bodyFat > 0) { sumBodyFat += d.bodyFat; countBodyFat++; }
 
           newChartData.push({
+              // [修復] 加入 value 屬性，即使是堆疊圖，主物件也需要有一個數值避免計算錯誤
+              value: d.intake, 
               stacks: [
                   { value: d.intake, color: '#34C759', marginBottom: 1 },
                   { value: -d.burned, color: '#FF9500' }
@@ -263,7 +252,9 @@ export default function AnalysisScreen() {
               });
           }
           else {
-              wData.push({ value: null });
+              // [修復] 絕對不要在 lineData 中放入 { value: null }，這會導致 reduce 錯誤
+              // 改為 value: 0 並隱藏該點，保持 array 長度一致
+              wData.push({ value: 0, hideDataPoint: true, dataPointText: '' });
           }
 
           if (d.bodyFat > 0) {
@@ -276,7 +267,8 @@ export default function AnalysisScreen() {
               });
           }
           else {
-              fData.push({ value: null });
+               // [修復] 同上，避免 null
+              fData.push({ value: 0, hideDataPoint: true, dataPointText: '' });
           }
       });
 
@@ -310,7 +302,6 @@ export default function AnalysisScreen() {
     loadData();
   }, [loadData]);
 
-  // Grid Storage
   useEffect(() => {
       const loadGridSettings = async () => {
           const savedSlots = await getAnalysisGrid();
@@ -532,7 +523,8 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            // 修正：移除 data 屬性，當使用 stackData 時不要傳入 data，避免 library 內部 reduce 錯誤
+                            // [修復] 移除 data 屬性，只使用 stackData
+                            // 內部的 stackData 已確保包含 value 和 stacks，且 lineData 不含 null
                             stackData={chartData}
                             barWidth={barWidth}
                             spacing={spacing}
@@ -558,7 +550,7 @@ export default function AnalysisScreen() {
                             lineConfig={{ 
                                 color: weightColor, 
                                 thickness: 3, 
-                                curved: true, 
+                                curved: false, // [建議] 暫時關閉曲線，因資料不連續時容易導致 crash
                                 hideDataPoints: false, 
                                 dataPointsColor: weightColor,
                                 textFontSize: 9, 
@@ -572,7 +564,7 @@ export default function AnalysisScreen() {
                             lineConfig2={{ 
                                 color: secondaryColor, 
                                 thickness: 3, 
-                                curved: true, 
+                                curved: false, // [建議] 同上
                                 hideDataPoints: false, 
                                 dataPointsColor: secondaryColor, 
                                 textFontSize: 9, 
