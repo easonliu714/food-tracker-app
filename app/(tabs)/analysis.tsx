@@ -532,8 +532,7 @@ export default function AnalysisScreen() {
                 <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
                     <View>
                         <BarChart 
-                            // 修正：提供與 chartData 長度相同的 dummy data，避免 crash
-                            data={chartData.map(() => ({ value: 0 }))}
+                            // 修正：移除 data 屬性，當使用 stackData 時不要傳入 data，避免 library 內部 reduce 錯誤
                             stackData={chartData}
                             barWidth={barWidth}
                             spacing={spacing}

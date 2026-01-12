@@ -79,6 +79,9 @@ const config: ExpoConfig = {
   },
   
   plugins: [
+    // 0. 加入我們新增的修復插件 (請確保路徑正確)
+    "./plugins/withHealthConnectFix",
+
     // 1. Lint 停用插件 (如你專案中有此檔案)
     "./plugins/withDisableLinting",
 
