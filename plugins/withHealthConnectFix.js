@@ -1,30 +1,58 @@
 const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins');
 
 module.exports = function withHealthConnectFix(config) {
-  // 1. 修正 MainActivity (解決閃退問題)
+  // 1. 修正 MainActivity (解決閃退與權限回傳空值問題)
   config = withMainActivity(config, async (config) => {
     let src = config.modResults.contents;
 
+    // A. 加入 Import
     if (!src.includes('dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate')) {
-      src = src.replace(
-        /package\s+[\w.]+/,
-        `$&
-import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
-      );
-    }
-
-    if (!src.includes('HealthConnectPermissionDelegate.setPermissionDelegate(this)')) {
-      if (src.includes('super.onCreate(savedInstanceState)')) {
+      // 確保有 package 宣告，插在 package 下方或檔案最前面
+      if (src.includes('package ')) {
         src = src.replace(
-          'super.onCreate(savedInstanceState)',
-          `super.onCreate(savedInstanceState)
-    HealthConnectPermissionDelegate.setPermissionDelegate(this)`
+          /package\s+[\w.]+/,
+          `$&
+import android.os.Bundle
+import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
         );
       } else {
-        const onCreateRegex = /fun\s+onCreate\s*\([^)]*\)\s*\{/;
-        if (onCreateRegex.test(src)) {
-            src = src.replace(onCreateRegex, `$&
-    HealthConnectPermissionDelegate.setPermissionDelegate(this)`);
+         src = `import android.os.Bundle
+import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate
+` + src;
+      }
+    }
+
+    // B. 注入 Permission Delegate
+    const delegateCode = `HealthConnectPermissionDelegate.setPermissionDelegate(this)`;
+
+    if (!src.includes(delegateCode)) {
+      // 情況 1: MainActivity 已有 onCreate 方法 -> 插在 super.onCreate 之後
+      if (src.includes('fun onCreate')) {
+        if (src.includes('super.onCreate(savedInstanceState)')) {
+          src = src.replace(
+            'super.onCreate(savedInstanceState)',
+            `super.onCreate(savedInstanceState)
+    ${delegateCode}`
+          );
+        } else {
+          // 有 onCreate 但沒 super (罕見)，插在函式開頭
+          src = src.replace(/fun\s+onCreate\s*\([^)]*\)\s*\{/, `$&
+    ${delegateCode}`);
+        }
+      } 
+      // 情況 2: MainActivity 沒有 onCreate 方法 (Expo 預設模版常見情況) -> 手動建立 onCreate
+      else {
+        // 尋找 class MainActivity ... { 的結尾 (最後一個 })
+        // 我們要在 class 內部的最後面插入 onCreate
+        const lastBraceIndex = src.lastIndexOf('}');
+        if (lastBraceIndex !== -1) {
+          const onCreateMethod = `
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    ${delegateCode}
+  }
+`;
+          src = src.substring(0, lastBraceIndex) + onCreateMethod + src.substring(lastBraceIndex);
         }
       }
     }
@@ -34,7 +62,6 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
   });
 
   // 2. 修正 AndroidManifest.xml (解決無法連結/無提示問題)
-  // Android 11+ 需要設定 <queries> 才能看見 Health Connect App
   config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults.manifest;
 
@@ -44,13 +71,12 @@ import dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate`
 
     const healthConnectPackageName = "com.google.android.apps.healthdata";
     
-    // 檢查是否已存在 (修正：檢查 android:name)
+    // 檢查是否已存在 (android:name)
     const hasQuery = manifest.queries.some(q => 
       q.package && q.package.some(p => p.$ && p.$["android:name"] === healthConnectPackageName)
     );
 
     if (!hasQuery) {
-      // 修正：屬性名稱必須包含 android: 前綴，否則建置會失敗
       manifest.queries.push({
         package: [{ $: { "android:name": healthConnectPackageName } }]
       });
