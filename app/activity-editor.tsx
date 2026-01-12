@@ -56,7 +56,7 @@ const ACTIVITY_RAW: ActivityCategory[] = [
     id: "cat_sport",
     items: [
       { id: "act_basketball", mets: 8.0, icon: "basketball" },
-      { id: "act_badminton", mets: 5.5, icon: "tennisball" },
+      { id: "act_badminton", mets: 5.5, icon: "badminton" },
       { id: "act_tennis", mets: 7.3, icon: "tennisball" },
       { id: "act_soccer", mets: 9.0, icon: "football" },
       { id: "act_baseball", mets: 5.0, icon: "baseball" },
@@ -300,7 +300,7 @@ export default function ActivityEditorScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <View style={{padding: 16}}><ThemedText style={{color: theme.icon}}>Please Select Category</ThemedText></View>
+                  <View style={{padding: 16}}><ThemedText style={{color: theme.icon}}>{t('select_category_msg',lang)}</ThemedText></View>
                 )
               }
               renderItem={({ item }) => (

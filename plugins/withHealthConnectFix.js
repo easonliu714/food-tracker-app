@@ -7,39 +7,39 @@ module.exports = function withHealthConnectFix(config) {
 
     // A. 處理 Import (避免重複)
     const packageMatch = src.match(/package\s+[\w.]+/);
-    if (!packageMatch) return config; 
-    const packageLine = packageMatch[0];
-
-    const neededImports = [
-        'android.os.Bundle',
-        'dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate'
-    ];
-
-    let importsToAdd = [];
-    for (const imp of neededImports) {
-        if (!src.includes(`import ${imp}`)) {
-            importsToAdd.push(`import ${imp}`);
-        }
-    }
-
-    if (importsToAdd.length > 0) {
-        src = src.replace(
-            packageLine,
-            `${packageLine}\n${importsToAdd.join('\n')}`
-        );
+    if (packageMatch) {
+      const packageLine = packageMatch[0];
+      const neededImports = [
+          'android.os.Bundle',
+          'dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate'
+      ];
+      let importsToAdd = [];
+      for (const imp of neededImports) {
+          if (!src.includes(`import ${imp}`)) {
+              importsToAdd.push(`import ${imp}`);
+          }
+      }
+      if (importsToAdd.length > 0) {
+          src = src.replace(packageLine, `${packageLine}\n${importsToAdd.join('\n')}`);
+      }
     }
 
     // B. 注入 Permission Delegate
     const delegateCode = `HealthConnectPermissionDelegate.setPermissionDelegate(this)`;
 
     if (!src.includes(delegateCode)) {
+      // 改進正則表達式，匹配 super.onCreate(null) 或 super.onCreate(savedInstanceState)
+      const superOnCreateRegex = /super\.onCreate\([^)]*\)/;
+      
       if (src.includes('fun onCreate')) {
-        if (src.includes('super.onCreate(savedInstanceState)')) {
+        if (superOnCreateRegex.test(src)) {
+          // 插在 super.onCreate(...) 之後，確保 Activity 初始化完成
           src = src.replace(
-            'super.onCreate(savedInstanceState)',
-            `super.onCreate(savedInstanceState)\n    ${delegateCode}`
+            superOnCreateRegex,
+            `$&\n    ${delegateCode}`
           );
         } else {
+          // 若找不到 super (罕見)，插在函式開頭
           src = src.replace(/fun\s+onCreate\s*\([^)]*\)\s*\{/, `$& \n    ${delegateCode}`);
         }
       } else {
@@ -61,11 +61,11 @@ module.exports = function withHealthConnectFix(config) {
     return config;
   });
 
-  // 2. 修正 AndroidManifest.xml (解決無法連結、Action 名稱錯誤問題)
+  // 2. 修正 AndroidManifest.xml (解決無法連結問題)
   config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults.manifest;
 
-    // A. 處理 <queries> (Package Visibility)
+    // A. 處理 <queries>
     if (!manifest.queries) {
       manifest.queries = [];
     }
@@ -79,8 +79,7 @@ module.exports = function withHealthConnectFix(config) {
       });
     }
 
-    // B. 處理 <intent-filter> (Rationale Activity) - [關鍵修正]
-    // 我們需要找到主要的 Activity (通常是 MainActivity) 並注入正確的 intent-filter
+    // B. 處理 <intent-filter> (Rationale Activity) - [強制修正邏輯]
     const mainActivity = manifest.application[0].activity.find(
       (a) => a.$['android:name'] === '.MainActivity'
     );
@@ -91,17 +90,28 @@ module.exports = function withHealthConnectFix(config) {
       }
 
       const rationaleActionName = "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE";
-      
-      // 檢查是否已存在 (避免重複)
-      const hasRationaleFilter = mainActivity['intent-filter'].some(filter => 
+      const defaultCategoryName = "android.intent.category.DEFAULT";
+
+      // 尋找是否已存在該 Action 的 filter
+      const existingFilter = mainActivity['intent-filter'].find(filter => 
         filter.action && filter.action.some(action => action.$['android:name'] === rationaleActionName)
       );
 
-      if (!hasRationaleFilter) {
+      if (existingFilter) {
+        // 如果 Filter 已存在，檢查是否有 category
+        if (!existingFilter.category) existingFilter.category = [];
+        
+        const hasCategory = existingFilter.category.some(c => c.$['android:name'] === defaultCategoryName);
+        
+        // 若缺少 DEFAULT category，強制補上
+        if (!hasCategory) {
+          existingFilter.category.push({ $: { "android:name": defaultCategoryName } });
+        }
+      } else {
+        // 若 Filter 不存在，建立完整的
         mainActivity['intent-filter'].push({
           action: [{ $: { "android:name": rationaleActionName } }],
-          // 必須加入 DEFAULT category，否則系統無法啟動此 Intent
-          category: [{ $: { "android:name": "android.intent.category.DEFAULT" } }]
+          category: [{ $: { "android:name": defaultCategoryName } }]
         });
       }
     }

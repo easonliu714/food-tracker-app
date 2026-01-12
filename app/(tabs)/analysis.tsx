@@ -17,7 +17,7 @@ import { gte, lte, and } from "drizzle-orm";
 import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage"; 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 32;
+const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 30;
 
 type StatKey = 'avgIntake' | 'avgBurned' | 'avgNet' | 'avgBMR' | 'totalDuration' | 'totalSteps' | 'avgWeight' | 'avgBodyFat' | 'avgPro' | 'avgFat' | 'avgCarb' | 'avgSod';
 

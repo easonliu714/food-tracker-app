@@ -19,39 +19,34 @@ export async function initHealthConnect(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
 
   try {
-    // 1. 檢查 SDK 狀態
     const status = await getSdkStatus();
     if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
-      // [除錯] 彈出狀態碼
-      Alert.alert("Debug", `SDK Status Unavailable: ${status}\n(1=Unavail, 2=UpdateRequired, 3=Available)`);
+      Alert.alert("Debug", `SDK Status Error: ${status}\n(1=Unavail, 2=UpdateReq, 3=Avail)`);
       return false;
     }
 
-    // 2. 初始化
     const isInitialized = await initialize();
     if (!isInitialized) {
-        // [除錯] 初始化失敗
-        Alert.alert("Debug", "Health Connect Initialize returned FALSE");
-        return false;
+        // 在某些手機上即使 initialize 回傳 false 也能運作，但通常是設定問題
+        console.log("Health Connect initialize returned false"); 
     }
 
-    // 3. 請求權限
     try {
         const granted = await requestPermission(PERMISSIONS);
         
-        // [除錯] 顯示拿到的權限數量
+        // 如果回傳空，再確認一次現有權限
         if (granted.length === 0) {
-            // 嘗試再次確認權限 (有時候 requestPermission 回傳空但實際上有權限)
-            const checkAgain = await getGrantedPermissions();
-            if (checkAgain.length === 0) {
-                Alert.alert("Debug", "Permission Request returned EMPTY list.\n(Delegate issue or User cancelled)");
+            const check = await getGrantedPermissions();
+            if (check.length === 0) {
+                // 這是最關鍵的錯誤：系統拒絕顯示權限視窗
+                Alert.alert("Debug", "Permission Request Failed.\nReturns empty list.\nCheck: Manifest Category or Settings Block.");
                 return false;
             }
             return true;
         }
         return true;
     } catch (permError: any) {
-        Alert.alert("Debug", `Request Permission Error: ${permError.message}`);
+        Alert.alert("Debug", `Permission Error: ${permError.message}`);
         return false;
     }
 
@@ -92,5 +87,4 @@ export async function getHealthData(start: Date, end: Date) {
   }
 }
 
-// 相容舊名稱
 export const connectHealthConnect = initHealthConnect;
