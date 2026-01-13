@@ -48,6 +48,7 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
+    // 我們已經在這裡手動宣告了權限，所以不需要官方插件自動加入
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
@@ -68,8 +69,6 @@ const config: ExpoConfig = {
         ],
         category: ["BROWSABLE", "DEFAULT"],
       },
-      // [修正] 移除這裡的 Health Connect Intent Filter
-      // 因為 Expo 會自動加前綴導致錯誤，我們改用 Plugin 注入
     ],
   },
   
@@ -91,10 +90,13 @@ const config: ExpoConfig = {
         },
       },
     ],
+    
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-    "react-native-health-connect",
+    // [重要修正] 移除了 "react-native-health-connect"，避免它產生錯誤的 Intent Filter
+    // 我們的 withHealthConnectFix 已經手動處理了所有必要設定
+
     [
       "expo-notifications",
       {
@@ -102,6 +104,7 @@ const config: ExpoConfig = {
         "color": "#ffffff"
       }
     ],
+    
     [
       "expo-camera",
       {
