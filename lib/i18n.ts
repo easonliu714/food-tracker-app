@@ -284,6 +284,14 @@ export const TRANSLATIONS = {
     act_water_jogging: "水中慢跑",
     act_water_polo: "水球",
     act_waterskiing: "滑水運動",
+    act_washing_car: "洗車",
+    act_treadmill: "跑步機",
+    act_walk: "散步，一般",
+    act_swim: "游泳，一般",
+    act_swim_fast: "游泳，快速",
+    act_stairs_down: "下樓梯",
+    act_stairs_up: "上樓梯",
+    act_housework: "家事勞動",
     
     intensity_low: "低強度", intensity_medium: "中強度", intensity_high: "高強度",
     
@@ -565,7 +573,15 @@ export const TRANSLATIONS = {
     act_water_jogging: "水中慢跑",
     act_water_polo: "水球",
     act_waterskiing: "滑水运动",
-    
+    act_washing_car: "洗车",
+    act_treadmill: "跑步机",
+    act_walk: "散步，一般",
+    act_swim: "游泳，一般",
+    act_swim_fast: "游泳，快速",
+    act_stairs_down: "下楼梯",
+    act_stairs_up: "上楼梯",
+    act_housework: "家事劳动",
+
     intensity_low: "低强度", intensity_medium: "中强度", intensity_high: "高强度",
     
     increase: "增加", decrease: "减少", no_change: "无变化",
@@ -829,6 +845,14 @@ export const TRANSLATIONS = {
     act_water_jogging: "Water jogging",
     act_water_polo: "Water polo",
     act_waterskiing: "Waterskiing",
+    act_washing_car: "Washing car",
+    act_treadmill: "Treadmill",
+    act_walk: "Walking, general",
+    act_swim: "Swimming, general",
+    act_swim_fast: "Swimming, fast",
+    act_stairs_down: "Stairs, down",
+    act_stairs_up: "Stairs, up",
+    act_housework: "Housework",
 
     intensity_low: "Low Intensity", intensity_medium: "Medium Intensity", intensity_high: "High Intensity",
 
@@ -1106,7 +1130,15 @@ export const TRANSLATIONS = {
     act_water_jogging: "水中ジョギング",
     act_water_polo: "水球",
     act_waterskiing: "ウォータースキー",
-    
+    act_washing_car: "車の洗車",
+    act_treadmill: "トレッドミル",
+    act_walk: "ウォーキング、一般",
+    act_swim: "水泳、一般",
+    act_swim_fast: "水泳、高速",
+    act_stairs_down: "階段、下り",
+    act_stairs_up: "階段、上り",
+    act_housework: "家事",
+
     intensity_low: "低", intensity_medium: "中", intensity_high: "高",
 
     increase: "増加", decrease: "減少", no_change: "変化なし",
@@ -1376,6 +1408,14 @@ export const TRANSLATIONS = {
     act_water_jogging: "수중 조깅",
     act_water_polo: "수구",
     act_waterskiing: "수상 스키",
+    act_washing_car: "세차",
+    act_treadmill: "러닝머신",
+    act_walk: "걷기, 일반",
+    act_swim: "수영, 일반",
+    act_swim_fast: "수영, 빠르게",
+    act_stairs_down: "계단, 내려가기",
+    act_stairs_up: "계단, 올라가기",
+    act_housework: "집안일",
     
     intensity_low: "저", intensity_medium: "중", intensity_high: "고",
     

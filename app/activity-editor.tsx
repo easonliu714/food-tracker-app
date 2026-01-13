@@ -1,3 +1,11 @@
+import { 
+  Ionicons, 
+  MaterialCommunityIcons, 
+  FontAwesome5, 
+  Foundation, 
+  Entypo, 
+  MaterialIcons 
+} from "@expo/vector-icons";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   StyleSheet,
@@ -12,7 +20,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db"; 
 import { activityLogs, userProfiles } from "@/drizzle/schema";
@@ -23,6 +30,26 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n"; // i18n
+
+// [新增] 統一管理的圖示元件
+const ActivityIcon = ({ library, name, size, color, style }: { library?: string, name: string, size: number, color: string, style?: any }) => {
+  switch (library) {
+    case "MaterialCommunityIcons":
+      return <MaterialCommunityIcons name={name as any} size={size} color={color} style={style} />;
+    case "FontAwesome5":
+      return <FontAwesome5 name={name as any} size={size} color={color} style={style} />;
+    case "Foundation":
+      return <Foundation name={name as any} size={size} color={color} style={style} />;
+    case "MaterialIcons":
+      return <MaterialIcons name={name as any} size={size} color={color} style={style} />;
+    case "Entypo":
+      return <Entypo name={name as any} size={size} color={color} style={style} />;
+    // 預設使用 Ionicons
+    default:
+      return <Ionicons name={name as any} size={size} color={color} style={style} />;
+  }
+};
+
 // 更新型別定義，加入 library? 屬性
 type ActivityItem = { id: string; mets: number; icon: string; library?: string };
 type ActivityCategory = { id: string; items: ActivityItem[] };
@@ -59,7 +86,7 @@ const ACTIVITY_RAW: ActivityCategory[] = [
       { id: "act_cycling_moderate", mets: 8.0, icon: "bike", library: "MaterialCommunityIcons" }, // 19-22 km/h
       { id: "act_cycling_vigorous", mets: 10.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // 22-25 km/h
       { id: "act_cycling_racing", mets: 12.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // >26 km/h
-      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "MaterialCommunityIcons" }, // 山地
+      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "Foundation" }, // 山地
 
       { id: "act_swim", mets: 6.3, icon: "swim", library: "MaterialCommunityIcons" }, // 慢
       { id: "act_swim_fast", mets: 9.8, icon: "swim", library: "MaterialCommunityIcons" }, // 快
@@ -130,8 +157,8 @@ const ACTIVITY_RAW: ActivityCategory[] = [
       { id: "act_badminton_comp", mets: 7.0, icon: "badminton", library: "MaterialCommunityIcons" }, // 競技
       { id: "act_basketball_gen", mets: 6.5, icon: "basketball", library: "MaterialCommunityIcons" }, // 一般
       { id: "act_basketball", mets: 8.0, icon: "basketball", library: "MaterialCommunityIcons" }, // 比賽
-      { id: "act_tennis_doubles", mets: 6.0, icon: "tennisball", library: "MaterialCommunityIcons" }, // 雙打
-      { id: "act_tennis", mets: 8.0, icon: "tennisball", library: "MaterialCommunityIcons" }, // 單人
+      { id: "act_tennis_doubles", mets: 6.0, icon: "tennisball" }, // 雙打
+      { id: "act_tennis", mets: 8.0, icon: "tennisball" }, // 單人
       { id: "act_table_tennis", mets: 4.0, icon: "table-tennis", library: "MaterialCommunityIcons" },
       { id: "act_soccer", mets: 7.0, icon: "soccer", library: "MaterialCommunityIcons" }, // 一般
       { id: "act_soccer_comp", mets: 10.0, icon: "soccer", library: "MaterialCommunityIcons" }, // 競技
@@ -463,23 +490,14 @@ export default function ActivityEditorScreen() {
                   }}
                 >
                   <View style={{flexDirection:'row', alignItems:'center'}}>
-                      {/* [步驟 3 修改] 根據 library 屬性動態渲染圖示 */}
-                      {item.library === "MaterialCommunityIcons" ? (
-                        <MaterialCommunityIcons 
-                          name={item.icon as any} 
+                      {/* [修改] 使用統一元件 */}
+                      <ActivityIcon 
+                          library={item.library} 
+                          name={item.icon} 
                           size={20} 
                           color={theme.text} 
-                          style={{marginRight: 10}}
-                        />
-                      ) : (
-                        <Ionicons 
-                          name={item.icon as any} 
-                          size={20} 
-                          color={theme.text} 
-                          style={{marginRight: 10}}
-                        />
-                      )}
-                      
+                          style={{marginRight: 10}} 
+                      />  
                       <ThemedText>{t(item.id, lang)}</ThemedText>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={theme.icon} />
@@ -516,11 +534,13 @@ export default function ActivityEditorScreen() {
 
                     {/* [同步修改] 主按鈕上的圖示顯示邏輯 */}
                     {activity?.icon && (
-                      activity.library === "MaterialCommunityIcons" ? (
-                        <MaterialCommunityIcons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>
-                      ) : (
-                        <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>
-                      )
+                      <ActivityIcon 
+                        iconName={activity.icon}
+                        name={activity.icon} 
+                        size={24} 
+                        color={theme.text} 
+                        style={{marginRight: 8}} 
+                      />
                     )}
                     
                     <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
