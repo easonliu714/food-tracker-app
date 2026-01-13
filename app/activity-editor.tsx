@@ -86,7 +86,7 @@ const ACTIVITY_RAW: ActivityCategory[] = [
       { id: "act_cycling_moderate", mets: 8.0, icon: "bike", library: "MaterialCommunityIcons" }, // 19-22 km/h
       { id: "act_cycling_vigorous", mets: 10.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // 22-25 km/h
       { id: "act_cycling_racing", mets: 12.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // >26 km/h
-      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "Foundation" }, // 山地
+      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "FontAwesome5" }, // 山地
 
       { id: "act_swim", mets: 6.3, icon: "swim", library: "MaterialCommunityIcons" }, // 慢
       { id: "act_swim_fast", mets: 9.8, icon: "swim", library: "MaterialCommunityIcons" }, // 快
