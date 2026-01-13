@@ -118,9 +118,9 @@ export default function AnalysisScreen() {
                   value: currentVal * scalingFactor, // [關鍵] 視覺高度放大
                   dataPointText: String(currentVal), // [關鍵] 顯示原始數值
                   textColor: color,
-                  textShiftY: -12, 
+                  textShiftY: -6, 
                   // [新增] 針對最後一個點向左位移，避免文字被切掉
-                  textShiftX: i === len - 1 ? -25 : 0,
+                  textShiftX: i === len - 1 ? -20 : -10,
                   textFontSize: 10,
                   dataPointColor: color,
                   hideDataPoint: false
@@ -446,12 +446,34 @@ export default function AnalysisScreen() {
               minWidth: 130
           }}>
               <ThemedText style={{fontWeight: 'bold', color:'white', marginBottom: 6}}>{d.dateStr}</ThemedText>
-              <View style={styles.rowBetween}><ThemedText style={styles.ttLabel} style={{color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={styles.ttVal}>{Math.round(d.intake)}</ThemedText></View>
-              <View style={styles.rowBetween}><ThemedText style={styles.ttLabel} style={{color:'#FF9500'}}>{t('burned', lang)}</ThemedText><ThemedText style={styles.ttVal}>{Math.round(d.burned)}</ThemedText></View>
-              <View style={styles.rowBetween}><ThemedText style={styles.ttLabel} style={{color:'#ccc'}}>{t('net_intake', lang)}</ThemedText><ThemedText style={styles.ttVal}>{Math.round(d.net)}</ThemedText></View>
+              
+              {/* [修正] 將兩個 style 合併為陣列 [style1, style2] */}
+              <View style={styles.rowBetween}>
+                  <ThemedText style={[styles.ttLabel, {color:'#34C759'}]}>{t('intake', lang)}</ThemedText>
+                  <ThemedText style={styles.ttVal}>{Math.round(d.intake)}</ThemedText>
+              </View>
+              
+              <View style={styles.rowBetween}>
+                  <ThemedText style={[styles.ttLabel, {color:'#FF9500'}]}>{t('burned', lang)}</ThemedText>
+                  <ThemedText style={styles.ttVal}>{Math.round(d.burned)}</ThemedText>
+              </View>
+              
+              <View style={styles.rowBetween}>
+                  <ThemedText style={[styles.ttLabel, {color:'#ccc'}]}>{t('net_intake', lang)}</ThemedText>
+                  <ThemedText style={styles.ttVal}>{Math.round(d.net)}</ThemedText>
+              </View>
+              
               <View style={{height:1, backgroundColor:'#555', marginVertical:4}}/>
-              <View style={styles.rowBetween}><ThemedText style={styles.ttLabel} style={{color:theme.tint}}>{t('weight', lang)}</ThemedText><ThemedText style={styles.ttVal}>{d.weight} kg</ThemedText></View>
-              <View style={styles.rowBetween}><ThemedText style={styles.ttLabel} style={{color:secondaryColor}}>{t('body_fat', lang)}</ThemedText><ThemedText style={styles.ttVal}>{d.bodyFat} %</ThemedText></View>
+              
+              <View style={styles.rowBetween}>
+                  <ThemedText style={[styles.ttLabel, {color:theme.tint}]}>{t('weight', lang)}</ThemedText>
+                  <ThemedText style={styles.ttVal}>{d.weight} kg</ThemedText>
+              </View>
+              
+              <View style={styles.rowBetween}>
+                  <ThemedText style={[styles.ttLabel, {color:secondaryColor}]}>{t('body_fat', lang)}</ThemedText>
+                  <ThemedText style={styles.ttVal}>{d.bodyFat} %</ThemedText>
+              </View>
           </View>
       );
   };
@@ -603,7 +625,7 @@ export default function AnalysisScreen() {
                                 textFontSize: 10, 
                                 textShiftY: -12, // 調整文字位置
                                 textColor: weightColor, 
-                                zIndex: 100,
+                                // [修正] 移除 zIndex: 100 (因為型別不支援且預設已會在最上層)
                                 // [重要] 移除 isSecondary: true，因為我們已經手動將數值放大到主軸的範圍
                                 // 這樣線條才會乖乖畫在我們計算好的高度，對齊右側刻度
                             }}
@@ -618,7 +640,7 @@ export default function AnalysisScreen() {
                                 textFontSize: 10, 
                                 textShiftY: -12, 
                                 textColor: secondaryColor, 
-                                zIndex: 100, 
+                                // [修正] 移除 zIndex: 100 (因為型別不支援且預設已會在最上層)
                                 // 同上
                             }}
                             

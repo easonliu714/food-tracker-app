@@ -17,7 +17,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.14", 
+  version: "1.0.14", // 建議進版，確保安裝時視為新版本
   orientation: "portrait",
   scheme: "foodtracker", 
 
@@ -48,7 +48,7 @@ const config: ExpoConfig = {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
-    // 我們已經在這裡手動宣告了權限，所以不需要官方插件自動加入
+    // 這裡保留權限宣告作為雙重保險
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
@@ -78,7 +78,14 @@ const config: ExpoConfig = {
   },
   
   plugins: [
+    // [重要] 加回官方插件，讓它負責產生基礎設定
+    ["react-native-health-connect", { 
+        "rationalActivityClassName": ".MainActivity" // 明確指定 Activity
+    }],
+    
+    // [重要] 我們的修正腳本放在後面，用來修復官方插件產生的錯誤 Action
     "./plugins/withHealthConnectFix",
+    
     "./plugins/withDisableLinting",
     [
       "expo-build-properties",
@@ -94,8 +101,6 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-    // [重要修正] 移除了 "react-native-health-connect"，避免它產生錯誤的 Intent Filter
-    // 我們的 withHealthConnectFix 已經手動處理了所有必要設定
 
     [
       "expo-notifications",

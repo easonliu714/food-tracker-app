@@ -404,12 +404,14 @@ export default function ActivityEditorScreen() {
       logDate.setHours(recordTime.getHours());
       logDate.setMinutes(recordTime.getMinutes());
 
-      const finalName = category?.id === 'cat_custom' ? customActivityName : t(activity.id, lang);
+      // 加入 ?. 以及 || '' 確保萬一 activity 為空時不會報錯
+      const finalName = category?.id === 'cat_custom' ? customActivityName : t(activity?.id || '', lang);
 
       const logData = {
         date: format(logDate, 'yyyy-MM-dd'),
         loggedAt: logDate,
-        category: t(category?.id, lang),
+        // [修正] 確保傳入 t 的參數必定為字串
+        category: category ? t(category.id, lang) : "",
         activityName: finalName,
         intensity: intensity,
         durationMinutes: parseInt(duration) || 0,
