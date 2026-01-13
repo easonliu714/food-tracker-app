@@ -119,6 +119,8 @@ export default function AnalysisScreen() {
                   dataPointText: String(currentVal), // [關鍵] 顯示原始數值
                   textColor: color,
                   textShiftY: -12, 
+                  // [新增] 針對最後一個點向左位移，避免文字被切掉
+                  textShiftX: i === len - 1 ? -25 : 0,
                   textFontSize: 10,
                   dataPointColor: color,
                   hideDataPoint: false

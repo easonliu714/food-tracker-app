@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db"; 
 import { activityLogs, userProfiles } from "@/drizzle/schema";
@@ -23,8 +23,8 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n"; // i18n
-
-type ActivityItem = { id: string; mets: number; icon: string };
+// 更新型別定義，加入 library? 屬性
+type ActivityItem = { id: string; mets: number; icon: string; library?: string };
 type ActivityCategory = { id: string; items: ActivityItem[] };
 
 // 只存 ID，顯示時再翻譯
@@ -55,8 +55,9 @@ const ACTIVITY_RAW: ActivityCategory[] = [
   {
     id: "cat_sport",
     items: [
-      { id: "act_basketball", mets: 8.0, icon: "basketball" },
-      { id: "act_badminton", mets: 5.5, icon: "badminton" },
+      { id: "act_basketball", mets: 8.0, icon: "basketball" }, // 預設使用 Ionicons
+      // 指定羽毛球使用 MaterialCommunityIcons 的 badminton 圖示
+      { id: "act_badminton", mets: 5.5, icon: "badminton", library: "MaterialCommunityIcons" }, 
       { id: "act_tennis", mets: 7.3, icon: "tennisball" },
       { id: "act_soccer", mets: 9.0, icon: "football" },
       { id: "act_baseball", mets: 5.0, icon: "baseball" },
@@ -309,7 +310,23 @@ export default function ActivityEditorScreen() {
                   onPress={() => { setActivity(item); setShowSelector(false); }}
                 >
                   <View style={{flexDirection:'row', alignItems:'center'}}>
-                      <Ionicons name={item.icon as any} size={20} color={theme.text} style={{marginRight: 10}}/>
+                      {/* [步驟 3 修改] 根據 library 屬性動態渲染圖示 */}
+                      {item.library === "MaterialCommunityIcons" ? (
+                        <MaterialCommunityIcons 
+                          name={item.icon as any} 
+                          size={20} 
+                          color={theme.text} 
+                          style={{marginRight: 10}}
+                        />
+                      ) : (
+                        <Ionicons 
+                          name={item.icon as any} 
+                          size={20} 
+                          color={theme.text} 
+                          style={{marginRight: 10}}
+                        />
+                      )}
+                      
                       <ThemedText>{t(item.id, lang)}</ThemedText>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={theme.icon} />
@@ -343,7 +360,16 @@ export default function ActivityEditorScreen() {
              <View>
                 <ThemedText style={styles.labelSmall}>{t('select_activity', lang)}</ThemedText>
                 <View style={{flexDirection:'row', alignItems:'center', marginTop: 4}}>
-                    {activity?.icon && <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>}
+
+                    {/* [同步修改] 主按鈕上的圖示顯示邏輯 */}
+                    {activity?.icon && (
+                      activity.library === "MaterialCommunityIcons" ? (
+                        <MaterialCommunityIcons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>
+                      ) : (
+                        <Ionicons name={activity.icon as any} size={24} color={theme.text} style={{marginRight:8}}/>
+                      )
+                    )}
+                    
                     <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>
                         {category?.id === 'cat_custom' ? (customActivityName || t('custom_activity', lang)) : (activity ? t(activity.id, lang) : t('select_activity', lang))}
                     </ThemedText>
