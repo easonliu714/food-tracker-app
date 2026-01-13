@@ -1462,6 +1462,11 @@ export const setAppLanguage = (lang: string) => {
 
 const LOGS_ZH = [
   {
+    version: "V1.0.14",
+    date: "2026-01-13",
+    content: "[新增] 擴充運動資料庫：整合國民健康署資料，新增數十項運動項目與精確 METs 數值。\n[優化] 運動紀錄體驗：自動依據 METs 判斷預設強度，並新增強度分級說明。\n[修正] Android Health Connect 權限請求失敗與同步異常問題。\n[修正] 分析頁面折線圖最右側數值被遮擋問題。\n[技術] 支援多種運動圖示庫顯示 (解決圖示顯示問號問題)。"
+  },
+  {
     version: "V1.0.13",
     date: "2026-01-09",
     content: "[新增] 整合 Google Health Connect：自動同步步數與睡眠數據。\n[新增] 智慧提醒系統：支援自訂用餐時間提醒，以及久坐/喝水間隔提醒 (可設定起訖時間)。\n[優化] 飲水目標改為依體重動態計算。\n[優化] AI 分析新增參考睡眠品質數據。\n[修正] 系統穩定性優化與動畫庫崩潰修復。"
@@ -1502,6 +1507,11 @@ const LOGS_ZH = [
 ];
 
 const LOGS_EN = [
+  {
+    version: "V1.0.14",
+    date: "2026-01-13",
+    content: "[New] Expanded Activity Database: Integrated official health data with accurate METs for numerous new activities.\n[Imp] Activity Recording: Auto-select intensity based on METs and added intensity guide.\n[Fix] Fixed Android Health Connect permission request and sync issues.\n[Fix] Fixed chart labels being cut off on the right edge in Analysis tab.\n[Tech] Added support for multiple icon libraries (Fixed missing icons)."
+  },
   {
     version: "V1.0.13",
     date: "2026-01-09",
@@ -1544,6 +1554,11 @@ const LOGS_EN = [
 
 const LOGS_JP = [
   {
+    version: "V1.0.14",
+    date: "2026-01-13",
+    content: "[新機能] 運動データベースの拡張：公式健康データに基づき、正確なMETs値を持つ多数の運動項目を追加。\n[改善] 運動記録体験：METsに基づいて強度を自動選択し、強度ガイドを追加。\n[修正] Android Health Connectの権限リクエストと同期の問題を修正。\n[修正] 分析チャートの右端のラベルが切れる問題を修正。\n[技術] 複数のアイコンライブラリのサポートを追加（アイコンが表示されない問題を修正）。"
+  },
+  {
     version: "V1.0.13",
     date: "2026-01-09",
     content: "[新機能] Google Health Connect連携：歩数と睡眠データを自動同期。\n[新機能] スマート通知システム：食事リマインダーと水分補給/座りすぎ防止の間隔リマインダー（開始/終了時間設定可）。\n[改善] 体重に基づいた動的な水分摂取目標。\n[改善] AI分析に睡眠データの参照を追加。\n[修正] システムの安定性向上とアニメーションライブラリのクラッシュ修正。"
@@ -1584,6 +1599,11 @@ const LOGS_JP = [
 ];
 
 const LOGS_KO = [
+  {
+    version: "V1.0.14",
+    date: "2026-01-13",
+    content: "[신규] 운동 데이터베이스 확장: 공식 건강 데이터를 기반으로 정확한 METs 값을 가진 수십 가지 운동 항목 추가.\n[개선] 운동 기록 경험: METs에 따라 강도를 자동 선택하고 강도 가이드를 추가.\n[수정] Android Health Connect 권한 요청 및 동기화 문제 수정.\n[수정] 분석 차트 오른쪽 끝의 레이블이 잘리는 문제 수정.\n[기술] 다중 아이콘 라이브러리 지원 추가 (아이콘 물음표 표시 문제 해결)."
+  },
   {
     version: "V1.0.13",
     date: "2026-01-09",

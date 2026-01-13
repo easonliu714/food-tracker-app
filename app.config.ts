@@ -17,7 +17,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.13", 
+  version: "1.0.14", 
   orientation: "portrait",
   scheme: "foodtracker", 
 
