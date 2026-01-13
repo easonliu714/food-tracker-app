@@ -47,9 +47,17 @@ export const TRANSLATIONS = {
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動", today: "今天", confirm: "確認",
     sleep: "睡眠",
-    
+    reminders_breakfast: "早餐提醒",
+    reminders_breakfast_msg: "美好的一天從早餐開始，記得吃點東西喔！",
+    reminders_lunch: "午餐提醒",
+    reminders_lunch_msg: "午休時間到了，補充能量繼續奮鬥！",
+    reminders_dinner: "晚餐提醒",
+    reminders_dinner_msg: "晚餐時間，享受美食也要注意份量喔。",
+
     // Water
     water_intake: "喝水紀錄", tap_to_add_water: "點擊以新增喝水紀錄",
+    reminders_water_move_title: "起身動動 & 喝水時間！",
+    reminders_water_move_msg: "站起來伸展一下，喝杯水，保持健康活力。",
 
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
@@ -337,9 +345,17 @@ export const TRANSLATIONS = {
     intake: "摄入", burned: "消耗", net_intake_pct: "净摄入 %", intake_target: "摄入/目标", 
     quick_record: "常用食物", no_recent_foods: "暂无常用记录", exercise: "运动", quick_add_activity: "常用运动", today: "今天", confirm: "确认",
     seep: "睡眠",
+    reminders_breakfast: "早餐提醒",
+    reminders_breakfast_msg: "美好的一天从早餐开始，记得吃点东西哦！",
+    reminders_lunch: "午餐提醒",
+    reminders_lunch_msg: "午休时间到了，补充能量继续奋斗！",
+    reminders_dinner: "晚餐提醒",
+    reminders_dinner_msg: "晚餐时间，享受美食也要注意份量哦。",
 
     // Water
     water_intake: "喝水记录", tap_to_add_water: "点击以新增喝水记录",
+    reminders_water_move_title: "起身动动 & 喝水时间！",
+    reminders_water_move_msg: "站起来伸展一下，喝杯水，保持健康活力。",
 
     // Actions
     camera: "拍照", scan_barcode: "扫码", manual_input: "手输", gallery: "相册",
@@ -598,6 +614,7 @@ export const TRANSLATIONS = {
     welcome: "Welcome", save: "Save", cancel: "Cancel", delete: "Delete", error: "Error", success: "Success", loading: "Loading...",
     tip: "Tip", save_success: "Saved successfully", invalid_input: "Invalid input", settings: "Settings", edit: "Edit",
     close: "Close", version_history: "Version History", how_to_get_key: "How to get the Key?", input_date: "Input Date",
+
     // Backup & Restore
     data_backup: "Data Backup & Restore",
     backup_db: "Export Database (Backup)",
@@ -620,8 +637,18 @@ export const TRANSLATIONS = {
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target",
     quick_record: "Frequent Foods", no_recent_foods: "No Frequent Records", exercise: "Exercise", quick_add_activity: "Frequent Exercises", today: "Today", confirm: "Confirm",
     seep: "Sleep",
+    reminders_breakfast: "Breakfast Reminder",
+    reminders_breakfast_msg: "A great day starts with breakfast, remember to eat something!",
+    reminders_lunch: "Lunch Reminder",
+    reminders_lunch_msg: "It's lunch time, refuel to keep going!",
+    reminders_dinner: "Dinner Reminder",
+    reminders_dinner_msg: "Dinner time, enjoy your meal but watch the portions!",
+
     // Water
     water_intake: "Water Intake", tap_to_add_water: "Tap to add water intake",
+    reminders_water_move_title: "Time to Move & Hydrate!",
+    reminders_water_move_msg: "Stand up and stretch, have a glass of water to stay healthy and energized.",
+
     // Actions
     camera: "Camera", scan_barcode: "Scan", manual_input: "Manual Input", gallery: "Gallery",
     scan_hint: "Please align the barcode within the frame",allow: "Allow",
@@ -894,9 +921,18 @@ export const TRANSLATIONS = {
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動", today: "今日", confirm: "確認",
     seep: "睡眠",
+    reminders_breakfast: "朝食リマインダー",
+    reminders_breakfast_msg: "良い一日は朝食から始まります。何か食べるのを忘れずに！",
+    reminders_lunch: "昼食リマインダー",
+    reminders_lunch_msg: "お昼の時間です。エネルギー補給をしましょう！",
+    reminders_dinner: "夕食リマインダー",
+    reminders_dinner_msg: "夕食の時間です。食事を楽しんで、量に注意しましょう！",
 
     // Water
     water_intake: "水分摂取", tap_to_add_water: "タップして水分摂取を追加",
+    reminders_water_move_title: "起身動動 & 喝水時間！",
+    reminders_water_move_msg: "立ち上がってストレッチをし、健康と活力のために一杯の水を飲みましょう。",
+
     // Actions
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
     scan_hint: "バーコードを枠に合わせてください",allow: "許可する",
@@ -1176,8 +1212,18 @@ export const TRANSLATIONS = {
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동", today: "오늘", confirm: "확인",
     seep: "수면",
+    reminders_breakfast: "아침 식사 알림",
+    reminders_breakfast_msg: "좋은 하루는 아침 식사로 시작됩니다. 꼭 챙겨 드세요!",
+    reminders_lunch: "점심 식사 알림",
+    reminders_lunch_msg: "점심 시간입니다. 에너지를 보충하세요!",
+    reminders_dinner: "저녁 식사 알림",
+    reminders_dinner_msg: "저녁 시간입니다. 식사를 즐기시고, 과식은 피하세요!",
+
     // Water
     water_intake: "수분 섭취", tap_to_add_water: "탭하여 수분 섭취 추가",
+    reminders_water_move_title: "일어나서 움직이고 물을 마실 시간입니다!",
+    reminders_water_move_msg: "일어나서 스트레칭을 하고, 건강과 활력을 위해 물 한 잔을 마시세요.",
+    
     // Actions
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
@@ -1217,7 +1263,6 @@ export const TRANSLATIONS = {
     extra_active: "매우 활발함", extra_active_desc: "육체 노동",
     target_date: "목표 완료 날짜",
     days_remaining: "남은 일수",
-    
 
     // AI Coach UI
     ai_coach: "AI 코치", ai_welcome_msg: "안녕하세요! 저는 당신의 개인 영양 및 피트니스 어시스턴트입니다.\n아래 버튼을 클릭하거나 직접 질문을 입력하세요.",

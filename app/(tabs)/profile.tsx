@@ -281,9 +281,9 @@ export default function ProfileScreen() {
       };
 
       // 2. 排程用餐提醒
-      if (reminders.breakfast.enabled) await scheduleDaily("Breakfast Time!", "Don't forget to log your breakfast.", reminders.breakfast.time);
-      if (reminders.lunch.enabled) await scheduleDaily("Lunch Time!", "Have a healthy lunch and log it!", reminders.lunch.time);
-      if (reminders.dinner.enabled) await scheduleDaily("Dinner Time!", "Log your dinner to keep track.", reminders.dinner.time);
+      if (reminders.breakfast.enabled) await scheduleDaily(t('reminders_breakfast', lang), t('reminders_breakfast_msg', lang), reminders.breakfast.time);
+      if (reminders.lunch.enabled) await scheduleDaily(t('reminders_lunch', lang), t('reminders_lunch_msg', lang), reminders.lunch.time);
+      if (reminders.dinner.enabled) await scheduleDaily(t('reminders_dinner', lang), t('reminders_dinner_msg', lang), reminders.dinner.time);
       
       // 3. 排程喝水/久坐提醒 (區間內循環)
       if (reminders.water.enabled && reminders.water.interval > 0) {
@@ -304,8 +304,8 @@ export default function ProfileScreen() {
                   
                   await Notifications.scheduleNotificationAsync({
                       content: { 
-                          title: "Time to Move & Drink!", 
-                          body: "Stand up, stretch, and drink a glass of water.",
+                          title: t('reminders_water_move_title', lang), 
+                          body: t('reminders_water_move_msg', lang),
                           sound: true
                       },
                       trigger: { 
