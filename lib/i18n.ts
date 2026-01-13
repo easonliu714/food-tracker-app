@@ -46,7 +46,7 @@ export const TRANSLATIONS = {
     body_metrics: "身體數值", record_metrics: "+ 紀錄", target_weight: "目標體重", target_body_fat: "目標體脂",
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動", today: "今天", confirm: "確認",
-    sleep: "睡眠",
+    sleep: "睡眠", sync_health_hint: "同步健康數據", quick_add: "常用",
     reminders_breakfast: "早餐提醒",
     reminders_breakfast_msg: "美好的一天從早餐開始，記得吃點東西喔！",
     reminders_lunch: "午餐提醒",
@@ -141,7 +141,7 @@ export const TRANSLATIONS = {
     activity_intensity: "運動強度", activity_details: "詳細數據", time_min: "時間 (分鐘)", distance_km: "距離 (km)", steps: "步數",
     floors: "樓層", est_calories: "預估消耗熱量", feeling_notes: "運動感受 & 筆記", enter_notes: "輸入筆記...",
     data_incomplete_msg: "請選擇運動項目，並至少輸入一項數據", activity_name: "運動名稱", category: "分類",
-    select_category_msg: "請選擇運動類別...",
+    select_category_msg: "請選擇運動類別...", search_placeholder: "搜尋運動 (例如: 游泳)",
     
     cat_cardio: "有氧與耐力", cat_gym: "健身房", cat_sport: "球類與競技", cat_life: "日常生活", cat_custom: "自訂",
     
@@ -344,7 +344,7 @@ export const TRANSLATIONS = {
     body_metrics: "身体数值", record_metrics: "+ 记录", target_weight: "目标体重", target_body_fat: "目标体脂",
     intake: "摄入", burned: "消耗", net_intake_pct: "净摄入 %", intake_target: "摄入/目标", 
     quick_record: "常用食物", no_recent_foods: "暂无常用记录", exercise: "运动", quick_add_activity: "常用运动", today: "今天", confirm: "确认",
-    seep: "睡眠",
+    seep: "睡眠", sync_health_hint: "同步健康数据", quick_add: "常用",
     reminders_breakfast: "早餐提醒",
     reminders_breakfast_msg: "美好的一天从早餐开始，记得吃点东西哦！",
     reminders_lunch: "午餐提醒",
@@ -438,7 +438,7 @@ export const TRANSLATIONS = {
     activity_intensity: "运动强度", activity_details: "详细数据", time_min: "时间 (分钟)", distance_km: "距离 (km)", steps: "步数",
     floors: "楼层", est_calories: "预估消耗热量", feeling_notes: "运动感受 & 笔记", enter_notes: "输入笔记...",
     data_incomplete_msg: "请选择运动项目，并至少输入一项数据", activity_name: "运动名称", category: "分类",
-    select_category_msg: "请选择运动类别...",
+    select_category_msg: "请选择运动类别...", search_placeholder: "搜索运动 (例如: 游泳)",
     
     cat_cardio: "有氧与耐力", cat_gym: "健身房", cat_sport: "球类与竞技", cat_life: "日常生活", cat_custom: "自定义",
     
@@ -636,7 +636,7 @@ export const TRANSLATIONS = {
     body_metrics: "Body Metrics", record_metrics: "+ Record", target_weight: "Target Weight", target_body_fat: "Target Body Fat",
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target",
     quick_record: "Frequent Foods", no_recent_foods: "No Frequent Records", exercise: "Exercise", quick_add_activity: "Frequent Exercises", today: "Today", confirm: "Confirm",
-    seep: "Sleep",
+    seep: "Sleep", sync_health_hint: "Sync Health Data", quick_add: "Frequent",
     reminders_breakfast: "Breakfast Reminder",
     reminders_breakfast_msg: "A great day starts with breakfast, remember to eat something!",
     reminders_lunch: "Lunch Reminder",
@@ -721,7 +721,7 @@ export const TRANSLATIONS = {
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
     floors: "Floors", est_calories: "Estimated Burned Calories", feeling_notes: "Notes & Feelings", enter_notes: "Enter notes...",
     data_incomplete_msg: "Please select an activity and enter at least one value", activity_name: "Activity Name", category: "Category",
-    select_category_msg: "Please select an activity category...",
+    select_category_msg: "Please select an activity category...", search_placeholder: "Search activities (e.g., swimming)",
 
     cat_cardio: "Cardio & Endurance", cat_gym: "Gym", cat_sport: "Sports & Competition", cat_life: "Daily Life", cat_custom: "Custom",
     
@@ -920,7 +920,7 @@ export const TRANSLATIONS = {
     body_metrics: "身体測定", record_metrics: "+ 記録", target_weight: "目標体重", target_body_fat: "目標体脂肪率",
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動", today: "今日", confirm: "確認",
-    seep: "睡眠",
+    seep: "睡眠", sync_health_hint: "ヘルスデータを同期", quick_add: "よく使う",
     reminders_breakfast: "朝食リマインダー",
     reminders_breakfast_msg: "良い一日は朝食から始まります。何か食べるのを忘れずに！",
     reminders_lunch: "昼食リマインダー",
@@ -1014,7 +1014,7 @@ export const TRANSLATIONS = {
     activity_intensity: "強度", activity_details: "詳細", time_min: "時間 (分)", distance_km: "距離 (km)", steps: "歩数",
     floors: "階数", est_calories: "推定消費カロリー", feeling_notes: "メモ & 感想", enter_notes: "メモを入力...",
     data_incomplete_msg: "運動を選択し、少なくとも1つの値を入力してください", activity_name: "運動名", category: "カテゴリ",
-    select_category_msg: "スポーツのカテゴリーを選択してください",
+    select_category_msg: "スポーツのカテゴリーを選択してください", search_placeholder: "運動を検索 (例: 水泳)",
 
     cat_cardio: "有酸素", cat_gym: "ジム", cat_sport: "スポーツ", cat_life: "生活活動", cat_custom: "カスタム",
     
@@ -1211,7 +1211,7 @@ export const TRANSLATIONS = {
     body_metrics: "신체 수치", record_metrics: "+ 기록", target_weight: "목표 체중", target_body_fat: "목표 체지방",
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동", today: "오늘", confirm: "확인",
-    seep: "수면",
+    seep: "수면", sync_health_hint: "건강 데이터 동기화", quick_add: "즐겨찾기",
     reminders_breakfast: "아침 식사 알림",
     reminders_breakfast_msg: "좋은 하루는 아침 식사로 시작됩니다. 꼭 챙겨 드세요!",
     reminders_lunch: "점심 식사 알림",
@@ -1301,7 +1301,7 @@ export const TRANSLATIONS = {
     activity_intensity: "강도", activity_details: "상세 정보", time_min: "시간 (분)", distance_km: "거리 (km)", steps: "걸음 수",
     floors: "층", est_calories: "예상 칼로리", feeling_notes: "메모 & 느낌", enter_notes: "메모 입력...",
     data_incomplete_msg: "운동을 선택하고 값을 입력하세요", activity_name: "운동명", category: "카테고리",
-    select_category_msg: "스포츠 카테고리를 선택해 주세요.",
+    select_category_msg: "스포츠 카테고리를 선택해 주세요.", search_placeholder: "운동 검색 (예: 수영)",
 
     cat_cardio: "유산소", cat_gym: "헬스장", cat_sport: "스포츠", cat_life: "생활", cat_custom: "직접 입력",
     

@@ -34,6 +34,7 @@ import { db, getLatestTwoDailyMetrics, duplicateFoodLog, getFrequentActivities, 
 import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/schema";
 
 import { initHealthConnect, getHealthData } from "@/lib/health";
+import { ActivityIcon, ACTIVITY_RAW } from '@/app/activity-editor'; 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
@@ -85,37 +86,10 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
-  // [新增] 安全的同步觸發器 (避免啟動崩潰)
-  const safeSyncHealth = async () => {
-      if (isSyncing) return;
-      setIsSyncing(true);
-      try {
-          const dateStr = format(currentDate, "yyyy-MM-dd");
-          // 僅同步當天或過去
-          if (new Date(dateStr) <= new Date()) {
-              await syncHealthData(dateStr);
-          }
-      } catch (e) {
-          console.log("Safe Sync Error:", e);
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
-  // [修改] 暫時註解掉自動同步，避免啟動時原生模組未就緒導致閃退
-  // useEffect(() => {
-  //     const timer = setTimeout(() => {
-  //         safeSyncHealth();
-  //     }, 2000); 
-  //     return () => clearTimeout(timer);
-  // }, [currentDate]);
-
-
   const syncHealthData = async (dateStr: string) => {
       if (isSyncing) return;
       setIsSyncing(true);
       try {
-          // [修改] 直接呼叫我們強化過的 initHealthConnect
           const authorized = await initHealthConnect();
           
           if (!authorized) {
@@ -170,7 +144,6 @@ export default function HomeScreen() {
                   await db.insert(dailyMetrics).values({ date: dateStr, sleepHours: fixedSleep });
               }
           }
-          // 若成功讀取到資料
           Alert.alert(t('success', lang), "Sync Completed");
 
       } catch (e: any) {
@@ -189,8 +162,6 @@ export default function HomeScreen() {
     setDiffWeight(null);
     setDiffFat(null);
     setWaterMl(0);
-    // setHealthSteps(0); // 暫不重置，避免閃爍
-    // setHealthSleep(0);
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
@@ -268,17 +239,10 @@ export default function HomeScreen() {
       if (stepLog && stepLog.steps) setHealthSteps(stepLog.steps);
       else setHealthSteps(0);
 
-      // [修改前] 這是最近紀錄 (Chronological)
-      // const recents = await db.select().from(foodLogs).orderBy(desc(foodLogs.loggedAt)).limit(10);
-      // const uniqueRecents = Array.from(new Map(recents.map(item => [item.foodName, item])).values()).slice(0, 5);
-      // setRecentFoods(uniqueRecents);
-
-      // [修改後] 這是常用食物 (Most Frequent) - 依出現次數排序
       const frequentFoodsRes = await db
         .select({
           foodName: foodLogs.foodName,
           count: sql`count(${foodLogs.id})`.as('count'),
-          // 為了讓 UI 可以 clone，我們取該食物最近一次的 log ID
           id: sql`max(${foodLogs.id})`.mapWith(Number).as('id'),
         })
         .from(foodLogs)
@@ -352,6 +316,17 @@ export default function HomeScreen() {
             await db.update(dailyMetrics).set({ waterMl: newAmount }).where(eq(dailyMetrics.id, existing[0].id));
           }
       } catch(e) { console.error("Water update failed", e); }
+  };
+
+  // 查找圖示的輔助函數
+  const getActivityIconInfo = (name: string) => {
+    for (const cat of ACTIVITY_RAW) {
+        const item = cat.items.find(i => t(i.id, lang) === name);
+        if (item) {
+            return { icon: item.icon, library: item.library };
+        }
+    }
+    return { icon: 'walk', library: undefined };
   };
 
   // --- 客製化月曆 Modal ---
@@ -471,49 +446,51 @@ export default function HomeScreen() {
 
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
-  // [修改] 身體數值卡片：加大、恢復目標體脂、底部步數/睡眠
   const renderBodyMetricsCard = () => (
     <ThemedView style={[styles.card, { paddingVertical: 20 }]}> 
       <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
-          <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
+            {/* + 紀錄 按鈕移動到這裡 */}
+            <TouchableOpacity onPress={handleSaveMetrics} style={{marginLeft: 12}}>
+               <Ionicons name="add-circle" size={24} color={theme.tint} />
+            </TouchableOpacity>
+          </View>
           
           <View style={{flexDirection:'row', gap: 12}}>
-             {/* 同步按鈕 */}
-             <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{padding:4}}>
-                {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={20} color={theme.tint} />}
-             </TouchableOpacity>
-             {/* 紀錄按鈕 */}
-             <TouchableOpacity onPress={handleSaveMetrics}>
-                <ThemedText style={{color:theme.tint,fontSize:16, fontWeight:'600'}}>{t('record_metrics',lang)}</ThemedText>
+             {/* 同步按鈕與提示 */}
+             <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12}}>
+                <ThemedText style={{fontSize: 10, color: '#888', marginRight: 4}}>{t('sync_health_hint', lang)}</ThemedText>
+                {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={16} color={theme.tint} />}
              </TouchableOpacity>
           </View>
       </View>
 
       <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
         {/* 左側：輸入區 */}
-        <View style={{gap: 12}}>
+        <View style={{gap: 10}}>
             <View style={{flexDirection:'row',alignItems:'center'}}>
-                <ThemedText style={{width: 60, fontSize: 16}}>{t('weight', lang)}</ThemedText>
-                <TextInput style={[styles.metricInput,{color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText style={{fontSize:16}}>kg</ThemedText>
+                <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
+                <TextInput style={[styles.metricInput,{fontSize: 16, color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                <ThemedText style={{fontSize:14}}>kg</ThemedText>
                 {renderDiffBadge(diffWeight,'kg')}
             </View>
             <View style={{flexDirection:'row',alignItems:'center'}}>
-                <ThemedText style={{width: 60, fontSize: 16}}>{t('body_fat', lang)}</ThemedText>
-                <TextInput style={[styles.metricInput,{color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText style={{fontSize:16}}>% </ThemedText>
+                <ThemedText style={{width: 95, fontSize: 14}}>{t('body_fat', lang)}</ThemedText>
+                <TextInput style={[styles.metricInput,{fontSize: 16, color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                <ThemedText style={{fontSize:14}}>% </ThemedText>
                 {renderDiffBadge(diffFat,'%')}
             </View>
         </View>
 
-        {/* 右側：目標區 (恢復顯示) */}
+        {/* 右側：目標區 */}
         <View style={{justifyContent:'center', alignItems:'flex-end', gap: 8}}>
             <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)}: {targetWeight} kg</ThemedText>
             <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)}: {targetBodyFat} %</ThemedText>
         </View>
       </View>
 
-      {/* 底部：Health Connect 數據 (步數 & 睡眠) */}
+      {/* 底部：Health Connect 數據 */}
       <View style={{borderTopWidth:1, borderColor:'#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
           <View style={{flexDirection:'row', alignItems:'center'}}>
               <Ionicons name="footsteps" size={18} color="#FF9500"/>
@@ -631,7 +608,21 @@ export default function HomeScreen() {
                     );
                 })}
             </View>
-            {frequentActivities.length > 0 && (<View style={{marginTop: 20, marginBottom: 8}}><ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>{frequentActivities.map((name, idx) => (<TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}><ThemedText>🏃 {name}</ThemedText></TouchableOpacity>))}</ScrollView></View>)}
+            {frequentActivities.length > 0 && (<View style={{marginTop: 20, marginBottom: 8}}><ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>{frequentActivities.map((name, idx) => {
+                            const { icon, library } = getActivityIconInfo(name);
+                            return (
+                                <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
+                                    <ActivityIcon 
+                                        library={library} 
+                                        name={icon} 
+                                        size={16} 
+                                        color={theme.text} 
+                                        style={{marginRight: 4}} 
+                                    />
+                                    <ThemedText>{name}</ThemedText>
+                                </TouchableOpacity>
+                            );
+                        })}</ScrollView></View>)}
             <View style={[styles.mealGroup, {marginTop: 20}]}>
                 <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText></View>
                 {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}

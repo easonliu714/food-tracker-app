@@ -31,8 +31,8 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { t, useLanguage } from "@/lib/i18n"; // i18n
 
-// [新增] 統一管理的圖示元件
-const ActivityIcon = ({ library, name, size, color, style }: { library?: string, name: string, size: number, color: string, style?: any }) => {
+// 統一管理的圖示元件 (匯出供首頁使用)
+export const ActivityIcon = ({ library, name, size, color, style }: { library?: string, name: string, size: number, color: string, style?: any }) => {
   switch (library) {
     case "MaterialCommunityIcons":
       return <MaterialCommunityIcons name={name as any} size={size} color={color} style={style} />;
@@ -44,7 +44,6 @@ const ActivityIcon = ({ library, name, size, color, style }: { library?: string,
       return <MaterialIcons name={name as any} size={size} color={color} style={style} />;
     case "Entypo":
       return <Entypo name={name as any} size={size} color={color} style={style} />;
-    // 預設使用 Ionicons
     default:
       return <Ionicons name={name as any} size={size} color={color} style={style} />;
   }
@@ -59,66 +58,67 @@ type ActivityCategory = { id: string; items: ActivityItem[] };
 // cat_gym: 健身房器材、有氧團課、瑜珈、重訓
 // cat_sport: 球類運動、競技運動
 // cat_life: 日常生活、家事
-const ACTIVITY_RAW: ActivityCategory[] = [
+// [修改 1] 匯出 ACTIVITY_RAW 供首頁查詢圖示
+export const ACTIVITY_RAW: ActivityCategory[] = [
   {
     id: "cat_cardio",
     items: [
-      { id: "act_walk", mets: 3.0, icon: "walk" }, // 慢走 4km/h
-      { id: "act_walk_3_2", mets: 2.5, icon: "walk", library: "MaterialCommunityIcons" }, // 3.2 km/h
-      { id: "act_walk_4", mets: 3.0, icon: "walk", library: "MaterialCommunityIcons" }, // 4 km/h
-      { id: "act_walk_4_8", mets: 3.5, icon: "walk", library: "MaterialCommunityIcons" }, // 4.8 km/h
-      { id: "act_walk_5_6", mets: 4.3, icon: "walk", library: "MaterialCommunityIcons" }, // 5.6 km/h
-      { id: "act_walk_6_4", mets: 5.0, icon: "walk", library: "MaterialCommunityIcons" }, // 6.4 km/h
-      { id: "act_walk_7_2", mets: 6.3, icon: "run", library: "MaterialCommunityIcons" }, // 7.2 km/h
-      { id: "act_walk_8", mets: 8.0, icon: "run-fast", library: "MaterialCommunityIcons" }, // 8 km/h
+      { id: "act_walk", mets: 3.0, icon: "walk" },
+      { id: "act_walk_3_2", mets: 2.5, icon: "walk", library: "MaterialCommunityIcons" },
+      { id: "act_walk_4", mets: 3.0, icon: "walk", library: "MaterialCommunityIcons" },
+      { id: "act_walk_4_8", mets: 3.5, icon: "walk", library: "MaterialCommunityIcons" },
+      { id: "act_walk_5_6", mets: 4.3, icon: "walk", library: "MaterialCommunityIcons" },
+      { id: "act_walk_6_4", mets: 5.0, icon: "walk", library: "MaterialCommunityIcons" },
+      { id: "act_walk_7_2", mets: 6.3, icon: "run", library: "MaterialCommunityIcons" },
+      { id: "act_walk_8", mets: 8.0, icon: "run-fast", library: "MaterialCommunityIcons" },
       
-      { id: "act_jogging", mets: 7.0, icon: "run", library: "MaterialCommunityIcons" }, // 慢跑 一般
-      { id: "act_run_8kph", mets: 8.0, icon: "run", library: "MaterialCommunityIcons" }, // 8 km/h
-      { id: "act_run_9_7kph", mets: 9.8, icon: "run", library: "MaterialCommunityIcons" }, // 9.7 km/h
-      { id: "act_run_11kph", mets: 11.0, icon: "run-fast", library: "MaterialCommunityIcons" }, // 11 km/h
-      { id: "act_run_12kph", mets: 11.5, icon: "run-fast", library: "MaterialCommunityIcons" }, // 12 km/h
-      { id: "act_run_13kph", mets: 12.3, icon: "run-fast", library: "MaterialCommunityIcons" }, // 13 km/h
-      { id: "act_run_14_5kph", mets: 14.5, icon: "run-fast", library: "MaterialCommunityIcons" }, // 14.5 km/h
-      { id: "act_run_16kph", mets: 16.0, icon: "run-fast", library: "MaterialCommunityIcons" }, // 16 km/h
+      { id: "act_jogging", mets: 7.0, icon: "run", library: "MaterialCommunityIcons" },
+      { id: "act_run_8kph", mets: 8.0, icon: "run", library: "MaterialCommunityIcons" },
+      { id: "act_run_9_7kph", mets: 9.8, icon: "run", library: "MaterialCommunityIcons" },
+      { id: "act_run_11kph", mets: 11.0, icon: "run-fast", library: "MaterialCommunityIcons" },
+      { id: "act_run_12kph", mets: 11.5, icon: "run-fast", library: "MaterialCommunityIcons" },
+      { id: "act_run_13kph", mets: 12.3, icon: "run-fast", library: "MaterialCommunityIcons" },
+      { id: "act_run_14_5kph", mets: 14.5, icon: "run-fast", library: "MaterialCommunityIcons" },
+      { id: "act_run_16kph", mets: 16.0, icon: "run-fast", library: "MaterialCommunityIcons" },
 
-      { id: "act_cycling_leisure", mets: 4.0, icon: "bike", library: "MaterialCommunityIcons" }, // <16 km/h
-      { id: "act_cycling_slow", mets: 6.0, icon: "bike", library: "MaterialCommunityIcons" }, // 16-19 km/h
-      { id: "act_cycling_moderate", mets: 8.0, icon: "bike", library: "MaterialCommunityIcons" }, // 19-22 km/h
-      { id: "act_cycling_vigorous", mets: 10.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // 22-25 km/h
-      { id: "act_cycling_racing", mets: 12.0, icon: "bike-fast", library: "MaterialCommunityIcons" }, // >26 km/h
-      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "FontAwesome5" }, // 山地
+      { id: "act_cycling_leisure", mets: 4.0, icon: "bike", library: "MaterialCommunityIcons" },
+      { id: "act_cycling_slow", mets: 6.0, icon: "bike", library: "MaterialCommunityIcons" },
+      { id: "act_cycling_moderate", mets: 8.0, icon: "bike", library: "MaterialCommunityIcons" },
+      { id: "act_cycling_vigorous", mets: 10.0, icon: "bike-fast", library: "MaterialCommunityIcons" },
+      { id: "act_cycling_racing", mets: 12.0, icon: "bike-fast", library: "MaterialCommunityIcons" },
+      { id: "act_cycling_mountain", mets: 8.5, icon: "mountain", library: "FontAwesome5" },
 
-      { id: "act_swim", mets: 6.3, icon: "swim", library: "MaterialCommunityIcons" }, // 慢
-      { id: "act_swim_fast", mets: 9.8, icon: "swim", library: "MaterialCommunityIcons" }, // 快
-      { id: "act_swim_back", mets: 7.0, icon: "swim", library: "MaterialCommunityIcons" }, // 仰式
-      { id: "act_swim_breast", mets: 10.3, icon: "swim", library: "MaterialCommunityIcons" }, // 蛙式
-      { id: "act_swim_butterfly", mets: 13.8, icon: "swim", library: "MaterialCommunityIcons" }, // 蝶式
-      { id: "act_water_jogging", mets: 9.8, icon: "water", library: "MaterialCommunityIcons" }, // 水中慢跑
-      { id: "act_aqua_aerobics", mets: 5.3, icon: "water", library: "MaterialCommunityIcons" }, // 水上有氧
+      { id: "act_swim", mets: 6.3, icon: "swim", library: "MaterialCommunityIcons" },
+      { id: "act_swim_fast", mets: 9.8, icon: "swim", library: "MaterialCommunityIcons" },
+      { id: "act_swim_back", mets: 7.0, icon: "swim", library: "MaterialCommunityIcons" },
+      { id: "act_swim_breast", mets: 10.3, icon: "swim", library: "MaterialCommunityIcons" },
+      { id: "act_swim_butterfly", mets: 13.8, icon: "swim", library: "MaterialCommunityIcons" },
+      { id: "act_water_jogging", mets: 9.8, icon: "water", library: "MaterialCommunityIcons" },
+      { id: "act_aqua_aerobics", mets: 5.3, icon: "water", library: "MaterialCommunityIcons" },
 
-      { id: "act_stairs_down", mets: 3.2, icon: "stairs", library: "MaterialCommunityIcons" }, // 下樓梯
-      { id: "act_stairs_up", mets: 8.4, icon: "stairs-up", library: "MaterialCommunityIcons" }, // 上樓梯 (爬樓梯)
-      { id: "act_hike", mets: 6.0, icon: "hiking", library: "MaterialCommunityIcons" }, // 爬山
-      { id: "act_jump_rope_slow", mets: 8.0, icon: "jump-rope", library: "MaterialCommunityIcons" }, // 慢
-      { id: "act_jump_rope_mod", mets: 10.0, icon: "jump-rope", library: "MaterialCommunityIcons" }, // 中
-      { id: "act_jump_rope_fast", mets: 12.0, icon: "jump-rope", library: "MaterialCommunityIcons" }, // 快
+      { id: "act_stairs_down", mets: 3.2, icon: "stairs", library: "MaterialCommunityIcons" },
+      { id: "act_stairs_up", mets: 8.4, icon: "stairs-up", library: "MaterialCommunityIcons" },
+      { id: "act_hike", mets: 6.0, icon: "hiking", library: "MaterialCommunityIcons" },
+      { id: "act_jump_rope_slow", mets: 8.0, icon: "jump-rope", library: "MaterialCommunityIcons" },
+      { id: "act_jump_rope_mod", mets: 10.0, icon: "jump-rope", library: "MaterialCommunityIcons" },
+      { id: "act_jump_rope_fast", mets: 12.0, icon: "jump-rope", library: "MaterialCommunityIcons" },
     ],
   },
   {
     id: "cat_gym",
     items: [
-      { id: "act_weight_light", mets: 3.0, icon: "dumbbell", library: "MaterialCommunityIcons" }, // 輕中度
-      { id: "act_weight_vig", mets: 6.0, icon: "weight-lifter", library: "MaterialCommunityIcons" }, // 高強度
-      { id: "act_circuit_training", mets: 8.0, icon: "cached", library: "MaterialCommunityIcons" }, // 循環訓練
-      { id: "act_core", mets: 3.8, icon: "human-handsup", library: "MaterialCommunityIcons" }, // 核心
-      { id: "act_yoga", mets: 2.5, icon: "yoga", library: "MaterialCommunityIcons" }, // 熱瑜珈
-      { id: "act_yoga_power", mets: 4.0, icon: "yoga", library: "MaterialCommunityIcons" }, // 力量瑜珈
+      { id: "act_weight_light", mets: 3.0, icon: "dumbbell", library: "MaterialCommunityIcons" },
+      { id: "act_weight_vig", mets: 6.0, icon: "weight-lifter", library: "MaterialCommunityIcons" },
+      { id: "act_circuit_training", mets: 8.0, icon: "cached", library: "MaterialCommunityIcons" },
+      { id: "act_core", mets: 3.8, icon: "human-handsup", library: "MaterialCommunityIcons" },
+      { id: "act_yoga", mets: 2.5, icon: "yoga", library: "MaterialCommunityIcons" },
+      { id: "act_yoga_power", mets: 4.0, icon: "yoga", library: "MaterialCommunityIcons" },
       { id: "act_pilates", mets: 3.0, icon: "human-handsup", library: "MaterialCommunityIcons" },
-      { id: "act_pilates_adv", mets: 4.5, icon: "human-handsup", library: "MaterialCommunityIcons" }, // 進階
+      { id: "act_pilates_adv", mets: 4.5, icon: "human-handsup", library: "MaterialCommunityIcons" },
       
       { id: "act_aerobic_dance", mets: 6.5, icon: "human-female-dance", library: "MaterialCommunityIcons" }, 
-      { id: "act_aerobics_low", mets: 5.0, icon: "human-female-dance", library: "MaterialCommunityIcons" }, // 低衝擊
-      { id: "act_aerobics_high", mets: 7.3, icon: "human-female-dance", library: "MaterialCommunityIcons" }, // 高衝擊
+      { id: "act_aerobics_low", mets: 5.0, icon: "human-female-dance", library: "MaterialCommunityIcons" },
+      { id: "act_aerobics_high", mets: 7.3, icon: "human-female-dance", library: "MaterialCommunityIcons" },
       { id: "act_zumba", mets: 7.3, icon: "human-female-dance", library: "MaterialCommunityIcons" },
       { id: "act_dance_general", mets: 4.5, icon: "music-note", library: "MaterialCommunityIcons" },
       { id: "act_dance_swing", mets: 5.5, icon: "music-note", library: "MaterialCommunityIcons" },
@@ -137,7 +137,7 @@ const ACTIVITY_RAW: ActivityCategory[] = [
       { id: "act_stat_bike_vig", mets: 10.5, icon: "bike", library: "MaterialCommunityIcons" },
       { id: "act_spinning", mets: 8.5, icon: "bike-fast", library: "MaterialCommunityIcons" },
       { id: "act_rowing_machine", mets: 7.0, icon: "rowing", library: "MaterialCommunityIcons" },
-      { id: "act_treadmill", mets: 9.0, icon: "run", library: "MaterialCommunityIcons" }, // 跑步機
+      { id: "act_treadmill", mets: 9.0, icon: "run", library: "MaterialCommunityIcons" },
       
       { id: "act_stretching", mets: 2.3, icon: "human-handsdown", library: "MaterialCommunityIcons" },
       { id: "act_plank", mets: 3.8, icon: "human-handsdown", library: "MaterialCommunityIcons" },
@@ -153,23 +153,23 @@ const ACTIVITY_RAW: ActivityCategory[] = [
   {
     id: "cat_sport",
     items: [
-      { id: "act_badminton", mets: 5.5, icon: "badminton", library: "MaterialCommunityIcons" }, // 休閒
-      { id: "act_badminton_comp", mets: 7.0, icon: "badminton", library: "MaterialCommunityIcons" }, // 競技
-      { id: "act_basketball_gen", mets: 6.5, icon: "basketball", library: "MaterialCommunityIcons" }, // 一般
-      { id: "act_basketball", mets: 8.0, icon: "basketball", library: "MaterialCommunityIcons" }, // 比賽
-      { id: "act_tennis_doubles", mets: 6.0, icon: "tennisball" }, // 雙打
-      { id: "act_tennis", mets: 8.0, icon: "tennisball" }, // 單人
+      { id: "act_badminton", mets: 5.5, icon: "badminton", library: "MaterialCommunityIcons" },
+      { id: "act_badminton_comp", mets: 7.0, icon: "badminton", library: "MaterialCommunityIcons" },
+      { id: "act_basketball_gen", mets: 6.5, icon: "basketball", library: "MaterialCommunityIcons" },
+      { id: "act_basketball", mets: 8.0, icon: "basketball", library: "MaterialCommunityIcons" },
+      { id: "act_tennis_doubles", mets: 6.0, icon: "tennisball", library: "MaterialCommunityIcons" },
+      { id: "act_tennis", mets: 8.0, icon: "tennisball", library: "MaterialCommunityIcons" },
       { id: "act_table_tennis", mets: 4.0, icon: "table-tennis", library: "MaterialCommunityIcons" },
-      { id: "act_soccer", mets: 7.0, icon: "soccer", library: "MaterialCommunityIcons" }, // 一般
-      { id: "act_soccer_comp", mets: 10.0, icon: "soccer", library: "MaterialCommunityIcons" }, // 競技
+      { id: "act_soccer", mets: 7.0, icon: "soccer", library: "MaterialCommunityIcons" },
+      { id: "act_soccer_comp", mets: 10.0, icon: "soccer", library: "MaterialCommunityIcons" },
       { id: "act_baseball", mets: 5.0, icon: "baseball", library: "MaterialCommunityIcons" },
       { id: "act_softball", mets: 5.0, icon: "baseball", library: "MaterialCommunityIcons" },
-      { id: "act_golf", mets: 4.3, icon: "golf", library: "MaterialCommunityIcons" }, // 步行
-      { id: "act_volleyball", mets: 6.0, icon: "volleyball", library: "MaterialCommunityIcons" }, // 室內
-      { id: "act_volleyball_beach", mets: 8.0, icon: "volleyball", library: "MaterialCommunityIcons" }, // 沙灘
-      { id: "act_rugby", mets: 8.0, icon: "rugby", library: "MaterialCommunityIcons" }, // 橄欖球
+      { id: "act_golf", mets: 4.3, icon: "golf", library: "MaterialCommunityIcons" },
+      { id: "act_volleyball", mets: 6.0, icon: "volleyball", library: "MaterialCommunityIcons" },
+      { id: "act_volleyball_beach", mets: 8.0, icon: "volleyball", library: "MaterialCommunityIcons" },
+      { id: "act_rugby", mets: 8.0, icon: "rugby", library: "MaterialCommunityIcons" },
       { id: "act_hockey", mets: 8.0, icon: "hockey-sticks", library: "MaterialCommunityIcons" },
-      { id: "act_racquetball", mets: 7.0, icon: "tennis", library: "MaterialCommunityIcons" }, // 壁球
+      { id: "act_racquetball", mets: 7.0, icon: "tennis", library: "MaterialCommunityIcons" },
       { id: "act_billiards", mets: 2.5, icon: "billiards", library: "MaterialCommunityIcons" },
       { id: "act_bowling", mets: 3.0, icon: "bowling", library: "MaterialCommunityIcons" },
       { id: "act_darts", mets: 2.5, icon: "target", library: "MaterialCommunityIcons" },
@@ -213,7 +213,7 @@ const ACTIVITY_RAW: ActivityCategory[] = [
       
       { id: "act_cooking", mets: 2.5, icon: "chef-hat", library: "MaterialCommunityIcons" },
       { id: "act_cleaning", mets: 3.5, icon: "broom", library: "MaterialCommunityIcons" },
-      { id: "act_vacuuming", mets: 3.3, icon: "robot-vacuum", library: "MaterialCommunityIcons" }, // 或用一般吸塵器圖標
+      { id: "act_vacuuming", mets: 3.3, icon: "robot-vacuum", library: "MaterialCommunityIcons" },
       { id: "act_mopping", mets: 3.5, icon: "bucket", library: "MaterialCommunityIcons" },
       { id: "act_housework", mets: 3.5, icon: "home", library: "MaterialCommunityIcons" },
       { id: "act_childcare", mets: 3.0, icon: "baby-carriage", library: "MaterialCommunityIcons" },
@@ -265,6 +265,10 @@ export default function ActivityEditorScreen() {
   const [category, setCategory] = useState<ActivityCategory | null>(null);
   const [activity, setActivity] = useState<ActivityItem | null>(null);
   const [showSelector, setShowSelector] = useState(false);
+  
+  // [修改 2] 搜尋關鍵字狀態
+  const [searchText, setSearchText] = useState("");
+
   const [customActivityName, setCustomActivityName] = useState("");
 
   const [intensity, setIntensity] = useState<"low"|"medium"|"high">("medium");
@@ -436,6 +440,15 @@ export default function ActivityEditorScreen() {
     }
   };
 
+  // [修改 3] 搜尋過濾邏輯
+  const filteredItems = useMemo(() => {
+    if (!searchText) return [];
+    const allItems = ACTIVITY_RAW.flatMap(c => c.items);
+    return allItems.filter(item => 
+      t(item.id, lang).toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [searchText, lang]);
+
   // Render
   const renderSelectorModal = () => (
     <Modal visible={showSelector} animationType="slide" transparent>
@@ -448,26 +461,49 @@ export default function ActivityEditorScreen() {
             </TouchableOpacity>
           </View>
           
-          <View style={{flexDirection: 'row', flex: 1}}>
-            <View style={[styles.categoryList, { borderColor: theme.icon }]}>
-              {ACTIVITY_RAW.map(cat => (
-                <TouchableOpacity 
-                  key={cat.id} 
-                  style={[styles.catItem, category?.id === cat.id && { backgroundColor: theme.tint + '20' }]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <ThemedText style={{fontWeight: category?.id === cat.id ? 'bold' : 'normal', color: category?.id === cat.id ? theme.tint : theme.text}}>
-                    {t(cat.id, lang)}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* [修改 4] 搜尋輸入框 */}
+          <View style={{paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth:1, borderColor:'#eee'}}>
+             <View style={{flexDirection:'row', alignItems:'center', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8, paddingHorizontal: 10}}>
+                <Ionicons name="search" size={20} color="#999" />
+                <TextInput 
+                    style={{flex:1, padding: 10, color: theme.text, fontSize: 16}}
+                    placeholder={t('search_placeholder', lang)}
+                    placeholderTextColor="#999"
+                    value={searchText}
+                    onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchText("")}>
+                        <Ionicons name="close-circle" size={18} color="#999" />
+                    </TouchableOpacity>
+                )}
+             </View>
+          </View>
 
+          <View style={{flexDirection: 'row', flex: 1}}>
+            {/* [修改 5] 搜尋時隱藏左側分類 */}
+            {!searchText && (
+                <View style={[styles.categoryList, { borderColor: theme.icon }]}>
+                {ACTIVITY_RAW.map(cat => (
+                    <TouchableOpacity 
+                    key={cat.id} 
+                    style={[styles.catItem, category?.id === cat.id && { backgroundColor: theme.tint + '20' }]}
+                    onPress={() => setCategory(cat)}
+                    >
+                    <ThemedText style={{fontWeight: category?.id === cat.id ? 'bold' : 'normal', color: category?.id === cat.id ? theme.tint : theme.text}}>
+                        {t(cat.id, lang)}
+                    </ThemedText>
+                    </TouchableOpacity>
+                ))}
+                </View>
+            )}
+
+            {/* [修改 6] 列表顯示邏輯 (搜尋結果 vs 分類項目) */}
             <FlatList
-              data={category?.items || []}
+              data={searchText ? filteredItems : (category?.items || [])}
               keyExtractor={item => item.id}
               ListEmptyComponent={
-                category?.id === 'cat_custom' ? (
+                !searchText && category?.id === 'cat_custom' ? (
                   <View style={{padding: 16}}>
                     <ThemedText>{t('custom_activity', lang)}</ThemedText>
                     <TouchableOpacity 
@@ -478,7 +514,11 @@ export default function ActivityEditorScreen() {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <View style={{padding: 16}}><ThemedText style={{color: theme.icon}}>{t('select_category_msg',lang)}</ThemedText></View>
+                  <View style={{padding: 16}}>
+                      <ThemedText style={{color: theme.icon}}>
+                          {searchText ? t('no_records', lang) : t('select_category_msg',lang)}
+                      </ThemedText>
+                  </View>
                 )
               }
               renderItem={({ item }) => (
@@ -486,13 +526,14 @@ export default function ActivityEditorScreen() {
                   style={styles.activityItem}
                   onPress={() => { 
                     setActivity(item); 
-                    // [修改] 選擇活動時，自動切換至建議強度
+					// [修改] 選擇活動時，自動切換至建議強度
                     setIntensity(getIntensityFromMets(item.mets));
                     setShowSelector(false); 
+                    setSearchText(""); // 重置搜尋
                   }}
                 >
                   <View style={{flexDirection:'row', alignItems:'center'}}>
-                      {/* [修改] 使用統一元件 */}
+				      {/* [修改] 使用統一元件 */}
                       <ActivityIcon 
                           library={item.library} 
                           name={item.icon} 

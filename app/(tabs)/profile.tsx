@@ -117,6 +117,7 @@ export default function ProfileScreen() {
           const logs = await db.select().from(foodLogs);
           const metrics = await db.select().from(dailyMetrics);
           const activities = await db.select().from(activityLogs);
+          // [備份] 確保取得分析頁面的排版設定
           const gridLayout = await getAnalysisGrid();
           const reminders = await db.select().from(reminderSettings);
         
@@ -179,8 +180,8 @@ export default function ProfileScreen() {
                           await db.update(userProfiles).set({ ...userData, createdAt: new Date(createdAt), updatedAt: new Date() }).where(eq(userProfiles.id, profileId));
                       }
                       
-                      // 移除 saveAnalysisGrid 恢復，因可能是舊版不相容
-                      // if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
+                      // [還原] 恢復分析頁面的排版設定
+                      if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
                       
                       if (backup.data.reminders?.length) {
                          await db.delete(reminderSettings);
@@ -533,7 +534,7 @@ export default function ProfileScreen() {
                  <View style={styles.row}>
                     {["male", "female"].map(g => (
                       <Pressable key={g} onPress={() => setGender(g as any)} style={[styles.option, gender === g && {backgroundColor: tintColor, borderColor: tintColor}]}>
-                         <ThemedText style={{color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
+                         <ThemedText style={{fontSize:14,color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
                       </Pressable>
                     ))}
                  </View>
