@@ -535,7 +535,7 @@ export default function ActivityEditorScreen() {
                     {/* [同步修改] 主按鈕上的圖示顯示邏輯 */}
                     {activity?.icon && (
                       <ActivityIcon 
-                        iconName={activity.icon}
+                        library={activity.library} // [修正] 補上 library 屬性
                         name={activity.icon} 
                         size={24} 
                         color={theme.text} 
