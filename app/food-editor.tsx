@@ -44,7 +44,7 @@ const DEFAULT_NUTRIENTS = {
 // [UI] 帶有 Emoji 的營養素輸入列
 interface NutrientRowProps {
     label: string;
-    emoji: string; // [NEW] Emoji support
+    emoji: string;
     val: string;
     k: string;
     update: (k: any, v: string) => void;
@@ -110,7 +110,8 @@ export default function FoodEditorScreen() {
   const [initialBaseNutrients, setInitialBaseNutrients] = useState<typeof DEFAULT_NUTRIENTS | null>(null);
   const [initialUnitWeight, setInitialUnitWeight] = useState("100");
 
-  const isInitialized = useRef(false);
+  // [修改 1] 移除 isInitialized Ref，確保每次 params 變更時都能重新讀取數據
+  // const isInitialized = useRef(false);
 
   useEffect(() => {
       if (mealScrollRef.current) {
@@ -148,11 +149,14 @@ export default function FoodEditorScreen() {
       magnesium: safeStr(item.magnesiumMg), zinc: safeStr(item.zincMg), iron: safeStr(item.ironMg)
   });
 
+  // [修改 2] 將 params 加入依賴陣列，並加入除錯訊息
   useEffect(() => {
-    if (isInitialized.current) return;
-    isInitialized.current = true;
+    // if (isInitialized.current) return;
+    // isInitialized.current = true;
     
     async function init() {
+        console.log("[FoodEditor] Initializing with params:", JSON.stringify(params, null, 2));
+        
         try {
             if (params.logId) {
                 const id = parseInt(params.logId as string);
@@ -209,6 +213,9 @@ export default function FoodEditorScreen() {
                 if (params.productData) {
                     try {
                         const prod = JSON.parse(params.productData as string);
+                        console.log("[FoodEditor] Product Data Source:", prod.source); // [除錯] 確認來源
+                        console.log("[FoodEditor] Product Name:", prod.name); // [除錯] 確認名稱
+
                         setFoodName(prod.name || "");
                         setBrand(prod.brand || "");
                         if (prod.stdWeight) {
@@ -229,16 +236,20 @@ export default function FoodEditorScreen() {
                             fiber: safeStr(prod.fiber), saturatedFat: safeStr(prod.saturatedFat), transFat: safeStr(prod.transFat),
                         };
                         setBaseNutrients(nutrients);
+                        
+                        // [關鍵] 如果來源是 local，設定 ID 以便後續進行 Update 而不是 Insert
                         if (prod.source === 'local' && prod.id) {
                              setDbFoodId(prod.id);
                              setInitialBaseNutrients(nutrients);
+                             console.log("[FoodEditor] Linked to Local DB ID:", prod.id);
+                        } else {
+                             console.log("[FoodEditor] Using API Data or New Entry");
                         }
                     } catch (e) { console.error(e); }
                 }
 
                 if (params.imageUri) {
                     setImageUri(params.imageUri as string);
-                    // [修正] 自動觸發 AI 分析
                     if (params.analyze === "true" && params.imageBase64) {
                         performAiAnalysis(params.imageBase64 as string, 'image');
                     }
@@ -247,7 +258,7 @@ export default function FoodEditorScreen() {
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }
     init();
-  }, []);
+  }, [params]); // [重要] 依賴 params 變更來重新執行 init
 
   const performAiAnalysis = async (input: string, type: 'image' | 'text') => {
       if (!input) return;
@@ -385,14 +396,20 @@ export default function FoodEditorScreen() {
               magnesiumMg: parseFloat(baseNutrients.magnesium) || 0,
               zincMg: parseFloat(baseNutrients.zinc) || 0,
               ironMg: parseFloat(baseNutrients.iron) || 0,
-              updatedAt: new Date()
+              
+              // [修正 3] 確保更新時間被寫入，讓 Barcode Scanner 排序能抓到最新
+              updatedAt: new Date() 
           };
 
+          console.log(`[FoodEditor] Saving Item. ForceNew: ${forceNewItem}, ID: ${foodId}`);
+          
           if (forceNewItem || !foodId) {
               const res = await db.insert(foodItems).values(itemData).returning({insertedId: foodItems.id});
               foodId = res[0].insertedId;
+              console.log(`[FoodEditor] Created new item ID: ${foodId}`);
           } else {
               await db.update(foodItems).set(itemData).where(eq(foodItems.id, foodId));
+              console.log(`[FoodEditor] Updated item ID: ${foodId}`);
           }
           
           const logData = {
@@ -431,7 +448,10 @@ export default function FoodEditorScreen() {
              if (router.canDismiss()) router.dismissAll();
              router.replace("/(tabs)");
           }}]);
-      } catch (e) { console.error(e); Alert.alert(t('error', lang), "Save Failed"); }
+      } catch (e) { 
+          console.error("[Save Error]", e); 
+          Alert.alert(t('error', lang), "Save Failed"); 
+      }
   };
 
   const updateNutrient = (key: keyof typeof baseNutrients, val: string) => { setBaseNutrients(prev => ({ ...prev, [key]: val })); };
@@ -489,7 +509,6 @@ export default function FoodEditorScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* [新增] 品牌輸入欄位 */}
             <View style={{marginTop: 12}}>
                 <ThemedText style={{fontSize: 12, color: '#888', marginBottom: 4}}>{t('brand', lang) || "Brand (Optional)"}</ThemedText>
                 <TextInput 
@@ -525,7 +544,6 @@ export default function FoodEditorScreen() {
 
         <ThemedView style={styles.card}>
             <ThemedText type="defaultSemiBold" style={{marginBottom: 12}}>📊 {t('val_per_100g', lang)}</ThemedText>
-            {/* 使用帶 Emoji 的組件 */}
             <NutrientRow label={t('calories', lang)} emoji="🔥" val={baseNutrients.calories} k="calories" update={updateNutrient} isMain unit="kcal" theme={theme}/>
             <View style={styles.divider}/>
             <NutrientRow label={t('protein', lang)} emoji="🥩" val={baseNutrients.protein} k="protein" update={updateNutrient} isMain theme={theme}/>
