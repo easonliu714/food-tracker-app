@@ -41,7 +41,6 @@ const DEFAULT_NUTRIENTS = {
   carbs: "0", sugar: "0", fiber: "0", sodium: "0", cholesterol: "0", magnesium: "0", zinc: "0", iron: "0"
 };
 
-// [UI] 帶有 Emoji 的營養素輸入列
 interface NutrientRowProps {
     label: string;
     emoji: string;
@@ -110,9 +109,6 @@ export default function FoodEditorScreen() {
   const [initialBaseNutrients, setInitialBaseNutrients] = useState<typeof DEFAULT_NUTRIENTS | null>(null);
   const [initialUnitWeight, setInitialUnitWeight] = useState("100");
 
-  // [修改 1] 移除 isInitialized Ref，確保每次 params 變更時都能重新讀取數據
-  // const isInitialized = useRef(false);
-
   useEffect(() => {
       if (mealScrollRef.current) {
           const index = MEAL_PERIODS.findIndex(m => m.id === selectedMeal);
@@ -149,18 +145,16 @@ export default function FoodEditorScreen() {
       magnesium: safeStr(item.magnesiumMg), zinc: safeStr(item.zincMg), iron: safeStr(item.ironMg)
   });
 
-  // [修改 2] 將 params 加入依賴陣列，並加入除錯訊息
+  const { logId: paramLogId, clone: paramClone, barcode: paramBarcode, productData: paramProductData, imageUri: paramImageUri, analyze: paramAnalyze, imageBase64: paramImageBase64 } = params;
+
   useEffect(() => {
-    // if (isInitialized.current) return;
-    // isInitialized.current = true;
-    
     async function init() {
-        console.log("[FoodEditor] Initializing with params:", JSON.stringify(params, null, 2));
+        console.log("[FoodEditor] Initializing...");
         
         try {
-            if (params.logId) {
-                const id = parseInt(params.logId as string);
-                const isClone = params.clone === "true"; 
+            if (paramLogId) {
+                const id = parseInt(paramLogId as string);
+                const isClone = paramClone === "true"; 
                 if (!isClone) setLogId(id);
 
                 const logRes = await db.select().from(foodLogs).where(eq(foodLogs.id, id));
@@ -208,14 +202,13 @@ export default function FoodEditorScreen() {
                 setRecordDate(now);
                 updateCategoryByTime(now);
 
-                if (params.barcode) setBarcode(params.barcode as string);
+                if (paramBarcode) setBarcode(paramBarcode as string);
 
-                if (params.productData) {
+                if (paramProductData) {
                     try {
-                        const prod = JSON.parse(params.productData as string);
-                        console.log("[FoodEditor] Product Data Source:", prod.source); // [除錯] 確認來源
-                        console.log("[FoodEditor] Product Name:", prod.name); // [除錯] 確認名稱
-
+                        const prod = JSON.parse(paramProductData as string);
+                        console.log("[FoodEditor] Product Data Source:", prod.source);
+                        
                         setFoodName(prod.name || "");
                         setBrand(prod.brand || "");
                         if (prod.stdWeight) {
@@ -234,31 +227,33 @@ export default function FoodEditorScreen() {
                             calories: safeStr(prod.cal), protein: safeStr(prod.pro), fat: safeStr(prod.fat),
                             carbs: safeStr(prod.carb), sodium: safeStr(prod.sod), sugar: safeStr(prod.sugar),
                             fiber: safeStr(prod.fiber), saturatedFat: safeStr(prod.saturatedFat), transFat: safeStr(prod.transFat),
+                            // [修正] 這裡接收傳遞過來的微量營養素
+                            cholesterol: safeStr(prod.cholesterol), 
+                            magnesium: safeStr(prod.magnesium), 
+                            zinc: safeStr(prod.zinc), 
+                            iron: safeStr(prod.iron),
                         };
                         setBaseNutrients(nutrients);
                         
-                        // [關鍵] 如果來源是 local，設定 ID 以便後續進行 Update 而不是 Insert
                         if (prod.source === 'local' && prod.id) {
                              setDbFoodId(prod.id);
                              setInitialBaseNutrients(nutrients);
                              console.log("[FoodEditor] Linked to Local DB ID:", prod.id);
-                        } else {
-                             console.log("[FoodEditor] Using API Data or New Entry");
                         }
                     } catch (e) { console.error(e); }
                 }
 
-                if (params.imageUri) {
-                    setImageUri(params.imageUri as string);
-                    if (params.analyze === "true" && params.imageBase64) {
-                        performAiAnalysis(params.imageBase64 as string, 'image');
+                if (paramImageUri) {
+                    setImageUri(paramImageUri as string);
+                    if (paramAnalyze === "true" && paramImageBase64) {
+                        performAiAnalysis(paramImageBase64 as string, 'image');
                     }
                 }
             }
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }
     init();
-  }, [params]); // [重要] 依賴 params 變更來重新執行 init
+  }, [paramLogId, paramClone, paramBarcode, paramProductData, paramImageUri, paramAnalyze, paramImageBase64]);
 
   const performAiAnalysis = async (input: string, type: 'image' | 'text') => {
       if (!input) return;
@@ -396,9 +391,7 @@ export default function FoodEditorScreen() {
               magnesiumMg: parseFloat(baseNutrients.magnesium) || 0,
               zincMg: parseFloat(baseNutrients.zinc) || 0,
               ironMg: parseFloat(baseNutrients.iron) || 0,
-              
-              // [修正 3] 確保更新時間被寫入，讓 Barcode Scanner 排序能抓到最新
-              updatedAt: new Date() 
+              updatedAt: new Date()
           };
 
           console.log(`[FoodEditor] Saving Item. ForceNew: ${forceNewItem}, ID: ${foodId}`);

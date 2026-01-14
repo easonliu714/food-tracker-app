@@ -41,7 +41,7 @@ export default function BarcodeScannerScreen() {
 
     try {
         // 1. 優先查詢 SQLite 本機資料庫
-        // [修改] 加入 orderBy(desc(foodItems.updatedAt)) 確保抓到最新的一筆
+        // 使用 updatedAt 排序確保抓到最新
         const localItems = await db.select()
             .from(foodItems)
             .where(eq(foodItems.barcode, data))
@@ -64,6 +64,11 @@ export default function BarcodeScannerScreen() {
                 fiber: String(localProd.fiberG || 0),
                 saturatedFat: String(localProd.saturatedFatG || 0),
                 transFat: String(localProd.transFatG || 0),
+                // [修正] 補上缺失的微量營養素傳遞
+                cholesterol: String(localProd.cholesterolMg || 0),
+                magnesium: String(localProd.magnesiumMg || 0),
+                zinc: String(localProd.zincMg || 0),
+                iron: String(localProd.ironMg || 0),
                 aiSummary: localProd.aiSummary, 
                 source: "local"
             };
@@ -93,6 +98,13 @@ export default function BarcodeScannerScreen() {
                 sod: ((n.sodium_100g || 0) * 1000).toString(), 
                 sugar: (n.sugars_100g || 0).toString(),
                 fiber: (n.fiber_100g || 0).toString(),
+                // [修正] 補上缺失的微量營養素傳遞
+                saturatedFat: (n["saturated-fat_100g"] || 0).toString(),
+                transFat: (n["trans-fat_100g"] || 0).toString(),
+                cholesterol: (n["cholesterol_100g"] || 0 * 1000).toString(),
+                magnesium: (n["magnesium_100g"] || 0 * 1000).toString(),
+                zinc: (n["zinc_100g"] || 0 * 1000).toString(),
+                iron: (n["iron_100g"] || 0* 1000).toString(), 
                 source: "off"
             };
             goToEditor(data, productData);

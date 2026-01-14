@@ -1,23 +1,22 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Switch, Platform } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Switch, Platform, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { saveSettings, getSettings, getAnalysisGrid } from "@/lib/storage";
+import { saveSettings, getSettings, getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage";
 import { validateApiKey } from "@/lib/gemini";
 import { db } from "@/lib/db";
 import { userProfiles, foodLogs, dailyMetrics, foodItems, activityLogs, reminderSettings } from "@/drizzle/schema"; 
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm"; 
 import { t, useLanguage, setAppLanguage, LANGUAGES, getVersionLogs } from "@/lib/i18n";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { format, isValid, differenceInDays } from "date-fns";
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Notifications from 'expo-notifications'; 
-// [修正] 引入 Notification 類型定義
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 
 import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file-system/legacy';
@@ -25,7 +24,6 @@ import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
 
-// 設定通知行為，確保在前景時也能顯示通知
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -60,7 +58,7 @@ export default function ProfileScreen() {
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
 
-  // 提醒設定狀態：包含新的 Start/End Time
+  // 提醒設定狀態
   const defaultTime = (h: number) => new Date(new Date().setHours(h, 0, 0, 0));
   const [reminders, setReminders] = useState({
       breakfast: { enabled: false, time: defaultTime(8) },
@@ -68,8 +66,8 @@ export default function ProfileScreen() {
       dinner: { enabled: false, time: defaultTime(18) },
       water: { 
           enabled: false, 
-          startTime: defaultTime(9), // 預設 09:00
-          endTime: defaultTime(21),  // 預設 21:00
+          startTime: defaultTime(9),
+          endTime: defaultTime(21),
           interval: 60 
       }
   });
@@ -82,6 +80,11 @@ export default function ProfileScreen() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showApiHelpModal, setShowApiHelpModal] = useState(false);
 
+  // 衝突處理相關狀態
+  const [conflictQueue, setConflictQueue] = useState<{local: any, remote: any}[]>([]);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [importStats, setImportStats] = useState({ added: 0, updated: 0, skipped: 0, identical: 0 });
+
   const backgroundColor = useThemeColor({}, "background");
   const cardBackground = useThemeColor({}, "cardBackground");
   const tintColor = useThemeColor({}, "tint");
@@ -89,7 +92,6 @@ export default function ProfileScreen() {
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
 
-  // [修正] 初始化通知頻道 (Android 必須)
   useEffect(() => {
     async function initNotifications() {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -109,6 +111,7 @@ export default function ProfileScreen() {
     initNotifications();
   }, []);
 
+  // 全資料庫備份
   const handleBackup = async () => {
       setLoading(true);
       try {
@@ -117,7 +120,6 @@ export default function ProfileScreen() {
           const logs = await db.select().from(foodLogs);
           const metrics = await db.select().from(dailyMetrics);
           const activities = await db.select().from(activityLogs);
-          // [備份] 確保取得分析頁面的排版設定
           const gridLayout = await getAnalysisGrid();
           const reminders = await db.select().from(reminderSettings);
         
@@ -146,6 +148,7 @@ export default function ProfileScreen() {
       }
   };
 
+  // 全資料庫還原
   const handleRestore = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
@@ -180,7 +183,6 @@ export default function ProfileScreen() {
                           await db.update(userProfiles).set({ ...userData, createdAt: new Date(createdAt), updatedAt: new Date() }).where(eq(userProfiles.id, profileId));
                       }
                       
-                      // [還原] 恢復分析頁面的排版設定
                       if (backup.data.gridLayout) await saveAnalysisGrid(backup.data.gridLayout);
                       
                       if (backup.data.reminders?.length) {
@@ -196,6 +198,241 @@ export default function ProfileScreen() {
 
       } catch (e: any) { console.error("Restore Error:", e); Alert.alert(t('error', lang), "Restore failed"); setLoading(false); }
   };
+
+  // 僅匯出商品資料庫 (處理重複條碼只留最新)
+  const handleExportProducts = async () => {
+      setLoading(true);
+      try {
+          const allProducts = await db.select().from(foodItems).where(isNotNull(foodItems.barcode));
+          const uniqueProductMap = new Map();
+          
+          allProducts.forEach(item => {
+              if (!item.barcode) return;
+              
+              if (!uniqueProductMap.has(item.barcode)) {
+                  uniqueProductMap.set(item.barcode, item);
+              } else {
+                  const existing = uniqueProductMap.get(item.barcode);
+                  const currentUpdate = item.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+                  const existingUpdate = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+                  
+                  if (currentUpdate > existingUpdate) {
+                      uniqueProductMap.set(item.barcode, item);
+                  }
+              }
+          });
+
+          const exportList = Array.from(uniqueProductMap.values());
+          console.log(`[Export] Total unique items to export: ${exportList.length}`);
+
+          const backupData = {
+              version: 1,
+              type: "product_catalog",
+              timestamp: new Date().toISOString(),
+              data: exportList
+          };
+
+          const fileUri = cacheDirectory + `food_products_backup_${Date.now()}.json`;
+          await writeAsStringAsync(fileUri, JSON.stringify(backupData));
+
+          if (await Sharing.isAvailableAsync()) {
+              await Sharing.shareAsync(fileUri, {
+                  mimeType: 'application/json',
+                  dialogTitle: t('export_products', lang)
+              });
+          }
+      } catch (e: any) {
+          console.error("Export Error:", e);
+          Alert.alert(t('error', lang), "Export failed: " + e.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // 匯入商品資料庫 (包含詳細比對邏輯)
+  const handleImportProducts = async () => {
+      try {
+          const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
+          if (result.canceled) return;
+          const file = result.assets[0];
+          setLoading(true);
+          const content = await readAsStringAsync(file.uri);
+          const importData = JSON.parse(content);
+
+          if (!importData.data || !Array.isArray(importData.data)) {
+              throw new Error("Invalid product backup format");
+          }
+
+          const productsToImport = importData.data;
+          console.log(`[Import] Total items in file: ${productsToImport.length}`);
+
+          const conflicts: {local: any, remote: any}[] = [];
+          const newItems: any[] = [];
+          let identicalCount = 0;
+
+          const localProducts = await db.select().from(foodItems).where(isNotNull(foodItems.barcode));
+          const localMap = new Map();
+          localProducts.forEach(p => {
+              if(p.barcode) localMap.set(p.barcode, p);
+          });
+
+          for (const item of productsToImport) {
+              if (!item.barcode) continue;
+              
+              const localItem = localMap.get(item.barcode);
+              const { id, ...itemData } = item; 
+
+              if (localItem) {
+                  // 比對關鍵欄位以決定是否為「完全相同」
+                  const checkFields = ['name', 'brand', 'baseAmount', 'calories', 'proteinG', 'fatG', 'carbsG', 'sodiumMg', 'sugarG', 'fiberG', 'saturatedFatG', 'transFatG'];
+                  let isIdentical = true;
+                  
+                  for (const field of checkFields) {
+                      const v1 = localItem[field] ?? 0;
+                      const v2 = itemData[field] ?? 0;
+                      if (String(v1) !== String(v2)) {
+                          isIdentical = false;
+                          break;
+                      }
+                  }
+
+                  if (isIdentical) {
+                      console.log(`[Import] Identical item skipped: ${item.name} (${item.barcode})`);
+                      identicalCount++;
+                  } else {
+                      console.log(`[Import] Conflict found: ${item.name} (${item.barcode})`);
+                      conflicts.push({ local: localItem, remote: itemData });
+                  }
+              } else {
+                  newItems.push({ ...itemData, updatedAt: new Date(itemData.updatedAt || new Date()) });
+              }
+          }
+
+          // 1. 寫入新增項目
+          if (newItems.length > 0) {
+              await db.insert(foodItems).values(newItems);
+              console.log(`[Import] Added ${newItems.length} new items.`);
+          }
+
+          // 初始化統計數據
+          const initialStats = {
+              added: newItems.length,
+              updated: 0,
+              skipped: 0,
+              identical: identicalCount
+          };
+          setImportStats(initialStats);
+
+          // 2. 處理衝突
+          if (conflicts.length > 0) {
+              setConflictQueue(conflicts);
+              setShowConflictModal(true);
+          } else {
+              // 若無衝突 (包含全部相同的情況)，直接顯示結果
+              Alert.alert(t('import_complete', lang), 
+                  t('import_stats_detail', lang, initialStats)
+              );
+          }
+
+      } catch (e: any) {
+          console.error("Import Error:", e);
+          Alert.alert(t('error', lang), "Import failed");
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // 處理單一衝突的決策
+  const resolveConflict = async (action: 'overwrite' | 'keep') => {
+      const current = conflictQueue[0];
+      if (!current) return;
+
+      if (action === 'overwrite') {
+          await db.update(foodItems)
+              .set({ ...current.remote, updatedAt: new Date() }) 
+              .where(eq(foodItems.id, current.local.id));
+          
+          setImportStats(prev => ({ ...prev, updated: prev.updated + 1 }));
+      } else {
+          setImportStats(prev => ({ ...prev, skipped: prev.skipped + 1 }));
+      }
+
+      const nextQueue = conflictQueue.slice(1);
+      setConflictQueue(nextQueue);
+
+      if (nextQueue.length === 0) {
+          setShowConflictModal(false);
+          // 使用 setTimeout 確保最後狀態已更新
+          setTimeout(() => {
+              const finalStats = {
+                  ...importStats,
+                  updated: importStats.updated + (action==='overwrite'?1:0),
+                  skipped: importStats.skipped + (action==='keep'?1:0)
+              };
+              
+              Alert.alert(t('import_complete', lang), 
+                  t('import_stats_detail', lang, finalStats)
+              );
+          }, 500);
+      }
+  };
+
+  // 衝突比對視窗 (包含所有項目)
+  const renderConflictModal = () => {
+      if (!showConflictModal || conflictQueue.length === 0) return null;
+      const { local, remote } = conflictQueue[0];
+
+      return (
+          <Modal visible={showConflictModal} transparent animationType="slide" onRequestClose={() => {}}>
+              <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, {backgroundColor: cardBackground, width: '90%', maxHeight:'85%'}]}>
+                      <ThemedText type="subtitle" style={{marginBottom: 8, color: '#FF9500'}}>{t('conflict_title', lang)}</ThemedText>
+                      <ThemedText style={{marginBottom: 16, fontSize: 14}}>{t('conflict_msg', lang)}</ThemedText>
+                      
+                      <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4}}>
+                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: tintColor, fontSize: 12}}>{t('local_version', lang)}</ThemedText>
+                          <View style={{width: 80}} />
+                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: '#FF3B30', fontSize: 12}}>{t('import_version', lang)}</ThemedText>
+                      </View>
+
+                      <ScrollView style={{maxHeight: 400, borderTopWidth:1, borderBottomWidth:1, borderColor: borderColor, marginVertical: 10}}>
+                          <ConflictRow label={t('food_name', lang)} val1={local.name} val2={remote.name} highlight={local.name !== remote.name} />
+                          <ConflictRow label={t('brand', lang)} val1={local.brand} val2={remote.brand} highlight={local.brand !== remote.brand} />
+                          <ConflictRow label={t('base_amount', lang)} val1={`${local.baseAmount}g`} val2={`${remote.baseAmount}g`} highlight={local.baseAmount !== remote.baseAmount} />
+                          <ConflictRow label={t('calories', lang)} val1={local.calories} val2={remote.calories} highlight={local.calories !== remote.calories} />
+                          <ConflictRow label={t('protein', lang)} val1={local.proteinG} val2={remote.proteinG} highlight={local.proteinG !== remote.proteinG} />
+                          <ConflictRow label={t('fat', lang)} val1={local.fatG} val2={remote.fatG} highlight={local.fatG !== remote.fatG} />
+                          <ConflictRow label={t('carbs', lang)} val1={local.carbsG} val2={remote.carbsG} highlight={local.carbsG !== remote.carbsG} />
+                          <ConflictRow label={t('sodium', lang)} val1={local.sodiumMg} val2={remote.sodiumMg} highlight={local.sodiumMg !== remote.sodiumMg} />
+                          <ConflictRow label={t('sugar', lang)} val1={local.sugarG} val2={remote.sugarG} highlight={local.sugarG !== remote.sugarG} />
+                          <ConflictRow label={t('fiber', lang)} val1={local.fiberG} val2={remote.fiberG} highlight={local.fiberG !== remote.fiberG} />
+                          <ConflictRow label={t('updated_at', lang)} val1={format(new Date(local.updatedAt), 'MM/dd HH:mm')} val2={remote.updatedAt ? format(new Date(remote.updatedAt), 'MM/dd HH:mm') : '-'} highlight />
+                      </ScrollView>
+
+                      <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
+                          <Pressable onPress={() => resolveConflict('keep')} style={[styles.btn, {flex:1, backgroundColor: '#8E8E93'}]}>
+                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('keep_local', lang)}</ThemedText>
+                          </Pressable>
+                          <Pressable onPress={() => resolveConflict('overwrite')} style={[styles.btn, {flex:1, backgroundColor: '#FF3B30'}]}>
+                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('overwrite', lang)}</ThemedText>
+                          </Pressable>
+                      </View>
+                      <ThemedText style={{textAlign:'center', marginTop:10, fontSize:12, color: textSecondary}}>
+                          {t('remaining', lang)}: {conflictQueue.length - 1}
+                      </ThemedText>
+                  </View>
+              </View>
+          </Modal>
+      );
+  };
+
+  const ConflictRow = ({label, val1, val2, highlight}: any) => (
+      <View style={{flexDirection:'row', paddingVertical: 8, borderBottomWidth: 0.5, borderColor: '#eee', alignItems: 'center'}}>
+          <View style={{flex:1, paddingRight:4, alignItems:'center'}}><ThemedText style={{fontSize:12, color: highlight?textColor:'#999'}}>{val1 ?? '-'}</ThemedText></View>
+          <View style={{width: 80, alignItems:'center'}}><ThemedText style={{fontSize:10, color:'#888', textAlign:'center'}}>{label}</ThemedText></View>
+          <View style={{flex:1, paddingLeft:4, alignItems:'center'}}><ThemedText style={{fontSize:12, color: highlight?textColor:'#999'}}>{val2 ?? '-'}</ThemedText></View>
+      </View>
+  );
 
   useEffect(() => {
     async function load() {
@@ -260,9 +497,7 @@ export default function ProfileScreen() {
     } else { Alert.alert(t('error', lang), res.error || "Invalid Key"); }
   };
 
-  // [修正] 排程通知函式：支援固定間隔邏輯，並符合 Expo 通知規範
   const scheduleLocalNotifications = async () => {
-      // 1. 取消所有舊通知
       await Notifications.cancelAllScheduledNotificationsAsync();
       
       const scheduleDaily = async (title: string, body: string, time: Date) => {
@@ -276,29 +511,24 @@ export default function ProfileScreen() {
                   type: SchedulableTriggerInputTypes.DAILY,
                   hour: time.getHours(), 
                   minute: time.getMinutes(), 
-                  channelId: 'default' // 必須指定頻道
+                  channelId: 'default'
               },
           });
       };
 
-      // 2. 排程用餐提醒
       if (reminders.breakfast.enabled) await scheduleDaily(t('reminders_breakfast', lang), t('reminders_breakfast_msg', lang), reminders.breakfast.time);
       if (reminders.lunch.enabled) await scheduleDaily(t('reminders_lunch', lang), t('reminders_lunch_msg', lang), reminders.lunch.time);
       if (reminders.dinner.enabled) await scheduleDaily(t('reminders_dinner', lang), t('reminders_dinner_msg', lang), reminders.dinner.time);
       
-      // 3. 排程喝水/久坐提醒 (區間內循環)
       if (reminders.water.enabled && reminders.water.interval > 0) {
           const start = reminders.water.startTime;
           const end = reminders.water.endTime;
           const intervalMins = reminders.water.interval;
 
-          // 計算 Start 到 End 的總分鐘數
           let currentMinutes = start.getHours() * 60 + start.getMinutes();
           const endMinutes = end.getHours() * 60 + end.getMinutes();
 
-          // 若結束時間小於開始時間，暫不支援跨日，簡單略過
           if (endMinutes > currentMinutes) {
-              // 迴圈排程每一個時間點
               while (currentMinutes <= endMinutes) {
                   const h = Math.floor(currentMinutes / 60);
                   const m = currentMinutes % 60;
@@ -313,7 +543,7 @@ export default function ProfileScreen() {
                           type: SchedulableTriggerInputTypes.DAILY,
                           hour: h, 
                           minute: m, 
-                          channelId: 'default' // 必須指定頻道
+                          channelId: 'default'
                       },
                   });
                   
@@ -353,7 +583,6 @@ export default function ProfileScreen() {
         if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
         else await db.insert(userProfiles).values(profileData);
 
-        // 儲存提醒設定 (含 Start/End Time)
         const fmtTime = (d: Date) => format(d, 'HH:mm');
         const reminderData = {
             breakfastReminderEnabled: reminders.breakfast.enabled,
@@ -512,8 +741,10 @@ export default function ProfileScreen() {
          {/* Backup & Restore Section */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
              <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
-             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:12}}>{t('backup_desc', lang)}</ThemedText>
-             <View style={{flexDirection:'row', gap:10}}>
+             
+             {/* Full DB */}
+             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('backup_desc', lang)}</ThemedText>
+             <View style={{flexDirection:'row', gap:10, marginBottom: 16}}>
                  <Pressable onPress={handleBackup} style={[styles.btn, {flex:1, backgroundColor: '#007AFF', padding:12}]}>
                      <Ionicons name="cloud-upload-outline" size={20} color="white" style={{marginBottom:4}}/>
                      <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('backup_db', lang)}</ThemedText>
@@ -521,6 +752,19 @@ export default function ProfileScreen() {
                  <Pressable onPress={handleRestore} style={[styles.btn, {flex:1, backgroundColor: '#FF9500', padding:12}]}>
                      <Ionicons name="cloud-download-outline" size={20} color="white" style={{marginBottom:4}}/>
                      <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('restore_db', lang)}</ThemedText>
+                 </Pressable>
+             </View>
+
+             {/* Product DB Only */}
+             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('product_export_desc', lang)}</ThemedText>
+             <View style={{flexDirection:'row', gap:10}}>
+                 <Pressable onPress={handleExportProducts} style={[styles.btn, {flex:1, backgroundColor: '#34C759', padding:12}]}>
+                     <Ionicons name="barcode-outline" size={20} color="white" style={{marginBottom:4}}/>
+                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('export_products', lang)}</ThemedText>
+                 </Pressable>
+                 <Pressable onPress={handleImportProducts} style={[styles.btn, {flex:1, backgroundColor: '#5856D6', padding:12}]}>
+                     <Ionicons name="download-outline" size={20} color="white" style={{marginBottom:4}}/>
+                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('import_products', lang)}</ThemedText>
                  </Pressable>
              </View>
          </View>
@@ -534,7 +778,7 @@ export default function ProfileScreen() {
                  <View style={styles.row}>
                     {["male", "female"].map(g => (
                       <Pressable key={g} onPress={() => setGender(g as any)} style={[styles.option, gender === g && {backgroundColor: tintColor, borderColor: tintColor}]}>
-                         <ThemedText style={{fontSize:14,color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
+                         <ThemedText style={{color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
                       </Pressable>
                     ))}
                  </View>
@@ -711,6 +955,9 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 衝突比對視窗 */}
+      {renderConflictModal()}
     </View>
   );
 }

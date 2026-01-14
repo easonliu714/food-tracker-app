@@ -32,7 +32,22 @@ export const TRANSLATIONS = {
     restore_confirm_title: "確認還原？",
     restore_confirm_msg: "這將會完全覆蓋目前的紀錄，且無法復原。請確認您選擇的是正確的備份檔案。",
     restore_success_msg: "還原成功！請完全關閉並重啟 App 以套用變更。",
-    
+    product_db: "商品資料庫 (條碼)",
+    export_products: "匯出商品庫",
+    import_products: "匯入商品庫",
+    product_export_desc: "僅匯出有條碼的商品資訊 (不含個人飲食紀錄)",
+    conflict_title: "發現重複商品",
+    conflict_msg: "系統中已存在相同條碼的商品，請選擇要保留的版本：",
+    local_version: "目前手機內的版本",
+    import_version: "匯入檔案中的版本",
+    keep_local: "保留現有",
+    overwrite: "覆蓋更新",
+    import_complete: "匯入完成",
+    import_stats: "成功新增: {new}, 更新: {updated}, 跳過: {skipped}",
+    import_stats_detail: "匯入報告：\n✅ 新增: {added} 筆\n🔄 更新: {updated} 筆\n⏭️ 資料相同: {identical} 筆\n🛡️ 手動保留: {skipped} 筆",
+    base_amount: "基準份量",
+    updated_at: "更新時間",
+
     // API Guide
     api_guide_title: "申請 Gemini API Key 步驟",
     api_step_1: "1. 點擊下方按鈕前往 Google AI Studio。",
@@ -330,7 +345,22 @@ export const TRANSLATIONS = {
     restore_confirm_title: "确认还原？",
     restore_confirm_msg: "这将完全覆盖当前的记录，且无法复原。请确认您选择的是正确的备份文件。",
     restore_success_msg: "还原成功！请完全关闭并重启 App 以应用变更。",
-    
+    product_db: "商品数据库 (条码)",
+    export_products: "导出商品库",
+    import_products: "导入商品库",
+    product_export_desc: "仅导出有条码的商品信息 (不含个人饮食记录)",
+    conflict_title: "发现重复商品",
+    conflict_msg: "系统中已存在相同条码的商品，请选择要保留的版本：",
+    local_version: "当前手机内的版本",
+    import_version: "导入文件中的版本",
+    keep_local: "保留现有",
+    overwrite: "覆盖更新",
+    import_complete: "导入完成",
+    import_stats: "成功新增: {new}, 更新: {updated}, 跳过: {skipped}",
+    import_stats_detail: "导入报告：\n✅ 新增: {added} 笔\n🔄 更新: {updated} 笔\n⏭️ 数据相同: {identical} 笔\n🛡️ 手动保留: {skipped} 笔",
+    base_amount: "基准份量",
+    updated_at: "更新时间",
+
     // API Guide
     api_guide_title: "申请 Gemini API Key 步骤",
     api_step_1: "1. 点击下方按钮前往 Google AI Studio。",
@@ -624,6 +654,22 @@ export const TRANSLATIONS = {
     restore_confirm_title: "Confirm Restore?",
     restore_confirm_msg: "This will completely overwrite your current records and cannot be undone. Please ensure you have selected the correct backup file.",
     restore_success_msg: "Restore successful! Please fully close and restart the app to apply changes.",
+    product_db: "Product Database (Barcode)",
+    export_products: "Export Products",
+    import_products: "Import Products",
+    product_export_desc: "Export only barcode products (excludes diet logs)",
+    conflict_title: "Conflict Detected",
+    conflict_msg: "A product with the same barcode already exists. Choose which version to keep:",
+    local_version: "Current Local Version",
+    import_version: "Imported Version",
+    keep_local: "Keep Local",
+    overwrite: "Overwrite",
+    import_complete: "Import Complete",
+    import_stats: "Added: {new}, Updated: {updated}, Skipped: {skipped}",
+    import_stats_detail: "Import Report:\n✅ Added: {added}\n🔄 Updated: {updated}\n⏭️ Identical: {identical}\n🛡️ Manually Kept: {skipped}",
+    base_amount: "Base Amount",
+    updated_at: "Updated At",
+
     // API Guide
     api_guide_title: "Steps to Apply for Gemini API Key",
     api_step_1: "1. Click the button below to go to Google AI Studio.",
@@ -906,7 +952,22 @@ export const TRANSLATIONS = {
     restore_confirm_title: "復元しますか？",
     restore_confirm_msg: "現在のデータは完全に上書きされ、元に戻すことはできません。",
     restore_success_msg: "復元しました！アプリを再起動してください。",
-    
+    product_db: "商品データベース (バーコード)",
+    export_products: "商品をエクスポート",
+    import_products: "商品をインポート",
+    product_export_desc: "バーコード付き商品のみエクスポート (食事記録は除く)",
+    conflict_title: "重複を検出",
+    conflict_msg: "同じバーコードの商品が既に存在します。保持するバージョンを選択してください：",
+    local_version: "現在のバージョン",
+    import_version: "インポートするバージョン",
+    keep_local: "現在を保持",
+    overwrite: "上書き保存",
+    import_complete: "インポート完了",
+    import_stats: "追加: {new}, 更新: {updated}, スキップ: {skipped}",
+    import_stats_detail: "インポートレポート:\n✅ 追加: {added}\n🔄 更新: {updated}\n⏭️ 同一: {identical}\n🛡️ 手動保持: {skipped}",
+    base_amount: "基準量",
+    updated_at: "更新日時",
+
     // API Guide
     api_guide_title: "Gemini APIキーの取得手順",
     api_step_1: "1. 下のボタンをクリックしてGoogle AI Studioへ移動します。",
@@ -1218,6 +1279,21 @@ export const TRANSLATIONS = {
     reminders_lunch_msg: "점심 시간입니다. 에너지를 보충하세요!",
     reminders_dinner: "저녁 식사 알림",
     reminders_dinner_msg: "저녁 시간입니다. 식사를 즐기시고, 과식은 피하세요!",
+    product_db: "상품 데이터베이스 (바코드)",
+    export_products: "상품 내보내기",
+    import_products: "상품 가져오기",
+    product_export_desc: "바코드가 있는 상품만 내보내기 (식단 기록 제외)",
+    conflict_title: "중복 항목 감지",
+    conflict_msg: "동일한 바코드의 상품이 이미 존재합니다. 유지할 버전을 선택하세요:",
+    local_version: "현재 로컬 버전",
+    import_version: "가져온 버전",
+    keep_local: "로컬 유지",
+    overwrite: "덮어쓰기",
+    import_complete: "가져오기 완료",
+    import_stats: "추가됨: {new}, 업데이트됨: {updated}, 건너뜀: {skipped}",
+    import_stats_detail: "가져오기 보고서:\n✅ 추가됨: {added}\n🔄 업데이트됨: {updated}\n⏭️ 동일함: {identical}\n🛡️ 수동 유지됨: {skipped}",
+    base_amount: "기준 양",
+    updated_at: "업데이트 시간",
 
     // Water
     water_intake: "수분 섭취", tap_to_add_water: "탭하여 수분 섭취 추가",
@@ -1482,10 +1558,19 @@ export const useLanguageStore = create<LanguageState>((set) => ({
   setLocale: (locale) => set({ locale }),
 }));
 
-export const t = (key: string, lang: string = 'zh-TW') => {
+// [重要修正] 支援參數替換的 t 函式
+export const t = (key: string, lang: string = 'zh-TW', params?: Record<string, any>) => {
   const dict = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS['en'];
   // @ts-ignore
-  return dict[key] || key;
+  let text = dict[key] || key;
+  
+  if (params) {
+    Object.keys(params).forEach(k => {
+      // 使用 RegExp global flag 確保替換所有出現的地方
+      text = text.replace(new RegExp(`{${k}}`, 'g'), String(params[k]));
+    });
+  }
+  return text;
 };
 
 export const useLanguage = () => {
