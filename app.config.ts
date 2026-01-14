@@ -17,7 +17,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.14.5", // 建議進版，確保安裝時視為新版本
+  version: "1.0.15", // 建議進版，確保安裝時視為新版本
   orientation: "portrait",
   scheme: "foodtracker", 
 
