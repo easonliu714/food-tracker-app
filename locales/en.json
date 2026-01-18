@@ -1,7 +1,33 @@
 {
-  "CFBundleDisplayName": "Food Tracker",
-  "CFBundleName": "Food Tracker",
-  "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to scan food barcodes and take photos.",
-  "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
-  "NSMicrophoneUsageDescription": "This app does not require microphone access."
+  "CFBundleDisplayName": "Nutrition Tracker",
+  "CFBundleName": "Nutrition Tracker",
+  "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use the camera to take food photos and scan barcodes.",
+  "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photo library to select food photos.",
+  "NSMicrophoneUsageDescription": "This app does not require microphone access.",
+  
+  "tutorial": {
+    "welcome_1": "Hi! I'm Nomi, your AI health coach! It's great to meet you! 🎉",
+    "welcome_lang_hint": "I'm currently communicating in your system language. You can switch languages anytime on the 'Settings' page if you need to!",
+    "welcome_2": "I'll help you track your diet, analyze nutrition, and achieve your health goals.",
+    "welcome_ask_name": "First, what should I call you?",
+    "welcome_goto_profile": "Great! Next, we need to set up some basic information so I can perform an accurate analysis!",
+    
+    "profile_intro": "This is where you set up your basic information.",
+    "profile_basic_hint": "Please enter your gender, birthday, height, and weight. This is very important for calculating your basal metabolic rate.",
+    "profile_goals_hint": "Set your target weight and body fat percentage. I will plan your calorie needs based on these.",
+    "profile_ai_hint": "This is the most important part! Please enter and test your Gemini API Key to enable my food analysis capabilities.",
+    "profile_save_hint": "Once you're done with the settings, remember to tap save!",
+    "profile_restart_intro": "No problem, let me reintroduce the profile page to you!",
+
+    "home_intro": "Welcome to the Home screen, {{name}}! This is your daily health dashboard.",
+    "home_metrics_hint": "Your body metrics are displayed here. Tap the + button to quickly log your weight.",
+    "home_water_hint": "Remember to drink more water! Tap + or - to record your water intake.",
+    "home_energy_hint": "This is today's calorie and nutrient intake progress bar. Try not to exceed your goals!",
+    "home_actions_hint": "Ready to eat? Tap here to snap a photo, scan, or manually log your meal!",
+    
+    "analysis_intro": "This is the analytics page, which helps you understand long-term health trends.",
+    "analysis_chart_hint": "The chart above shows the curves of weight and body fat changes.",
+    "analysis_grid_hint": "Below is a detailed breakdown of nutrient intake."
+  },
+  "feature_guide": "Function Description"
 }

@@ -17,7 +17,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.15", // 建議進版，確保安裝時視為新版本
+  version: "1.0.16", // 建議進版，確保安裝時視為新版本
   orientation: "portrait",
   scheme: "foodtracker", 
 
@@ -53,6 +53,8 @@ const config: ExpoConfig = {
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
+      // [修改開始] 新增 ACTIVITY_RECOGNITION 權限
+      "android.permission.ACTIVITY_RECOGNITION", 
       // 增加 Health Connect 權限宣告
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",

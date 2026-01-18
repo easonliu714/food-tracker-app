@@ -7,8 +7,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { t, useLanguage } from "@/lib/i18n";
 import { db } from "@/lib/db";
 import { foodItems } from "@/drizzle/schema";
-import { eq } from "drizzle-orm";
-import { desc } from "drizzle-orm"; // 記得引入 desc
+// [修改開始] 整合 drizzle-orm 的引入
+import { eq, desc } from "drizzle-orm"; 
 
 const { width } = Dimensions.get("window");
 const SCAN_SIZE = width * 0.7;
@@ -38,6 +38,9 @@ export default function BarcodeScannerScreen() {
     if (scanned || isLoading) return;
     setScanned(true);
     setIsLoading(true);
+
+    // [修改開始] 增加 Log 方便開發時確認掃描到的數值
+    console.log(`[Scanner] Scanned: ${data} (${type})`);
 
     try {
         // 1. 優先查詢 SQLite 本機資料庫
@@ -133,6 +136,8 @@ export default function BarcodeScannerScreen() {
   };
 
   const showNotFoundAlert = (barcode: string) => {
+      // [修改開始] 在提示訊息中加入條碼 (Barcode: xxx)，確保使用者確認掃描到的數值，解決「沒帶出條碼」的視覺疑慮
+      const msg = (t('product_not_found_msg', lang) || "Choose how to proceed:") + `\n\n[ ${barcode} ]`;
       Alert.alert(
           t('product_not_found', lang) || "Product Not Found",
           t('product_not_found_msg', lang) || "Choose how to proceed:",
@@ -169,8 +174,14 @@ export default function BarcodeScannerScreen() {
         style={StyleSheet.absoluteFillObject}
         facing="back"
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+        // [修改開始] 擴充條碼支援類型，增加 Code128, Code39, ITF 等常見格式以提升相容性
         barcodeScannerSettings={{
-            barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "qr"],
+            barcodeTypes: [
+                "ean13", "ean8", "upc_a", "upc_e", 
+                "qr", 
+                "code128", "code39", "code93", "codabar", "itf14", 
+                "pdf417", "aztec", "datamatrix"
+            ],
         }}
       />
       {isLoading && (

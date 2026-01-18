@@ -13,6 +13,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { initDatabase } from "@/lib/db";
 import { Colors } from "@/constants/theme";
 import { SessionProvider } from "@/hooks/use-auth"; 
+// [修改開始] 引入 TutorialProvider
+import { TutorialProvider } from '@/context/TutorialContext';
 
 // 防止 Splash Screen 自動隱藏，直到資源載入完成
 SplashScreen.preventAutoHideAsync();
@@ -64,18 +66,18 @@ export default function RootLayout() {
   return (
     <SessionProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-          
-          {/* 其他功能頁面 */}
-          <Stack.Screen name="camera" options={{ headerShown: false }} />
-          <Stack.Screen name="barcode-scanner" options={{ headerShown: false }} />
-          <Stack.Screen name="food-editor" options={{ headerShown: false }} />
-          <Stack.Screen name="activity-editor" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
+        {/* [修改開始] 包裹 TutorialProvider */}
+        <TutorialProvider>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+            <Stack.Screen name="camera" options={{ headerShown: false }} />
+            <Stack.Screen name="barcode-scanner" options={{ headerShown: false }} />
+            <Stack.Screen name="food-editor" options={{ headerShown: false }} />
+            <Stack.Screen name="activity-editor" options={{ headerShown: false }} />
+          </Stack>
+        </TutorialProvider>
       </ThemeProvider>
     </SessionProvider>
   );

@@ -140,17 +140,25 @@ export async function chatWithAI(history: any[], newMessage: string, profile: an
     }
 }
 
-export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any) {
+// [修改開始] 增加 foodNameHint 參數
+export async function analyzeFoodImage(base64Image: string, lang: string, profile?: any, foodNameHint?: string) {
   try {
     const model = await getModel();
     const context = profile ? getProfileContext(profile) : "";
 
+    // [修改] 動態調整 Prompt
+    let userHint = "";
+    if (foodNameHint) {
+        userHint = `USER HINT: The user has identified this food as "${foodNameHint}". Please prioritize this name for your analysis, but combined with the image content to estimate portion size and specific ingredients.`;
+    }
+
     const prompt = `
       You are a professional nutritionist.
       Analyze the provided image (plated meal or nutrition label).
+      ${userHint}
 
       Task:
-      1. Identify food item(s).
+      1. Identify food item(s) (If user provided a hint, use it as the primary identification).
       2. ESTIMATE serving size (g/ml). Do NOT default to 100g unless unsure.
       3. Analyze nutrition facts for that serving size.
       4. Provide composition analysis and health advice.

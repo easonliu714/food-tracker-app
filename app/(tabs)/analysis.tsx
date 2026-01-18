@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Vibration } from "react-native";
+import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Vibration, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart } from "react-native-gifted-charts";
 import { format, subDays, differenceInDays, eachDayOfInterval } from "date-fns";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { GestureHandlerRootView, PinchGestureHandler } from "react-native-gesture-handler";
+import { useFocusEffect } from "expo-router"; // 確保有引入
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -15,6 +16,12 @@ import { db } from "@/lib/db";
 import { dailyMetrics, foodLogs, activityLogs, userProfiles } from "@/drizzle/schema";
 import { gte, lte, and } from "drizzle-orm";
 import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage"; 
+
+// [修改開始] 引入引導相關元件
+import { useTutorial } from '@/context/TutorialContext';
+import { TutorialTarget } from '@/components/TutorialTarget';
+import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
+// [修改結束]
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 30;
@@ -43,11 +50,30 @@ export default function AnalysisScreen() {
       card: useThemeColor({}, "cardBackground"),
       text: useThemeColor({}, "text"),
       tint: useThemeColor({}, "tint"),
-      icon: useThemeColor({}, "icon"),
+      icon: useThemeColor({}, 'icon'),
+      border: useThemeColor({}, 'border'),
       warn: '#FF3B30'
   };
   const secondaryColor = '#AF52DE';
   const weightColor = '#007AFF';
+
+  // [修改開始] 分析頁面導覽邏輯
+  const { startScenario } = useTutorial();
+  
+  useFocusEffect(useCallback(()=>{
+      async function check() {
+           const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS);
+           if (!seen) {
+               startScenario('ANALYSIS_GUIDE', [
+                   { text: t('tutorial.analysis_intro', lang) },
+                   { targetKey: 'analysis_chart', text: t('tutorial.analysis_chart_hint', lang) },
+                   { targetKey: 'analysis_grid', text: t('tutorial.analysis_grid_hint', lang) }
+               ]);
+           }
+      }
+      check();
+  },[lang])); // 加入 lang dependency
+  // [修改結束]
 
   const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
   const [loading, setLoading] = useState(true);
@@ -93,8 +119,6 @@ export default function AnalysisScreen() {
   const [chartScrollable, setChartScrollable] = useState(false); 
 
   // [Helper] 插值與縮放函數
-  // dataArray: 原始數據 (例如 70.5, 0, 71.0)
-  // scalingFactor: 縮放倍率 (例如 25 倍，將 70 放大成 1750 以匹配卡路里軸高度)
   const interpolateAndScaleData = (dataArray: number[], color: string, scalingFactor: number) => {
       const result: any[] = [];
       const len = dataArray.length;
@@ -119,7 +143,6 @@ export default function AnalysisScreen() {
                   dataPointText: String(currentVal), // [關鍵] 顯示原始數值
                   textColor: color,
                   textShiftY: -6, 
-                  // [新增] 針對最後一個點向左位移，避免文字被切掉
                   textShiftX: i === len - 1 ? -20 : -10,
                   textFontSize: 10,
                   dataPointColor: color,
@@ -269,8 +292,6 @@ export default function AnalysisScreen() {
       });
 
       // 2. 計算縮放倍率 (Scaling Factor)
-      // 目標：讓 Weight 的數值 (例如 80) 在視覺上能對齊 Calorie 的高度 (例如 2500)
-      // 如果 maxCal = 2500, maxWeight = 100, 則倍率 = 25
       const scalingFactor = finalMaxCal / yMaxW;
 
       // 3. 生成圖表數據
@@ -447,7 +468,6 @@ export default function AnalysisScreen() {
           }}>
               <ThemedText style={{fontWeight: 'bold', color:'white', marginBottom: 6}}>{d.dateStr}</ThemedText>
               
-              {/* [修正] 將兩個 style 合併為陣列 [style1, style2] */}
               <View style={styles.rowBetween}>
                   <ThemedText style={[styles.ttLabel, {color:'#34C759'}]}>{t('intake', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{Math.round(d.intake)}</ThemedText>
@@ -552,12 +572,12 @@ export default function AnalysisScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView contentContainerStyle={{padding: 16}} scrollEnabled={true}>
         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 16}}>
-             <ThemedText type="title">{t('analysis', lang)}</ThemedText>
-             {isEditMode && (
-                 <TouchableOpacity onPress={() => { setIsEditMode(false); setSelectedSlotIndex(null); }} style={{backgroundColor: theme.tint, paddingHorizontal:12, paddingVertical:6, borderRadius:16}}>
-                     <ThemedText style={{color:'white', fontWeight:'bold', fontSize:12}}>{t('done', lang)}</ThemedText>
-                 </TouchableOpacity>
-             )}
+              <ThemedText type="title">{t('analysis', lang)}</ThemedText>
+              {isEditMode && (
+                  <TouchableOpacity onPress={() => { setIsEditMode(false); setSelectedSlotIndex(null); }} style={{backgroundColor: theme.tint, paddingHorizontal:12, paddingVertical:6, borderRadius:16}}>
+                      <ThemedText style={{color:'white', fontWeight:'bold', fontSize:12}}>{t('done', lang)}</ThemedText>
+                  </TouchableOpacity>
+              )}
         </View>
         
         <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
@@ -573,97 +593,101 @@ export default function AnalysisScreen() {
         {renderCustomRangePicker()}
 
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
-        <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
-            {gridSlots.map((key, index) => renderGridItem(key, index))}
-        </View>
-
-        <ThemedView style={styles.chartCard}>
-            <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
-                <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
-                <View style={{flexDirection:'row', gap: 8, flexWrap:'wrap', justifyContent:'flex-end', flex:1}}>
-                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#34C759', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('intake', lang)}</ThemedText></View>
-                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#FF9500', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('burned', lang)}</ThemedText></View>
-                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:weightColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('weight', lang)}</ThemedText></View>
-                    <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:secondaryColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('body_fat', lang)}</ThemedText></View>
-                </View>
+        
+        {/* [修改開始] 包裹詳細數據區 */}
+        <TutorialTarget targetKey="analysis_grid">
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
+                {gridSlots.map((key, index) => renderGridItem(key, index))}
             </View>
+        </TutorialTarget>
+        {/* [修改結束] */}
 
-            {chartData.length > 0 ? (
-                <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
-                    <View>
-                        <BarChart 
-                            stackData={chartData}
-                            barWidth={barWidth}
-                            spacing={spacing}
-                            initialSpacing={10}
-                            noOfSections={5}
-                            
-                            yAxisThickness={0}
-                            yAxisTextStyle={{color: '#888', fontSize: 10}}
-                            maxValue={axisConfig.maxCal}
-                            minValue={axisConfig.minCal}
-                            
-                            showSecondaryYAxis
-                            secondaryYAxisConfig={{
-                                showYAxisIndices: true,
-                                yAxisTextStyle: {color: weightColor, fontSize: 10},
-                                maxValue: axisConfig.maxWeight,
-                                minValue: axisConfig.minWeight,
-                                noOfSections: 5,
-                            }}
-
-                            showLine
-                            connectPoints={true} 
-                            
-                            lineData={lineDataWeight}
-                            lineConfig={{ 
-                                color: weightColor, 
-                                thickness: 3, 
-                                curved: false, 
-                                hideDataPoints: false, 
-                                dataPointsColor: weightColor,
-                                textFontSize: 10, 
-                                textShiftY: -12, // 調整文字位置
-                                textColor: weightColor, 
-                                // [修正] 移除 zIndex: 100 (因為型別不支援且預設已會在最上層)
-                                // [重要] 移除 isSecondary: true，因為我們已經手動將數值放大到主軸的範圍
-                                // 這樣線條才會乖乖畫在我們計算好的高度，對齊右側刻度
-                            }}
-                            
-                            lineData2={lineDataFat}
-                            lineConfig2={{ 
-                                color: secondaryColor, 
-                                thickness: 3, 
-                                curved: false, 
-                                hideDataPoints: false, 
-                                dataPointsColor: secondaryColor, 
-                                textFontSize: 10, 
-                                textShiftY: -12, 
-                                textColor: secondaryColor, 
-                                // [修正] 移除 zIndex: 100 (因為型別不支援且預設已會在最上層)
-                                // 同上
-                            }}
-                            
-                            xAxisThickness={1}
-                            xAxisColor={'#ddd'}
-                            rulesColor={'#eee'}
-                            rulesType="solid"
-                            height={280}
-                            width={VISIBLE_CHART_WIDTH}
-                            scrollable={chartScrollable}
-                            renderTooltip={renderTooltip}
-                        />
-                         {/* [新增] 提示文字區域 */}
-                        <View style={{marginTop: 10, alignItems: 'center'}}>
-                            <ThemedText style={{fontSize: 10, color: '#888'}}>
-                                {t('pinch_to_zoom', lang)} • {t('drag_to_move', lang)}
-                            </ThemedText>
-                        </View>
+        {/* [修改開始] 包裹圖表區 */}
+        <TutorialTarget targetKey="analysis_chart">
+            <ThemedView style={styles.chartCard}>
+                <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
+                    <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
+                    <View style={{flexDirection:'row', gap: 8, flexWrap:'wrap', justifyContent:'flex-end', flex:1}}>
+                        <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#34C759', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('intake', lang)}</ThemedText></View>
+                        <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:8, backgroundColor:'#FF9500', marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('burned', lang)}</ThemedText></View>
+                        <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:weightColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('weight', lang)}</ThemedText></View>
+                        <View style={{flexDirection:'row', alignItems:'center'}}><View style={{width:8, height:2, backgroundColor:secondaryColor, marginRight:4}}/><ThemedText style={{fontSize:10}}>{t('body_fat', lang)}</ThemedText></View>
                     </View>
-                </PinchGestureHandler>
-            ) : <ThemedText>No Data</ThemedText>}
-        </ThemedView>
+                </View>
 
+                {chartData.length > 0 ? (
+                    <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchEvent}>
+                        <View>
+                            <BarChart 
+                                stackData={chartData}
+                                barWidth={barWidth}
+                                spacing={spacing}
+                                initialSpacing={10}
+                                noOfSections={5}
+                                
+                                yAxisThickness={0}
+                                yAxisTextStyle={{color: '#888', fontSize: 10}}
+                                maxValue={axisConfig.maxCal}
+                                minValue={axisConfig.minCal}
+                                
+                                showSecondaryYAxis
+                                secondaryYAxisConfig={{
+                                    showYAxisIndices: true,
+                                    yAxisTextStyle: {color: weightColor, fontSize: 10},
+                                    maxValue: axisConfig.maxWeight,
+                                    minValue: axisConfig.minWeight,
+                                    noOfSections: 5,
+                                }}
+
+                                showLine
+                                connectPoints={true} 
+                                
+                                lineData={lineDataWeight}
+                                lineConfig={{ 
+                                    color: weightColor, 
+                                    thickness: 3, 
+                                    curved: false, 
+                                    hideDataPoints: false, 
+                                    dataPointsColor: weightColor,
+                                    textFontSize: 10, 
+                                    textShiftY: -12, 
+                                    textColor: weightColor, 
+                                }}
+                                
+                                lineData2={lineDataFat}
+                                lineConfig2={{ 
+                                    color: secondaryColor, 
+                                    thickness: 3, 
+                                    curved: false, 
+                                    hideDataPoints: false, 
+                                    dataPointsColor: secondaryColor, 
+                                    textFontSize: 10, 
+                                    textShiftY: -12, 
+                                    textColor: secondaryColor, 
+                                }}
+                                
+                                xAxisThickness={1}
+                                xAxisColor={'#ddd'}
+                                rulesColor={'#eee'}
+                                rulesType="solid"
+                                height={280}
+                                width={VISIBLE_CHART_WIDTH}
+                                scrollable={chartScrollable}
+                                renderTooltip={renderTooltip}
+                            />
+                            <View style={{marginTop: 10, alignItems: 'center'}}>
+                                <ThemedText style={{fontSize: 10, color: '#888'}}>
+                                    {t('pinch_to_zoom', lang)} • {t('drag_to_move', lang)}
+                                </ThemedText>
+                            </View>
+                        </View>
+                    </PinchGestureHandler>
+                ) : <ThemedText>No Data</ThemedText>}
+            </ThemedView>
+        </TutorialTarget>
+        {/* [修改結束] */}
+        
+        {/* Add Item Modal */}
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={()=>setShowAddModal(false)}>
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.card}]}>

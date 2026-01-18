@@ -35,6 +35,10 @@ import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/sc
 
 import { initHealthConnect, getHealthData } from "@/lib/health";
 import { ActivityIcon, ACTIVITY_RAW } from '@/app/activity-editor'; 
+// [修改開始] 引入引導相關元件
+import { useTutorial } from '@/context/TutorialContext';
+import { TutorialTarget } from '@/components/TutorialTarget';
+import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
@@ -45,6 +49,32 @@ export default function HomeScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
   const lang = useLanguage();
   const dateLocale = LOCALE_MAP[lang] || enUS;
+
+  // [修改開始] 初始化引導
+  const { startScenario, userName, activeScenario } = useTutorial();
+
+  useFocusEffect(
+    useCallback(() => {
+        async function checkTutorial() {
+            if (activeScenario === 'HOME_GUIDE') return;
+
+            const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
+            const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+            
+            // 若為首次啟動且未看過首頁導覽，或從 Onboarding 流程導回
+            if (isFirst && !seen && !activeScenario) {
+                startScenario('HOME_GUIDE', [
+                     { text: t('tutorial.home_intro', lang, { name: userName }) },
+                     { targetKey: 'home_metrics', text: t('tutorial.home_metrics_hint', lang) },
+                     { targetKey: 'home_water', text: t('tutorial.home_water_hint', lang) },
+                     { targetKey: 'home_energy', text: t('tutorial.home_energy_hint', lang) },
+                     { targetKey: 'home_actions', text: t('tutorial.home_actions_hint', lang) }
+                ]);
+            }
+        }
+        checkTutorial();
+    }, [activeScenario, userName, lang])
+  );
 
   const [currentDate, setCurrentDate] = useState(new Date());
   
@@ -446,20 +476,19 @@ export default function HomeScreen() {
 
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
+  // [修改開始] 修改 BodyMetricsCard 以支援深色模式輸入框
   const renderBodyMetricsCard = () => (
     <ThemedView style={[styles.card, { paddingVertical: 20 }]}> 
       <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
             <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
-            {/* + 紀錄 按鈕移動到這裡 */}
             <TouchableOpacity onPress={handleSaveMetrics} style={{marginLeft: 12}}>
                <Ionicons name="add-circle" size={24} color={theme.tint} />
             </TouchableOpacity>
           </View>
           
           <View style={{flexDirection:'row', gap: 12}}>
-             {/* 同步按鈕與提示 */}
-             <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12}}>
+             <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: theme.inputBackground, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12}}>
                 <ThemedText style={{fontSize: 10, color: '#888', marginRight: 4}}>{t('sync_health_hint', lang)}</ThemedText>
                 {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={16} color={theme.tint} />}
              </TouchableOpacity>
@@ -467,18 +496,32 @@ export default function HomeScreen() {
       </View>
 
       <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
-        {/* 左側：輸入區 */}
+        {/* 左側：輸入區 - [修改] 增加 backgroundColor 和 borderRadius */}
         <View style={{gap: 10}}>
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
-                <TextInput style={[styles.metricInput,{fontSize: 16, color:theme.text}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText style={{fontSize:14}}>kg</ThemedText>
+                <TextInput 
+                    style={[styles.metricInput, {fontSize: 16, color:theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
+                    value={weight} 
+                    onChangeText={setWeight} 
+                    placeholder="--" 
+                    placeholderTextColor="#999" 
+                    keyboardType="numeric"
+                />
+                <ThemedText style={{fontSize:14, marginLeft: 4}}>kg</ThemedText>
                 {renderDiffBadge(diffWeight,'kg')}
             </View>
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('body_fat', lang)}</ThemedText>
-                <TextInput style={[styles.metricInput,{fontSize: 16, color:theme.text}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                <ThemedText style={{fontSize:14}}>% </ThemedText>
+                <TextInput 
+                    style={[styles.metricInput, {fontSize: 16, color:theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
+                    value={bodyFat} 
+                    onChangeText={setBodyFat} 
+                    placeholder="--" 
+                    placeholderTextColor="#999" 
+                    keyboardType="numeric"
+                />
+                <ThemedText style={{fontSize:14, marginLeft: 4}}>% </ThemedText>
                 {renderDiffBadge(diffFat,'%')}
             </View>
         </View>
@@ -490,7 +533,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 底部：Health Connect 數據 */}
       <View style={{borderTopWidth:1, borderColor:'#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
           <View style={{flexDirection:'row', alignItems:'center'}}>
               <Ionicons name="footsteps" size={18} color="#FF9500"/>
@@ -505,6 +547,7 @@ export default function HomeScreen() {
     </ThemedView>
   );
 
+  // [修改開始] 修改 WaterSection - 改為左右按鈕控制
   const renderWaterSection = () => {
       const totalCups = Math.ceil(waterGoal / WATER_CUP_SIZE);
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
@@ -516,27 +559,45 @@ export default function HomeScreen() {
                   <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
               </View>
               
-              <View style={{flexDirection:'row', flexWrap:'wrap', gap: 2, justifyContent:'center'}}>
-                  {Array.from({length: totalCups}).map((_, idx) => (
-                      <TouchableOpacity 
-                        key={idx} 
-                        onPress={addWater} 
-                        onLongPress={removeWater}
-                        style={{opacity: idx < currentCups ? 1 : 0.3}}
-                      >
-                          <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={32} color="#007AFF" />
-                      </TouchableOpacity>
-                  ))}
-                  {currentCups > totalCups && (
-                       <View style={{flexDirection:'row', alignItems:'center'}}>
-                           <Ionicons name="add" size={20} color={theme.text}/>
-                           <Ionicons name="water" size={32} color="#007AFF" />
-                           <ThemedText style={{fontSize:12, fontWeight:'bold', position:'absolute', color:'white', left:10}}>+{currentCups - totalCups}</ThemedText>
-                       </View>
-                  )}
+              <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'center'}}>
+                  {/* 減號按鈕 (左) */}
+                  <TouchableOpacity 
+                      onPress={removeWater}
+                      style={{width: 44, height: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 22, marginRight: 16}}
+                  >
+                      <Ionicons name="remove" size={24} color={theme.text} />
+                  </TouchableOpacity>
+
+                  {/* 水滴顯示區 (移除點擊事件，純顯示) */}
+                  <View style={{flexDirection:'row', flexWrap:'wrap', gap: 2, justifyContent:'center', maxWidth: SCREEN_WIDTH * 0.5}}>
+                      {Array.from({length: totalCups}).map((_, idx) => (
+                          <View 
+                            key={idx} 
+                            style={{opacity: idx < currentCups ? 1 : 0.3}}
+                          >
+                              <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={28} color="#007AFF" />
+                          </View>
+                      ))}
+                      {currentCups > totalCups && (
+                           <View style={{flexDirection:'row', alignItems:'center'}}>
+                               <Ionicons name="add" size={16} color={theme.text}/>
+                               <Ionicons name="water" size={28} color="#007AFF" />
+                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:8}}>+{currentCups - totalCups}</ThemedText>
+                           </View>
+                      )}
+                  </View>
+
+                  {/* 加號按鈕 (右) */}
+                  <TouchableOpacity 
+                      onPress={addWater}
+                      style={{width: 44, height: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 22, marginLeft: 16}}
+                  >
+                      <Ionicons name="add" size={24} color={theme.text} />
+                  </TouchableOpacity>
               </View>
-              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:8}}>
-                  {t('tap_to_add_water', lang) || "Tap to add 500ml, Long press to remove"}
+              
+              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:12}}>
+                  {t('tap_buttons_to_adjust', lang) || "Tap buttons to adjust (+/- 250ml)"}
               </ThemedText>
           </ThemedView>
       );
@@ -586,17 +647,33 @@ export default function HomeScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
-        {renderBodyMetricsCard()}
-        {renderWaterSection()}
-        {renderEnergySection()}
+        
+        {/* [修改開始] 加入 TutorialTarget 包裹各區塊 */}
+        <TutorialTarget targetKey="home_metrics">
+            {renderBodyMetricsCard()}
+        </TutorialTarget>
+
+        <TutorialTarget targetKey="home_water">
+            {renderWaterSection()}
+        </TutorialTarget>
+
+        <TutorialTarget targetKey="home_energy">
+            {renderEnergySection()}
+        </TutorialTarget>
+
         {renderQuickAdd()}
+        
         <View style={styles.recordSection}>
-            <View style={styles.quickActionRow}>
-                <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
-                <ActionButton icon="barcode" label={t('scan_barcode', lang)} onPress={() => router.push("/barcode-scanner")} color="#007AFF" />
-                <ActionButton icon="create" label={t('manual_input', lang)} onPress={() => router.push("/food-editor")} color="#5856D6" />
-                <ActionButton icon="fitness" label={t('exercise', lang)} onPress={() => router.push("/activity-editor")} color="#FF9500" />
-            </View>
+            {/* [修改開始] 包裹記錄按鈕區 */}
+            <TutorialTarget targetKey="home_actions">
+               <View style={styles.quickActionRow}>
+                    <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
+                    <ActionButton icon="barcode" label={t('scan_barcode', lang)} onPress={() => router.push("/barcode-scanner")} color="#007AFF" />
+                    <ActionButton icon="create" label={t('manual_input', lang)} onPress={() => router.push("/food-editor")} color="#5856D6" />
+                    <ActionButton icon="fitness" label={t('exercise', lang)} onPress={() => router.push("/activity-editor")} color="#FF9500" />
+               </View>
+            </TutorialTarget>
+
             <View style={styles.logsContainer}>
                 {MEAL_ORDER.map((mealType) => {
                     const logs = dailyLogs[mealType] || [];
@@ -636,6 +713,7 @@ export default function HomeScreen() {
   );
 }
 
+
 const ActionButton = ({ icon, label, onPress, color }: any) => (<TouchableOpacity style={styles.actionButton} onPress={onPress}><View style={[styles.iconCircle, { backgroundColor: color }]}><Ionicons name={icon} size={24} color="#FFF" /></View><ThemedText style={styles.actionLabel}>{label}</ThemedText></TouchableOpacity>);
 
 const styles = StyleSheet.create({
@@ -644,7 +722,8 @@ const styles = StyleSheet.create({
   headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   dateDisplay: { alignItems: "center" },
   card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4, backgroundColor:'white' },
-  metricInput: { borderBottomWidth: 1, width: 60, fontSize: 18, fontWeight: "600", textAlign: "center", marginRight: 4, paddingVertical: 2 },
+  // [修改開始] metricInput 樣式調整，移除底部線條，增加區塊感
+  metricInput: { width: 70, fontSize: 18, fontWeight: "600", textAlign: "center", paddingVertical: 8, paddingHorizontal: 4 }, 
   sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
   barBg: { height: 12, backgroundColor: "#E5E5EA", borderRadius: 6, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 6 },

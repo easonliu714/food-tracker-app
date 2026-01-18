@@ -20,7 +20,8 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { db } from "@/lib/db";
 import { foodItems, foodLogs, userProfiles } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
-import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini";
+// [修改] 引用 analyzeFoodImage 的時候，介面雖然不變，但內部邏輯已更新
+import { analyzeFoodImage, analyzeFoodText } from "@/lib/gemini"; 
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -98,6 +99,8 @@ export default function FoodEditorScreen() {
   const [brand, setBrand] = useState(""); 
   const [barcode, setBarcode] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  // [修改開始] 新增狀態來儲存 Base64 圖片資料，以便後續再次分析使用
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [dbFoodId, setDbFoodId] = useState<number | null>(null); 
   
   const [inputMode, setInputMode] = useState<"serving" | "weight">("serving");
@@ -245,8 +248,14 @@ export default function FoodEditorScreen() {
 
                 if (paramImageUri) {
                     setImageUri(paramImageUri as string);
-                    if (paramAnalyze === "true" && paramImageBase64) {
-                        performAiAnalysis(paramImageBase64 as string, 'image');
+                    
+                    // [修改開始] 儲存傳入的 base64 圖片
+                    if (paramImageBase64) {
+                        setImageBase64(paramImageBase64 as string);
+                        
+                        if (paramAnalyze === "true") {
+                            performAiAnalysis(paramImageBase64 as string, 'image');
+                        }
                     }
                 }
             }
@@ -255,6 +264,7 @@ export default function FoodEditorScreen() {
     init();
   }, [paramLogId, paramClone, paramBarcode, paramProductData, paramImageUri, paramAnalyze, paramImageBase64]);
 
+  // [修改開始] 修改 AI 分析邏輯
   const performAiAnalysis = async (input: string, type: 'image' | 'text') => {
       if (!input) return;
       setIsAnalyzing(true);
@@ -264,9 +274,20 @@ export default function FoodEditorScreen() {
           let result;
           
           if (type === 'image') {
+              // 來自 Camera 的第一次自動分析 (input 為 base64)
               result = await analyzeFoodImage(input, lang, profile);
           } else {
-              result = await analyzeFoodText(input, lang, profile);
+              // type === 'text' (input 為食物名稱文字)
+              // 檢查是否有儲存的圖片 (imageBase64)
+              if (imageBase64) {
+                  console.log("[AI] Analyzing Text with Image Context:", input);
+                  // 將文字當作 Hint 傳入，結合既有的圖片進行分析
+                  result = await analyzeFoodImage(imageBase64, lang, profile, input);
+              } else {
+                  console.log("[AI] Analyzing Text Only:", input);
+                  // 只有文字，走舊流程
+                  result = await analyzeFoodText(input, lang, profile);
+              }
           }
           
           if (result) {

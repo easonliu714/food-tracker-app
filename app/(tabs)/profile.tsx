@@ -20,6 +20,10 @@ import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 
 import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file-system/legacy';
+// [修改開始] 引入引導相關元件
+import { useTutorial } from '@/context/TutorialContext';
+import { TutorialTarget } from '@/components/TutorialTarget';
+import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -37,6 +41,30 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const lang = useLanguage();
+  
+  // [修改開始] 引導邏輯
+  const { startScenario } = useTutorial();
+
+  const restartTutorial = () => {
+      startScenario('PROFILE_GUIDE', [
+           { text: t('tutorial.profile_restart_intro', lang) },
+           { targetKey: 'profile_basic', text: t('tutorial.profile_basic_hint', lang) },
+           { targetKey: 'profile_goals', text: t('tutorial.profile_goals_hint', lang) },
+           { targetKey: 'profile_ai', text: t('tutorial.profile_ai_hint', lang) },
+           { targetKey: 'profile_save', text: t('tutorial.profile_save_hint', lang) }
+      ]);
+  };
+  
+  useFocusEffect(
+    useCallback(() => {
+        async function check() {
+            const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE);
+            const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+            // 首次流程中自動觸發邏輯通常由 Context 控制，這裡可作為保險或單獨進入時觸發
+        }
+        check();
+    }, [lang])
+  );
   
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
@@ -91,6 +119,8 @@ export default function ProfileScreen() {
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
+  // [修改開始] 取得新的 inputBackground
+  const inputBackground = useThemeColor({}, "inputBackground");
 
   useEffect(() => {
     async function initNotifications() {
@@ -637,26 +667,36 @@ export default function ProfileScreen() {
 
       <ScrollView style={{paddingHorizontal: 16}}>
          {/* AI Settings */}
-         <View style={[styles.card, {backgroundColor: cardBackground}]}>
-            <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
-            <View style={{marginTop:12}}>
-              <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
-              <TextInput style={[styles.input, {color: textColor, borderColor}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
-              <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}>
-                  <ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText>
-              </Pressable>
-            </View>
-            <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>
-                {testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white', fontWeight:'600'}}>{t('test_key', lang)}</ThemedText>}
-            </Pressable>
-            <View style={{marginTop:12}}>
-                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
-                <Pressable style={[styles.input, {justifyContent:'center', borderColor}]} onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert(t('tip', lang), t('test_key_first', lang) || "Test Key First")}>
-                    <ThemedText style={{color:textColor}}>{selectedModel}</ThemedText>
-                    <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
+         {/* [修改開始] 包裹 AI 設定區 */}
+         <TutorialTarget targetKey="profile_ai">
+             <View style={[styles.card, {backgroundColor: cardBackground}]}>
+                <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
+                <View style={{marginTop:12}}>
+                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
+                  <TextInput 
+                      style={[styles.input, {color: textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} 
+                      value={apiKey} 
+                      onChangeText={setApiKey} 
+                      secureTextEntry 
+                      placeholder="AI Studio Key..." 
+                      placeholderTextColor="#999" 
+                  />
+                  <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}>
+                      <ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText>
+                  </Pressable>
+                </View>
+                <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>
+                    {testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white', fontWeight:'600'}}>{t('test_key', lang)}</ThemedText>}
                 </Pressable>
-            </View>
-         </View>
+                <View style={{marginTop:12}}>
+                    <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
+                    <Pressable style={[styles.input, {justifyContent:'center', borderColor, backgroundColor: inputBackground, borderWidth: 0}]} onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert(t('tip', lang), t('test_key_first', lang) || "Test Key First")}>
+                        <ThemedText style={{color:textColor}}>{selectedModel}</ThemedText>
+                        <Ionicons name="chevron-down" size={16} color={textColor} style={{position:'absolute', right:12}}/>
+                    </Pressable>
+                </View>
+             </View>
+         </TutorialTarget>
 
          {/* Notification Settings */}
          <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
@@ -770,112 +810,146 @@ export default function ProfileScreen() {
          </View>
 
          {/* Basic Info */}
-         <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
-            <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
-            <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
-               <View style={{flex:1}}>
-                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('gender', lang)}</ThemedText>
-                 <View style={styles.row}>
-                    {["male", "female"].map(g => (
-                      <Pressable key={g} onPress={() => setGender(g as any)} style={[styles.option, gender === g && {backgroundColor: tintColor, borderColor: tintColor}]}>
-                         <ThemedText style={{color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
+         {/* [修改開始] 包裹基本資料區 */}
+         <TutorialTarget targetKey="profile_basic">
+             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
+                <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
+                <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
+                   <View style={{flex:1}}>
+                     <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('gender', lang)}</ThemedText>
+                     <View style={styles.row}>
+                        {["male", "female"].map(g => (
+                          <Pressable key={g} onPress={() => setGender(g as any)} style={[styles.option, gender === g && {backgroundColor: tintColor, borderColor: tintColor}]}>
+                             <ThemedText style={{color: gender===g?'white':textColor}}>{g==='male'?t('male', lang):t('female', lang)}</ThemedText>
+                          </Pressable>
+                        ))}
+                     </View>
+                   </View>
+                   <View style={{flex:1}}>
+                      <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang)}</ThemedText>
+                      <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor, backgroundColor: inputBackground, borderWidth: 0, paddingHorizontal: 8}]}>
+                          <ThemedText style={{color:textColor, flexWrap: 'wrap', textAlign: 'center'}} adjustsFontSizeToFit numberOfLines={1}>
+                              {isValid(birthDate) ? format(birthDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
+                          </ThemedText>
                       </Pressable>
-                    ))}
+                      {showDatePicker && (
+                        <DateTimePicker 
+                            value={isValid(birthDate) ? birthDate : new Date()} 
+                            mode="date" 
+                            onChange={onBirthDateChange} 
+                            maximumDate={new Date()} 
+                        />
+                      )}
+                   </View>
+                </View>
+
+                <View style={[styles.row, {marginBottom: 12}]}>
+                   <View style={{flex:1}}>
+                       <ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)} (cm)</ThemedText>
+                       <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/>
+                   </View>
+                   <View style={{width:10}}/>
+                   <View style={{flex:1}}>
+                       <ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)} (kg)</ThemedText>
+                       <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/>
+                   </View>
+                </View>
+                 <View style={{marginBottom: 12}}>
+                    <ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)} %</ThemedText>
+                    <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
                  </View>
-               </View>
-               <View style={{flex:1}}>
-                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('birth_date', lang)}</ThemedText>
-                  <Pressable onPress={()=>setShowDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor}]}>
-                      <ThemedText style={{color:textColor}}>
-                          {isValid(birthDate) ? format(birthDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
-                      </ThemedText>
-                  </Pressable>
-                  {showDatePicker && (
-                    <DateTimePicker 
-                        value={isValid(birthDate) ? birthDate : new Date()} 
-                        mode="date" 
-                        onChange={onBirthDateChange} 
-                        maximumDate={new Date()} 
-                    />
-                  )}
-               </View>
-            </View>
 
-            <View style={[styles.row, {marginBottom: 12}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('height', lang)} (cm)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={heightCm} onChangeText={setHeightCm} keyboardType="numeric"/></View>
-               <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={currentWeight} onChangeText={setCurrentWeight} keyboardType="numeric"/></View>
-            </View>
-             <View style={{marginBottom: 12}}>
-                <ThemedText style={{fontSize:12, color:textSecondary}}>{t('body_fat', lang)} %</ThemedText>
-                <TextInput style={[styles.input, {color:textColor, borderColor}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
+                {/* 包裹目標區 */}
+                <TutorialTarget targetKey="profile_goals">
+                    <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
+                        <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
+                        <View style={[styles.row, {marginBottom: 12}]}>
+                           <View style={{flex:1}}>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)} (kg)</ThemedText>
+                               <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/>
+                           </View>
+                           <View style={{width:10}}/>
+                           <View style={{flex:1}}>
+                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText>
+                               <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/>
+                           </View>
+                        </View>
+
+                        <View style={{marginBottom: 12}}>
+                            <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('target_date', lang)}</ThemedText>
+                            <Pressable onPress={()=>setShowTargetDatePicker(true)} style={[styles.input, {justifyContent:'space-between', borderColor, backgroundColor: inputBackground, borderWidth: 0, height: 'auto', minHeight: 48, paddingVertical: 8}]}>
+                                <ThemedText style={{color: targetDate ? textColor : '#999'}}>
+                                    {targetDate ? format(targetDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
+                                </ThemedText>
+                                {targetDate && (
+                                    <ThemedText style={{fontSize: 12, color: tintColor, flexShrink: 1, textAlign: 'right', marginLeft: 4}}>
+                                        {differenceInDays(targetDate, new Date())} {t('days_remaining', lang)}
+                                    </ThemedText>
+                                )}
+                            </Pressable>
+                            {showTargetDatePicker && (
+                                <DateTimePicker 
+                                    value={targetDate || new Date()} 
+                                    mode="date" 
+                                    minimumDate={new Date()}
+                                    onChange={onTargetDateChange} 
+                                />
+                            )}
+                        </View>
+                        
+                        <View style={{marginTop:12}}>
+                           <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('training_goal', lang)}</ThemedText>
+                           <View style={{gap: 8}}>
+                              {GOAL_IDS.map(id => (
+                                <Pressable key={id} onPress={()=>setTrainingGoal(id)} style={[styles.listOption, trainingGoal===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                                   <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                                       <View>
+                                           <ThemedText style={{fontWeight:'bold', color: trainingGoal===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
+                                           <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
+                                       </View>
+                                       {trainingGoal===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                                   </View>
+                                </Pressable>
+                              ))}
+                           </View>
+                        </View>
+                        <View style={{marginTop:16}}>
+                           <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('activity_level', lang)}</ThemedText>
+                           <View style={{gap: 8}}>
+                              {ACTIVITY_IDS.map(id => (
+                                <Pressable key={id} onPress={()=>setActivityLevel(id)} style={[styles.listOption, activityLevel===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
+                                   <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
+                                       <View>
+                                           <ThemedText style={{fontWeight:'bold', color: activityLevel===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
+                                           <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
+                                       </View>
+                                       {activityLevel===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
+                                   </View>
+                                </Pressable>
+                              ))}
+                           </View>
+                        </View>
+                    </View>
+                </TutorialTarget>
+
              </View>
+         </TutorialTarget>
+         {/* [修改結束] */}
+         
+         {/* [修改開始] 包裹儲存按鈕 */}
+         <TutorialTarget targetKey="profile_save">
+             <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
+                <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
+             </Pressable>
+         </TutorialTarget>
+         {/* [修改結束] */}
 
-            <ThemedText style={{fontSize:14, fontWeight:'bold', marginTop:8, marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
-            <View style={[styles.row, {marginBottom: 12}]}>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_weight', lang)} (kg)</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetWeight} onChangeText={setTargetWeight} keyboardType="numeric"/></View>
-               <View style={{width:10}}/>
-               <View style={{flex:1}}><ThemedText style={{fontSize:12, color:textSecondary}}>{t('target_body_fat', lang)} %</ThemedText><TextInput style={[styles.input, {color:textColor, borderColor}]} value={targetBodyFat} onChangeText={setTargetBodyFat} keyboardType="numeric"/></View>
-            </View>
-
-            <View style={{marginBottom: 12}}>
-                <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('target_date', lang)}</ThemedText>
-                <Pressable onPress={()=>setShowTargetDatePicker(true)} style={[styles.input, {justifyContent:'center', borderColor, flexDirection:'row', justifyContent:'space-between'}]}>
-                    <ThemedText style={{color: targetDate ? textColor : '#999'}}>
-                        {targetDate ? format(targetDate, 'yyyy-MM-dd') : "YYYY-MM-DD"}
-                    </ThemedText>
-                    {targetDate && (
-                        <ThemedText style={{fontSize: 12, color: tintColor}}>
-                            {differenceInDays(targetDate, new Date())} {t('days_remaining', lang)}
-                        </ThemedText>
-                    )}
-                </Pressable>
-                {showTargetDatePicker && (
-                    <DateTimePicker 
-                        value={targetDate || new Date()} 
-                        mode="date" 
-                        minimumDate={new Date()}
-                        onChange={onTargetDateChange} 
-                    />
-                )}
-            </View>
-            
-            <View style={{marginTop:12}}>
-               <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('training_goal', lang)}</ThemedText>
-               <View style={{gap: 8}}>
-                  {GOAL_IDS.map(id => (
-                    <Pressable key={id} onPress={()=>setTrainingGoal(id)} style={[styles.listOption, trainingGoal===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
-                       <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                           <View>
-                               <ThemedText style={{fontWeight:'bold', color: trainingGoal===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
-                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
-                           </View>
-                           {trainingGoal===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
-                       </View>
-                    </Pressable>
-                  ))}
-               </View>
-            </View>
-            <View style={{marginTop:16}}>
-               <ThemedText type="defaultSemiBold" style={{marginBottom:8}}>{t('activity_level', lang)}</ThemedText>
-               <View style={{gap: 8}}>
-                  {ACTIVITY_IDS.map(id => (
-                    <Pressable key={id} onPress={()=>setActivityLevel(id)} style={[styles.listOption, activityLevel===id && {borderColor:tintColor, backgroundColor:tintColor+'10'}]}>
-                       <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center'}}>
-                           <View>
-                               <ThemedText style={{fontWeight:'bold', color: activityLevel===id?tintColor:textColor}}>{t(id, lang)}</ThemedText>
-                               <ThemedText style={{fontSize:12, color:textSecondary}}>{t(`${id}_desc`, lang)}</ThemedText>
-                           </View>
-                           {activityLevel===id && <Ionicons name="checkmark-circle" size={20} color={tintColor}/>}
-                       </View>
-                    </Pressable>
-                  ))}
-               </View>
-            </View>
-         </View>
-         <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
-            <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
+         {/* [修改開始] 新增功能說明按鈕 */}
+         <Pressable onPress={restartTutorial} style={{padding: 16, alignItems:'center', marginTop: 10}}>
+             <ThemedText style={{color: tintColor, fontSize: 14}}>❓ {t('feature_guide', lang) || "Feature Guide"}</ThemedText>
          </Pressable>
+         {/* [修改結束] */}
+
          <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center', marginBottom: 40}}>
              <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
          </Pressable>
@@ -966,7 +1040,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   card: { padding: 20, borderRadius: 16 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: 'white', height: 48, flexDirection:'row', alignItems:'center' },
+  // [修改開始] input 樣式: 移除固定 height: 48，改用 minHeight: 48，確保大字體可以撐開
+  input: { borderRadius: 10, padding: 12, fontSize: 16, minHeight: 48, flexDirection:'row', alignItems:'center' },
   row: { flexDirection: 'row' },
   option: { flex: 1, padding: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', borderRadius: 8, marginHorizontal: 2 },
   listOption: { padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },

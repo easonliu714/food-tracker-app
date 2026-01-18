@@ -15,6 +15,8 @@ export const Colors = {
     textDisabled: "#C7C7CC",
     background: "#F2F2F7",
     cardBackground: "#FFFFFF",
+    // [修改開始] 新增 inputBackground 用於輸入框背景
+    inputBackground: "#F2F2F7", 
     tint: tintColorLight,
     warning: "#FF9500",
     danger: "#FF3B30",
@@ -29,6 +31,8 @@ export const Colors = {
     textDisabled: "#48484A",
     background: "#000000",
     cardBackground: "#1C1C1E",
+    // [修改開始] 新增 inputBackground (深色背景)，避免白底白字
+    inputBackground: "#2C2C2E", 
     tint: tintColorDark,
     warning: "#FF9F0A",
     danger: "#FF453A",

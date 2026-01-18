@@ -3,5 +3,31 @@
   "CFBundleName": "營養追蹤",
   "NSCameraUsageDescription": "允許 $(PRODUCT_NAME) 使用相機來拍攝食物照片和掃描條碼。",
   "NSPhotoLibraryUsageDescription": "允許 $(PRODUCT_NAME) 存取您的相簿來選擇食物照片。",
-  "NSMicrophoneUsageDescription": "此應用程式不需要使用麥克風。"
+  "NSMicrophoneUsageDescription": "此應用程式不需要使用麥克風。",
+  
+  "tutorial": {
+    "welcome_1": "嗨！我是你的 AI 健康教練 Nomi！很高興見到你！🎉",
+    "welcome_lang_hint": "我現在使用你的系統語言溝通。如果需要，隨時可以在「設定」頁面切換語言喔！",
+    "welcome_2": "我會協助你追蹤飲食、分析營養，達成健康目標。",
+    "welcome_ask_name": "首先，請問我該怎麼稱呼你呢？",
+    "welcome_goto_profile": "好的！接下來，我們需要設定一些基本資料，這樣我才能精準分析喔！",
+    
+    "profile_intro": "這裡是基本資料設定區。",
+    "profile_basic_hint": "請填寫性別、生日、身高體重，這對計算基礎代謝很重要。",
+    "profile_goals_hint": "設定你的目標體重和體脂率，我會依此規劃熱量需求。",
+    "profile_ai_hint": "最重要的是這裡！請輸入你的 Gemini API Key 並進行測試，賦予我分析食物的能力。",
+    "profile_save_hint": "設定完成後，記得按下儲存喔！",
+    "profile_restart_intro": "沒問題，讓我再為您介紹一次個人檔案頁面！",
+
+    "home_intro": "歡迎來到首頁，{{name}}！這裡是你的每日健康儀表板。",
+    "home_metrics_hint": "這裡顯示你的身體數值，按 + 號可以快速記錄體重。",
+    "home_water_hint": "記得多喝水！點擊 + 或 - 來記錄飲水量。",
+    "home_energy_hint": "這是今日的熱量與營養攝取進度條，別超標囉！",
+    "home_actions_hint": "準備吃飯了嗎？點擊這裡拍照、掃描或手動記錄飲食！",
+    
+    "analysis_intro": "這裡是分析頁面，幫助你了解長期的健康趨勢。",
+    "analysis_chart_hint": "上方圖表顯示體重與體脂的變化曲線。",
+    "analysis_grid_hint": "下方是營養攝取的詳細分佈。"
+  },
+  "feature_guide": "功能說明"
 }
