@@ -151,5 +151,7 @@ const config: ExpoConfig = {
     },
   },
 };
-
+{
+  "owner": "easonliu714s-personal-trainer"
+}
 export default config;
