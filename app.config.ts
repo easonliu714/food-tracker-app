@@ -6,8 +6,8 @@ const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  appName: 'Food Tracker',
-  appSlug: 'nutrition_tracker',
+  appName: 'Nomi',
+  appSlug: 'nomi',
   logoUrl: 'https://files.manuscdn.com/user_upload_by_module/session_file/310519663249409721/lBYRAahQjSJDLaqW.png',
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
@@ -17,9 +17,11 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
+  // [修改開始] 新增 owner 欄位 (根據您的 EAS CLI 提示)
+  owner: "easonliu714s-personal-trainer",
   version: "1.0.16", // 建議進版，確保安裝時視為新版本
   orientation: "portrait",
-  scheme: "foodtracker", 
+  scheme: "nourish_me", 
 
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
@@ -151,7 +153,4 @@ const config: ExpoConfig = {
     },
   },
 };
-{
-  "owner": "easonliu714s-personal-trainer"
-}
 export default config;
