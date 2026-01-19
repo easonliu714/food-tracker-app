@@ -46,6 +46,55 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
 const LOCALE_MAP: any = { 'zh-TW': zhTW, 'en': enUS, 'ja': ja, 'ko': ko, 'fr': fr, 'ru': ru };
 
+// [新增] 時間格式轉換 Helper
+const decimalToHHMM = (decimal: number) => {
+  if (!decimal && decimal !== 0) return "";
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+const hhmmToDecimal = (hhmm: string) => {
+  if (!hhmm) return 0;
+  // 支援 HH:MM 或 HHMM
+  const clean = hhmm.replace(':', '');
+  // 如果長度不足(例如輸入"7"或"75")，暫時視為純數字直接轉，或是直接回傳0避免錯誤
+  if (clean.length < 3) return parseFloat(clean) || 0; 
+  
+  let h = 0, m = 0;
+  if (hhmm.includes(':')) {
+      const parts = hhmm.split(':');
+      h = parseInt(parts[0]) || 0;
+      m = parseInt(parts[1]) || 0;
+  } else {
+      // 處理純數字輸入 (如 0730)
+      if (clean.length === 3) {
+          h = parseInt(clean.substring(0, 1));
+          m = parseInt(clean.substring(1));
+      } else {
+          h = parseInt(clean.substring(0, 2));
+          m = parseInt(clean.substring(2));
+      }
+  }
+  
+  const totalHours = h + (m / 60);
+  // [修改] 保持小數點後兩位
+  return Math.round(totalHours * 100) / 100;
+};
+
+const formatTimeInput = (text: string) => {
+    // 移除非數字
+    const cleaned = text.replace(/[^0-9]/g, '');
+    
+    // 限制長度 (HHMM = 4位)
+    const trimmed = cleaned.substring(0, 4);
+
+    if (trimmed.length >= 3) {
+        return `${trimmed.substring(0, 2)}:${trimmed.substring(2)}`;
+    }
+    return trimmed;
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const theme = Colors[useColorScheme() ?? "light"];
@@ -101,14 +150,14 @@ export default function HomeScreen() {
   const [diffFat, setDiffFat] = useState<number | null>(null);
   
   const [showSleepModal, setShowSleepModal] = useState(false);
-  const [manualSleep, setManualSleep] = useState("");
+  const [manualSleep, setManualSleep] = useState(""); // 這裡存的是 HH:MM 字串
 
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(2000); 
   const WATER_CUP_SIZE = 250;
 
   const [healthSteps, setHealthSteps] = useState(0);
-  const [healthSleep, setHealthSleep] = useState(0);
+  const [healthSleep, setHealthSleep] = useState(0); // 這裡存的是 decimal 小時
   const [isSyncing, setIsSyncing] = useState(false); 
 
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
@@ -128,9 +177,12 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
+  // [修正] 儲存睡眠時間：轉為 decimal 儲存
   const handleSaveSleep = async () => {
-      const h = parseFloat(manualSleep);
+      // 解析 HH:MM 為 小時數 (例如 07:30 -> 7.5)
+      const h = hhmmToDecimal(manualSleep);
       if (isNaN(h)) return;
+      
       try {
           const dateStr = format(currentDate, "yyyy-MM-dd");
           const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
@@ -141,7 +193,8 @@ export default function HomeScreen() {
           }
           setHealthSleep(h);
           setShowSleepModal(false);
-          setManualSleep("");
+          // 保持 manualSleep 為格式化字串，以便下次打開直接顯示
+          setManualSleep(decimalToHHMM(h)); 
       } catch(e) { console.error(e); }
   };
 
@@ -211,6 +264,9 @@ export default function HomeScreen() {
     setDiffWeight(null);
     setDiffFat(null);
     setWaterMl(0);
+    // 先清空，避免顯示上一筆資料
+    setManualSleep(""); 
+    setHealthSleep(0);
 
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
@@ -239,9 +295,20 @@ export default function HomeScreen() {
         setWeight(curW > 0 ? String(curW) : "");
         setBodyFat(curF > 0 ? String(curF) : "");
         setWaterMl(metricsRes[0].waterMl || 0);
-        if (metricsRes[0].sleepHours) setHealthSleep(metricsRes[0].sleepHours);
+        
+        // [修正] 讀取並轉換睡眠時間
+        if (metricsRes[0].sleepHours) {
+            const h = metricsRes[0].sleepHours;
+            setHealthSleep(h);
+            setManualSleep(decimalToHHMM(h)); // 轉回 HH:MM 格式供編輯
+        } else {
+            setHealthSleep(0);
+            setManualSleep(""); // 明確清空
+        }
       } else {
-          setHealthSleep(0);
+        // [修正] 無資料時，確保為空
+        setHealthSleep(0);
+        setManualSleep("");
       }
 
       const latestTwo = await getLatestTwoDailyMetrics();
@@ -785,13 +852,15 @@ export default function HomeScreen() {
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.cardBackground}]}>
                     <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_sleep', lang)}</ThemedText>
+                    {/* [修正] 輸入框: 純數字鍵盤, 限制長度4, 顯示 HH:MM 格式 */}
                     <TextInput 
-                        style={[styles.metricInput, {width: '100%', backgroundColor: theme.inputBackground, borderRadius:8, padding:10, marginBottom:16}]}
-                        placeholder={t('sleep_hours', lang)}
+                        style={[styles.metricInput, {width: '100%', backgroundColor: theme.inputBackground, borderRadius:8, padding:10, marginBottom:16, color: theme.text}]}
+                        placeholder={t('sleep_hours', lang) || "HHMM"} // e.g. 0730
                         placeholderTextColor="#999"
-                        keyboardType="numeric"
+                        keyboardType="number-pad"
+                        maxLength={5} // 07:30
                         value={manualSleep}
-                        onChangeText={setManualSleep}
+                        onChangeText={(text) => setManualSleep(formatTimeInput(text))}
                     />
                     <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
                         <TouchableOpacity onPress={()=>setShowSleepModal(false)}><ThemedText>{t('cancel', lang)}</ThemedText></TouchableOpacity>
