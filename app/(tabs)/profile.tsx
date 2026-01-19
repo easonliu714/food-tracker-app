@@ -659,11 +659,11 @@ export default function ProfileScreen() {
           targetKey="profile_ai" 
           onMeasure={(y) => targetPositions.current['profile_ai'] = y}
           adjustment={{
-            padding: 10, // 可選的，增加額外的內邊距
+            padding: 80, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
+            offsetY: 80,    // 正數表示往下移動 (例如往下 20px)
             heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 寬度
+            widthAdd: 0,    // 負數表示寬度
         }}
           >
              <View style={[styles.card, {backgroundColor: cardBackground}]}>

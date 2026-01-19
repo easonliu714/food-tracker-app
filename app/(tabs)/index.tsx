@@ -687,11 +687,11 @@ export default function HomeScreen() {
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
          adjustment={{
-            padding: 10, // 可選的，增加額外的內邊距
+            padding: 50, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: 0,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 寬度
+            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 負數表示減少寬度
          }}
          >
             {renderBodyMetricsCard()}
@@ -701,11 +701,11 @@ export default function HomeScreen() {
          targetKey="home_water" 
          onMeasure={(y) => targetPositions.current['home_water'] = y}
          adjustment={{
-            padding: 10, // 可選的，增加額外的內邊距
+            padding: 50, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: -50,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: 0,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 寬度
+            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 負數表示減少寬度
          }}
          >
             {renderWaterSection()}
@@ -715,11 +715,11 @@ export default function HomeScreen() {
          targetKey="home_energy" 
          onMeasure={(y) => targetPositions.current['home_energy'] = y}
          adjustment={{
-            padding: 10, // 可選的，增加額外的內邊距
+            padding: 50, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 寬度
+            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 負數表示減少寬度
          }}
          >
             {renderEnergySection()}
@@ -732,11 +732,11 @@ export default function HomeScreen() {
              targetKey="home_actions" 
              onMeasure={(y) => targetPositions.current['home_actions'] = y}
              adjustment={{
-                padding: 10, // 可選的，增加額外的內邊距
+                padding: 50, // 可選的，增加額外的內邊距
                 offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-                offsetY: -200,    // 正數表示往下移動 (例如往下 20px)
-                heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
-                widthAdd: 0,    // 寬度
+                offsetY: 0,    // 正數表示往下移動 (例如往下 20px)
+                heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
+                widthAdd: 0,    // 負數表示減少寬度
              }}
              >
                <View style={styles.quickActionRow}>

@@ -616,7 +616,7 @@ export default function AnalysisScreen() {
          targetKey="analysis_grid" 
          onMeasure={(y) => targetPositions.current['analysis_grid'] = y}
          adjustment={{
-            offsetY: -10,
+            offsetY: -50,
             heightAdd: 0
         }}
         >   
@@ -629,7 +629,7 @@ export default function AnalysisScreen() {
         <TutorialTarget
          targetKey="analysis_chart" 
          onMeasure={(y) => targetPositions.current['analysis_chart'] = y}
-         adjustment={{offsetY: -120}}
+         adjustment={{offsetY: -130}}
          >
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
