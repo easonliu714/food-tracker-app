@@ -39,6 +39,12 @@ export const getTutorialSteps = (lang: string, userName: string = "User") => {
         { text: t('tutorial_analysis_intro', lang) },
         { targetKey: 'analysis_chart', text: t('tutorial_analysis_chart_hint', lang) },
         { targetKey: 'analysis_grid', text: t('tutorial_analysis_grid_hint', lang) }
+    ],
+    // [新增] AI 教練頁面
+    RECIPES_GUIDE: [
+        { text: t('tutorial_recipes_intro', lang) },
+        { targetKey: 'recipes_history', text: t('tutorial_recipes_history_hint', lang) },
+        { targetKey: 'recipes_input', text: t('tutorial_recipes_input_hint', lang) }
     ]
   };
 };

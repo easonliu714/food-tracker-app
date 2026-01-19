@@ -28,10 +28,22 @@
   "tutorial_analysis_chart_hint": "上方圖表顯示體重與體脂的變化曲線。",
   "tutorial_analysis_grid_hint": "下方是營養攝取的詳細分佈。",
 
+  "tutorial_recipes_intro": "這裡是你的 AI 營養教練，隨時為你解答飲食疑問。",
+  "tutorial_recipes_input_hint": "在下方輸入你的問題，例如『冰箱剩番茄可以做什麼？』或『這餐熱量多少？』。",
+  "tutorial_recipes_history_hint": "這裡會顯示你們的對話紀錄，長按可以複製或分享建議喔！",
+
   "feature_guide": "功能說明",
   "select_guide_topic": "請選擇要介紹的功能頁面：",
+  "prev_step": "上一步",
+  "next_step": "下一步",
+  "finish_tutorial": "完成導覽",
+  "skip_tutorial": "跳過導覽",
+  "start_tutorial": "開始導覽",
+
   "tab_home": "首頁",
   "tab_analysis": "分析",
+  "tab_ai_coach": "AI 教練",
+  "tab_recipes": "營養教練",
   "tab_settings": "設定",
   "cancel": "取消",
   "confirm": "確認",

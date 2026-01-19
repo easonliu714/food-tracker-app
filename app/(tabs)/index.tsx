@@ -61,15 +61,15 @@ export default function HomeScreen() {
     if (activeScenario === 'HOME_GUIDE' && scrollViewRef.current) {
        // 根據 HOME_GUIDE 的步驟順序定義捲動位置 (Y軸)
        // 0: Intro (Top)
-       // 1: Metrics (Top)
-       // 2: Water (約 250px 處)
-       // 3: Energy (約 450px 處)
+       // 1: Metrics (約 10px 處)
+       // 2: Water (約 100px 處)
+       // 3: Energy (約 200px 處)
        // 4: Actions (Bottom)
        
        let yPos = 0;
-       if (currentStepIndex <= 1) yPos = 0;
-       else if (currentStepIndex === 2) yPos = 250;
-       else if (currentStepIndex === 3) yPos = 450;
+       if (currentStepIndex <= 1) yPos = 10;
+       else if (currentStepIndex === 2) yPos = 100;
+       else if (currentStepIndex === 3) yPos = 200;
        else if (currentStepIndex >= 4) {
            scrollViewRef.current.scrollToEnd({ animated: true });
            return;

@@ -8,6 +8,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLanguage } from '@/lib/i18n';
 // [修改] 引入腳本產生器
 import { getTutorialSteps, TutorialStep } from '@/constants/tutorial-steps';
+// [新增] 引入 button 文字
+import { t } from '@/lib/i18n'; 
 
 const GuideAvatarImage = require('@/assets/images/guide_avatar.png'); 
 
@@ -81,6 +83,13 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
+    // [新增] 上一步邏輯
+  const handlePrev = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(prev => prev - 1);
+    }
+  };
+  
   const stopTutorial = async () => {
     Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
       setActiveScenario(null);
@@ -170,6 +179,13 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
                 )}
 
                 <View style={styles.btnRow}>
+                    {/* [新增] 上一步按鈕 (僅在非第一步時顯示) */}
+                    {currentStepIndex > 0 && (
+                        <TouchableOpacity onPress={handlePrev} style={styles.skipBtn}>
+                            <Text style={{color: theme.tint}}>{t('prev_step', lang) || "Back"}</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {!currentStep?.forceNext && (
                         <TouchableOpacity onPress={stopTutorial} style={styles.skipBtn}>
                             <Text style={{color: '#888'}}>Skip</Text>

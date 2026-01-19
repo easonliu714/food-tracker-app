@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react';
-import { getSettings, saveSettings } from './storage';
 import { create } from 'zustand';
-import { se } from 'date-fns/locale';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getLocales } from 'expo-localization';
+import { I18nManager } from 'react-native';
 
+// 1. 定義支援的語言選單
 export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
   { code: 'zh-CN', label: '简体中文' },
   { code: 'en', label: 'English' },
+  { code: 'zh-ch', label: '简体中文' },
   { code: 'ja', label: '日本語' },
   { code: 'ko', label: '한국어' },
-  { code: 'fr', label: 'Français' },
-  { code: 'ru', label: 'Русский' },
 ];
 
-export const TRANSLATIONS = {
+// 2. 建立 Zustand 狀態管理
+// 您可以在這裡直接新增 Key，Copilot 會幫您補完其他語言
+export const TRANSLATIONS: Record<string, any> = {
   'zh-TW': {
     // Tab Titles
     tab_home: "首頁", tab_analysis: "分析", tab_ai_coach: "AI 教練", tab_settings: "設定",
@@ -326,7 +329,36 @@ export const TRANSLATIONS = {
     interval: "間隔 (分)", start_time: "開始時間", end_time: "結束時間", water_move: "喝水/久坐", water: "喝水",
 
     // [新增] METs 說明
-    mets_explanation: "註：\n※中強度身體活動(3-6METs)：持續從事10分鐘以上還能舒服的對話，但無法唱歌。這類活動會讓人覺得有點累，呼吸及心跳比平常快一些，也會流一些汗。\n※高強度身體活動(>6METs)：持續從事10分鐘以上時，將無法邊活動邊跟人輕鬆說話。這類活動會讓身體感覺很累，呼吸及心跳比平常快很多，也會流很多汗。\n※1分鐘的費力身體活動 = 2分鐘的中度身體活動"
+    mets_explanation: "註：\n※中強度身體活動(3-6METs)：持續從事10分鐘以上還能舒服的對話，但無法唱歌。這類活動會讓人覺得有點累，呼吸及心跳比平常快一些，也會流一些汗。\n※高強度身體活動(>6METs)：持續從事10分鐘以上時，將無法邊活動邊跟人輕鬆說話。這類活動會讓身體感覺很累，呼吸及心跳比平常快很多，也會流很多汗。\n※1分鐘的費力身體活動 = 2分鐘的中度身體活動",
+  
+    // --- AI 引導員 (Tutorial) ---
+    tutorial_welcome_1: "嗨！我是你的 AI 健康教練 Nomi！很高興見到你！🎉",
+    tutorial_welcome_lang_hint: "我現在使用你的系統語言溝通。如果需要，隨時可以在「設定」頁面切換語言喔！",
+    tutorial_welcome_2: "我會協助你追蹤飲食、分析營養，達成健康目標。",
+    tutorial_welcome_ask_name: "首先，請問我該怎麼稱呼你呢？",
+    tutorial_welcome_goto_profile: "好的！接下來，我們需要設定一些基本資料，這樣我才能精準分析喔！",
+    
+    tutorial_profile_intro: "這裡是基本資料設定區。",
+    tutorial_profile_basic_hint: "請填寫性別、生日、身高體重，這對計算基礎代謝很重要。",
+    tutorial_profile_goals_hint: "設定你的目標體重和體脂率，我會依此規劃熱量需求。",
+    tutorial_profile_ai_hint: "最重要的是這裡！請輸入你的 Gemini API Key 並進行測試，賦予我分析食物的能力。",
+    tutorial_profile_save_hint: "設定完成後，記得按下儲存喔！",
+    tutorial_profile_restart_intro: "沒問題，讓我再為您介紹一次個人檔案頁面！",
+
+    tutorial_home_intro: "歡迎來到首頁，{{name}}！這裡是你的每日健康儀表板。",
+    tutorial_home_metrics_hint: "這裡顯示你的身體數值，點擊睡眠可手動記錄，按 + 號記錄體重。",
+    tutorial_home_water_hint: "記得多喝水！點擊 + 或 - 來記錄飲水量。",
+    tutorial_home_energy_hint: "這是今日的熱量與營養攝取進度條，別超標囉！",
+    tutorial_home_actions_hint: "準備吃飯了嗎？點擊這裡拍照、掃描或手動記錄飲食！",
+    
+    tutorial_analysis_intro: "這裡是分析頁面，幫助你了解長期的健康趨勢。",
+    tutorial_analysis_chart_hint: "上方圖表顯示體重與體脂的變化曲線。",
+    tutorial_analysis_grid_hint: "下方是營養攝取的詳細分佈。",
+
+    tutorial_recipes_intro: "這裡是你的 AI 營養教練，隨時為你解答飲食疑問。",
+    tutorial_recipes_input_hint: "在下方輸入你的問題，例如『冰箱剩番茄可以做什麼？』或『這餐熱量多少？』。",
+    tutorial_recipes_history_hint: "這裡會顯示你們的對話紀錄，長按可以複製或分享建議喔！",
+  
   },
   // [新增] 簡體中文
   'zh-CN': {
@@ -639,7 +671,35 @@ export const TRANSLATIONS = {
     // Interval / Reminder
     interval: "间隔 (分)", start_time: "开始时间", end_time: "结束时间", water_move: "喝水/久坐", water: "喝水",
     
-    mets_explanation: "注：\n※中强度活动(3-6METs)：持续从事10分钟以上还能舒服的对话，但无法唱歌。这类活动会让人觉得有点累，呼吸及心跳比平常快一些，也会流一些汗。\n※高强度活动(>6METs)：持续从事10分钟以上时，将无法边活动边跟人轻松说话。这类活动会让身体感觉很累，呼吸及心跳比平常快很多，也会流很多汗。\n※1分钟的费力身体活动 = 2分钟的中度身体活动"
+    mets_explanation: "注：\n※中强度活动(3-6METs)：持续从事10分钟以上还能舒服的对话，但无法唱歌。这类活动会让人觉得有点累，呼吸及心跳比平常快一些，也会流一些汗。\n※高强度活动(>6METs)：持续从事10分钟以上时，将无法边活动边跟人轻松说话。这类活动会让身体感觉很累，呼吸及心跳比平常快很多，也会流很多汗。\n※1分钟的费力身体活动 = 2分钟的中度身体活动",
+
+    // --- AI Guide (Tutorial) ---
+    tutorial_welcome_1: "嗨！我是你的 AI 健康教练 Nomi！很高兴见到你！🎉",
+    tutorial_welcome_lang_hint: "我现在使用你的系统语言沟通。如果需要，随时可以在「设置」页面切换语言哦！",
+    tutorial_welcome_2: "我会协助你追踪饮食、分析营养，达成健康目标。",
+    tutorial_welcome_ask_name: "首先，请问我该怎么称呼你呢？",
+    tutorial_welcome_goto_profile: "好的！接下来，我们需要设定一些基本资料，这样我才能精准分析哦！",
+    
+    tutorial_profile_intro: "这里是基本资料设定区。",
+    tutorial_profile_basic_hint: "请填写性别、生日、身高体重，这对计算基础代谢很重要。",
+    tutorial_profile_goals_hint: "设定你的目标体重和体脂率，我会依此规划热量需求。",
+    tutorial_profile_ai_hint: "最重要的是这里！请输入你的 Gemini API Key 并进行测试，赋予我分析食物的能力。",
+    tutorial_profile_save_hint: "设定完成后，记得按下保存哦！",
+    tutorial_profile_restart_intro: "没问题，让我再为您介绍一次个人档案页面！",
+
+    tutorial_home_intro: "欢迎来到首页，{{name}}！这里是你的每日健康仪表板。",
+    tutorial_home_metrics_hint: "这里显示你的身体数值，点击睡眠可手动记录，按 + 号记录体重。",
+    tutorial_home_water_hint: "记得多喝水！点击 + 或 - 来记录饮水量。",
+    tutorial_home_energy_hint: "这是今日的热量与营养摄取进度条，别超标哦！",
+    tutorial_home_actions_hint: "准备吃饭了吗？点击这里拍照、扫码或手动记录饮食！",
+    
+    tutorial_analysis_intro: "这里是分析页面，帮助你了解长期的健康趋势。",
+    tutorial_analysis_chart_hint: "上方图表显示体重与体脂的变化曲线。",
+    tutorial_analysis_grid_hint: "下方是营养摄取的详细分布。",
+
+    tutorial_recipes_intro: "这里是你的 AI 营养教练，随时为你解答饮食疑问。",
+    tutorial_recipes_input_hint: "在下方输入你的问题，例如『冰箱剩番茄可以做什么？』或『这餐热量多少？』。",
+    tutorial_recipes_history_hint: "这里会显示你们的对话记录，长按可以复制或分享建议哦！",
   },
   'en': {
     // Tab Titles
@@ -939,7 +999,35 @@ export const TRANSLATIONS = {
 
     // Interval / Reminder
     interval: "Interval (min)", start_time: "Start Time", end_time: "End Time", water_move: "Water & Move", water: "Water",
-    mets_explanation: "Note:\n※ Medium Intensity (3-6 METs): Can talk but not sing. You feel a bit tired, breathing and heart rate are slightly faster, and some sweating.\n※ High Intensity (>6 METs): Cannot say more than a few words without pausing for breath. You feel tired, breathing and heart rate are much faster, heavy sweating.\n※ 1 min vigorous = 2 min moderate activity."
+    mets_explanation: "Note:\n※ Medium Intensity (3-6 METs): Can talk but not sing. You feel a bit tired, breathing and heart rate are slightly faster, and some sweating.\n※ High Intensity (>6 METs): Cannot say more than a few words without pausing for breath. You feel tired, breathing and heart rate are much faster, heavy sweating.\n※ 1 min vigorous = 2 min moderate activity.",
+    
+    // --- AI Guide (Tutorial) ---
+    tutorial_welcome_1: "Hi! I'm Nomi, your AI health coach! Great to meet you! 🎉",
+    tutorial_welcome_lang_hint: "I'm currently communicating in your system language. You can switch languages anytime in the 'Settings' page if needed!",
+    tutorial_welcome_2: "I'll help you track your diet, analyze nutrition, and achieve your health goals.",
+    tutorial_welcome_ask_name: "First, what should I call you?",
+    tutorial_welcome_goto_profile: "Great! Next, we need to set up some basic info so I can analyze accurately!",
+    
+    tutorial_profile_intro: "This is the Basic Info setup area.",
+    tutorial_profile_basic_hint: "Please fill in gender, birth date, height, and weight. This is important for calculating basal metabolic rate.",
+    tutorial_profile_goals_hint: "Set your target weight and body fat percentage, and I'll plan your calorie needs accordingly.",
+    tutorial_profile_ai_hint: "Most importantly, enter your Gemini API Key here and test it to give me the ability to analyze foods.",
+    tutorial_profile_save_hint: "Remember to hit Save when you're done setting up!",
+    tutorial_profile_restart_intro: "No problem, let me introduce the Profile page to you again!",
+
+    tutorial_home_intro: "Welcome to the Home page, {{name}}! This is your daily health dashboard.",
+    tutorial_home_metrics_hint: "This shows your body metrics. Tap Sleep to manually log, press + to record weight.",
+    tutorial_home_water_hint: "Remember to drink water! Tap + or - to log your intake.",
+    tutorial_home_energy_hint: "This is today's calorie and nutrient intake progress bar. Don't exceed your limits!",
+    tutorial_home_actions_hint: "Ready to eat? Tap here to take photos, scan barcodes, or manually log your meals!",
+
+    tutorial_analysis_intro: "This is the Analysis page, helping you understand long-term health trends.",
+    tutorial_analysis_chart_hint: "The chart above shows weight and body fat trends.",
+    tutorial_analysis_grid_hint: "Below is a detailed breakdown of nutrient intake.",
+
+    tutorial_recipes_intro: "This is your AI nutrition coach, ready to answer your dietary questions anytime.",
+    tutorial_recipes_input_hint: "Type your questions below, like 'What can I make with leftover tomatoes?' or 'How many calories are in this meal?'.",
+    tutorial_recipes_history_hint: "This will show your conversation history. Long press to copy or share suggestions!",
   },
   'ja': {
     tab_home: "ホーム", tab_analysis: "分析", tab_ai_coach: "AIコーチ", tab_settings: "設定",
@@ -1250,7 +1338,35 @@ export const TRANSLATIONS = {
 
     // Interval / Reminder
     interval: "間隔 (分)", start_time: "開始", end_time: "終了", water_move: "水分/活動", water: "水分",
-    mets_explanation: "注：\n※中強度（3-6 METs）：会話はできるが歌うことはできない程度。少し疲れを感じ、呼吸と心拍数が少し上がり、汗ばむ程度。\n※高強度（>6 METs）：息切れせずに会話を続けることが難しい程度。非常に疲れを感じ、呼吸と心拍数が大幅に上がり、大量に汗をかく。\n※1分の高強度活動 = 2分の中強度活動"
+    mets_explanation: "注：\n※中強度（3-6 METs）：会話はできるが歌うことはできない程度。少し疲れを感じ、呼吸と心拍数が少し上がり、汗ばむ程度。\n※高強度（>6 METs）：息切れせずに会話を続けることが難しい程度。非常に疲れを感じ、呼吸と心拍数が大幅に上がり、大量に汗をかく。\n※1分の高強度活動 = 2分の中強度活動",
+
+    // --- AI Guide (Tutorial) ---
+    tutorial_welcome_1: "こんにちは！私はあなたのAI健康コーチ、Nomiです！お会いできて嬉しいです！ 🎉",
+    tutorial_welcome_lang_hint: "現在、システム言語でコミュニケーションを取っています。必要に応じて「設定」ページでいつでも言語を切り替えることができます！",
+    tutorial_welcome_2: "私はあなたの食事を追跡し、栄養を分析し、健康目標の達成をサポートします。",
+    tutorial_welcome_ask_name: "まず、あなたの名前を教えてください。",
+    tutorial_welcome_goto_profile: "素晴らしい！次に、正確な分析のために基本情報を設定しましょう！",
+    
+    tutorial_profile_intro: "ここは基本情報の設定エリアです。",
+    tutorial_profile_basic_hint: "性別、生年月日、身長、体重を入力してください。これは基礎代謝率の計算に重要です。",
+    tutorial_profile_goals_hint: "目標体重と体脂肪率を設定してください。私はそれに基づいてあなたのカロリー必要量を計画します。",
+    tutorial_profile_ai_hint: "最も重要なのは、ここにGemini APIキーを入力し、テストすることです。これにより、私が食品を分析できるようになります。",
+    tutorial_profile_save_hint: "設定が完了したら、必ず保存を押してください！",
+    tutorial_profile_restart_intro: "問題ありません。もう一度プロフィールページを紹介します！",
+
+    tutorial_home_intro: "ホームページへようこそ、{{name}}さん！ここはあなたの日々の健康ダッシュボードです。",
+    tutorial_home_metrics_hint: "ここにはあなたの身体測定が表示されます。睡眠をタップして手動で記録し、+を押して体重を記録してください。",
+    tutorial_home_water_hint: "水分補給を忘れずに！+または-をタップして摂取量を記録してください。",
+    tutorial_home_energy_hint: "これは今日のカロリーと栄養摂取の進捗バーです。制限を超えないようにしましょう！",
+    tutorial_home_actions_hint: "食事の準備はできましたか？ここをタップして写真を撮るか、バーコードをスキャンするか、食事を手動で記録してください！",
+
+    tutorial_analysis_intro: "ここは分析ページで、長期的な健康傾向の理解を助けます。",
+    tutorial_analysis_chart_hint: "上のチャートは体重と体脂肪の傾向を示しています。",
+    tutorial_analysis_grid_hint: "下には栄養摂取の詳細な内訳があります。",
+
+    tutorial_recipes_intro: "ここはあなたのAI栄養コーチで、いつでも食事に関する質問に答えます。",
+    tutorial_recipes_input_hint: "以下に質問を入力してください。例えば、「余ったトマトで何が作れますか？」や「この食事のカロリーはどれくらいですか？」など。",
+    tutorial_recipes_history_hint: "ここにはあなたの会話履歴が表示されます。長押しして提案をコピーまたは共有できます！",
   },
   'ko': {
     // Tab Titles
@@ -1554,52 +1670,96 @@ export const TRANSLATIONS = {
 
     // Interval / Reminder
     interval: "간격 (분)", start_time: "시작 시간", end_time: "종료 시간", water_move: "수분/활동", water: "수분",
-    mets_explanation: "참고:\n※ 중강도 운동(3-6 METs): 10분 이상 지속 시 대화는 가능하지만 노래는 부를 수 없음. 약간의 피로감, 호흡 및 심박수가 평소보다 조금 빠름, 약간의 땀이 남.\n※ 고강도 운동(>6 METs): 10분 이상 지속 시 숨이 차서 대화가 어려움. 몸이 매우 힘들고, 호흡 및 심박수가 매우 빠르며, 땀이 많이 남.\n※ 1분의 고강도 운동 = 2분의 중강도 운동"
+    mets_explanation: "참고:\n※ 중강도 운동(3-6 METs): 10분 이상 지속 시 대화는 가능하지만 노래는 부를 수 없음. 약간의 피로감, 호흡 및 심박수가 평소보다 조금 빠름, 약간의 땀이 남.\n※ 고강도 운동(>6 METs): 10분 이상 지속 시 숨이 차서 대화가 어려움. 몸이 매우 힘들고, 호흡 및 심박수가 매우 빠르며, 땀이 많이 남.\n※ 1분의 고강도 운동 = 2분의 중강도 운동",
+
+    // --- AI Guide (Tutorial) ---
+    tutorial_welcome_1: "안녕하세요! 저는 당신의 AI 건강 코치, Nomi입니다! 만나서 반가워요! 🎉",
+    tutorial_welcome_lang_hint: "현재 시스템 언어로 소통하고 있습니다. 필요에 따라 '설정' 페이지에서 언제든지 언어를 변경할 수 있습니다!",
+    tutorial_welcome_2: "저는 당신의 식단을 추적하고, 영양을 분석하며, 건강 목표 달성을 도와드립니다.",
+    tutorial_welcome_ask_name: "먼저, 당신의 이름을 알려주세요.",
+    tutorial_welcome_goto_profile: "멋져요! 다음으로, 정확한 분석을 위해 기본 정보를 설정해봅시다!",
+    
+    tutorial_profile_intro: "여기는 기본 정보 설정 영역입니다.",
+    tutorial_profile_basic_hint: "성별, 생년월일, 신장, 체중을 입력하세요. 이는 기초대사량 계산에 중요합니다.",
+    tutorial_profile_goals_hint: "목표 체중과 체지방률을 설정하세요. 저는 그것을 바탕으로 당신의 칼로리 필요량을 계획할 것입니다.",
+    tutorial_profile_ai_hint: "가장 중요한 것은 여기에 Gemini API 키를 입력하고 테스트하는 것입니다. 이를 통해 제가 음식을 분석할 수 있게 됩니다.",
+    tutorial_profile_save_hint: "설정이 완료되면 반드시 저장을 눌러주세요!",
+    tutorial_profile_restart_intro: "문제없어요. 다시 한 번 프로필 페이지를 소개할게요!",
+
+    tutorial_home_intro: "홈페이지에 오신 것을 환영합니다, {{name}}님! 여기는 당신의 일일 건강 대시보드입니다.",
+    tutorial_home_metrics_hint: "여기에는 당신의 신체 측정치가 표시됩니다. 수면을 탭하여 수동으로 기록하고, +를 눌러 체중을 기록하세요.",
+    tutorial_home_water_hint: "수분 섭취를 잊지 마세요! + 또는 -를 탭하여 섭취량을 기록하세요.",
+    tutorial_home_energy_hint: "이것은 오늘의 칼로리 및 영양 섭취 진행 바입니다. 한도를 초과하지 않도록 주의하세요!",
+    tutorial_home_actions_hint: "식사 준비가 되셨나요? 여기를 탭하여 사진을 찍거나, 바코드를 스캔하거나, 식사를 수동으로 기록하세요!",
+
+    tutorial_analysis_intro: "여기는 분석 페이지로, 장기적인 건강 추세를 이해하는 데 도움을 줍니다.",
+    tutorial_analysis_chart_hint: "위의 차트는 체중 및 체지방 추세를 보여줍니다.",
+    tutorial_analysis_grid_hint: "아래에는 영양 섭취의 상세한 내역이 있습니다.",
+
+    tutorial_recipes_intro: "여기는 당신의 AI 영양 코치로, 언제든지 식사 관련 질문에 답변해 드립니다.",
+    tutorial_recipes_input_hint: "아래에 질문을 입력하세요. 예: '남은 토마토로 무엇을 만들 수 있나요?' 또는 '이 식사의 칼로리는 얼마인가요?' 등.",
+    tutorial_recipes_history_hint: "여기에는 당신의 대화 기록이 표시됩니다. 길게 눌러 제안을 복사하거나 공유할 수 있습니다!",
   }
 };
 
+// 3. 狀態管理 (Zustand)
 interface LanguageState {
-  locale: string;
-  setLocale: (locale: string) => void;
+  language: string;
+  setLanguage: (lang: string) => void;
 }
 
-export const useLanguageStore = create<LanguageState>((set) => ({
-  locale: 'zh-TW',
-  setLocale: (locale) => set({ locale }),
-}));
-
-// [重要修正] 支援參數替換的 t 函式
-export const t = (key: string, lang: string = 'zh-TW', params?: Record<string, any>) => {
-  const dict = TRANSLATIONS[lang as keyof typeof TRANSLATIONS] || TRANSLATIONS['en'];
-  // @ts-ignore
-  let text = dict[key] || key;
+// 4. 自動偵測系統語言的邏輯
+const getDeviceLanguage = () => {
+  const deviceLocales = getLocales();
+  const deviceLang = deviceLocales[0]?.languageTag || 'en'; // e.g., "zh-TW", "en-US"
   
-  if (params) {
-    Object.keys(params).forEach(k => {
-      // 使用 RegExp global flag 確保替換所有出現的地方
-      text = text.replace(new RegExp(`{${k}}`, 'g'), String(params[k]));
+  // 簡單的對應邏輯
+  if (deviceLang.includes('zh') && (deviceLang.includes('TW') || deviceLang.includes('HK'))) {
+    return 'zh-Hant';
+  }
+  if (deviceLang.includes('zh')) {
+    return 'zh-ch';
+  }
+  if (deviceLang.includes('ja')) return 'ja';
+  if (deviceLang.includes('ko')) return 'ko';
+  
+  return 'en'; // 預設英文
+};
+
+export const useLanguageStore = create<LanguageState>()(
+  persist(
+    (set) => ({
+      // 初始化時，優先使用偵測到的系統語言
+      language: getDeviceLanguage(),
+      setLanguage: (lang) => set({ language: lang }),
+    }),
+    {
+      name: 'language-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+    }
+  )
+);
+
+export const useLanguage = () => useLanguageStore((state) => state.language);
+export const setAppLanguage = (lang: string) => useLanguageStore.getState().setLanguage(lang);
+
+// 5. 翻譯函式 t()
+export const t = (key: string, lang: string, params?: any) => {
+  // 容錯：若傳入的 lang 不在字典裡，回退到 en，再回退到 zh-Hant
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS['en'] || TRANSLATIONS['zh-Hant'];
+  
+  let text = dict[key] || key; // 找不到就回傳 key 本身
+
+  // 處理參數 {{name}}
+  if (params && typeof text === 'string') {
+    Object.keys(params).forEach((param) => {
+      text = text.replace(new RegExp(`{{${param}}}`, 'g'), params[param]);
     });
   }
   return text;
 };
 
-export const useLanguage = () => {
-  const locale = useLanguageStore((state) => state.locale);
-  useEffect(() => {
-    getSettings().then(s => { 
-      if(s.language && s.language !== locale) {
-        useLanguageStore.getState().setLocale(s.language);
-      }
-    });
-  }, []);
-  return locale;
-};
-
-export const setAppLanguage = (lang: string) => {
-  useLanguageStore.getState().setLocale(lang);
-  saveSettings({ language: lang });
-};
-
+// 版本履歷 (也可以放這裡)
 const LOGS_ZH = [
   {
     version: "V1.0.14",
