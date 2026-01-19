@@ -1,7 +1,5 @@
 import { useRouter } from "expo-router";
-// [修正] 在這裡補上 useRef
-import { useState, useEffect, useCallback, useRef } from "react"; 
-// [修正] 合併所有 react-native 的 import，移除重複的 Alert
+import { useState, useEffect, useCallback, useRef } from "react";
 import { 
   ActivityIndicator, 
   Pressable, 
@@ -15,8 +13,9 @@ import {
   Switch, 
   Platform, 
   Text,
-  ActionSheetIOS // [新增] 確保 ActionSheetIOS 也被引入
+  // [修正] 移除 ActionSheetIOS，改用自訂 Modal 以確保跨平台一致性
 } from "react-native";
+// ... (保留原本的 imports)
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
@@ -61,78 +60,48 @@ export default function ProfileScreen() {
   const { isAuthenticated } = useAuth();
   const lang = useLanguage();
   
-  // [新增] ScrollView Ref
-  const scrollViewRef = useRef<ScrollView>(null);
+  // [修改] 取得導覽 Context 與 Scroll 請求
   const { startScenario, userName, onScrollRequest } = useTutorial();
+  
+  // [新增] ScrollView Ref 與位置紀錄
+  const scrollViewRef = useRef<ScrollView>(null);
+  const targetPositions = useRef<Record<string, number>>({});
 
-  // [新增] 註冊捲動監聽
+  // [新增] 自訂功能選單 Modal 狀態
+  const [showGuideMenuModal, setShowGuideMenuModal] = useState(false);
+
   useEffect(() => {
-      // 當導覽步驟切換並要求捲動時
       onScrollRequest((targetKey) => {
-          // 這裡做一個簡單的映射，根據 Key 決定捲動位置
-          // 若要精確對齊需要更複雜的 layout 計算，這裡示範針對長頁面的重點區域
-          if (targetKey === 'profile_save') {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
-          } else if (targetKey === 'profile_basic' || targetKey === 'profile_ai') {
-              // 這些通常在上方或中間，視情況捲動
-              // 簡單做法：回到頂部，確保用戶從頭看起
-              scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          const y = targetPositions.current[targetKey];
+          if (y !== undefined) {
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 50), animated: true });
           }
       });
   }, []);
 
-  // [修改] 顯示功能選單
+  // [修改] 顯示功能選單 (開啟 Modal)
   const showGuideMenu = () => {
+      setShowGuideMenuModal(true);
+  };
+
+  // [新增] 處理導覽選單點擊
+  const handleGuideSelection = (index: number) => {
+      setShowGuideMenuModal(false);
       const allSteps = getTutorialSteps(lang, userName);
-      
-      const options = [
-          t('tab_home', lang),      // 0
-          t('tab_analysis', lang),  // 1
-          t('tab_ai_coach', lang),   // 2 [新增] AI 教練
-          t('tab_settings', lang),  // 3
-          t('cancel', lang)         // 4
-      ];
 
-      const handleSelection = (index: number) => {
-          if (index === 0) {
-              router.push('/(tabs)');
-              setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
-          } else if (index === 1) {
-              router.push('/(tabs)/analysis');
-              setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
-          } else if (index === 2) {
-              // [新增] 跳轉到 AI 教練頁面
-              router.push('/(tabs)/recipes');
-              setTimeout(() => startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE), 500);
-          } else if (index === 3) {
-              // 停留在本頁，直接開始
-              scrollViewRef.current?.scrollTo({ y: 0, animated: false }); // 先回到頂部
-              startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE);
-          }
-      };
-
-      if (Platform.OS === 'ios') {
-          ActionSheetIOS.showActionSheetWithOptions(
-            {
-              options: options,
-              cancelButtonIndex: 4,
-              title: t('select_guide_topic', lang),
-            },
-            handleSelection
-          );
-      } else {
-          //Android 使用 Alert 作為替代
-          Alert.alert(
-              t('select_guide_topic', lang),
-              "",
-              [
-                  { text: t('tab_home', lang), onPress: () => handleSelection(0) },
-                  { text: t('tab_analysis', lang), onPress: () => handleSelection(1) },
-                  { text: t('tab_ai_coach', lang), onPress: () => handleSelection(2) },
-                  { text: t('tab_settings', lang), onPress: () => handleSelection(3) },
-                  { text: t('cancel', lang), style: "cancel" }
-              ]
-          );
+      if (index === 0) { // Home
+          router.push('/(tabs)');
+          setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
+      } else if (index === 1) { // Analysis
+          router.push('/(tabs)/analysis');
+          setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
+      } else if (index === 2) { // Recipes
+          router.push('/(tabs)/recipes');
+          setTimeout(() => startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE), 500);
+      } else if (index === 3) { // Settings
+          // 先捲動到頂部確保從頭開始
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          setTimeout(() => startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE), 300);
       }
   };
   
@@ -144,12 +113,13 @@ export default function ProfileScreen() {
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
             // 首次流程中自動觸發邏輯通常由 Context 控制，這裡可作為保險或單獨進入時觸發
             if (isFirst && !seen) {
-                 // 通常由 Context 的 navigate_profile 觸發，這裡保留 restartTutorial 供手動呼叫
+                 // 通常由 Context 的 navigate_profile 觸發，這裡保留作為備用
             }
         }
         check();
     }, [lang])
   );
+  
   
   const [apiKey, setApiKey] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemini-flash-latest");
@@ -207,16 +177,10 @@ export default function ProfileScreen() {
   useEffect(() => {
     async function initNotifications() {
       const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('Notification permissions denied');
-      }
-
+      if (status !== 'granted') console.log('Notification permissions denied');
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
+          name: 'default', importance: Notifications.AndroidImportance.MAX, vibrationPattern: [0, 250, 250, 250], lightColor: '#FF231F7C',
         });
       }
     }
@@ -474,53 +438,6 @@ export default function ProfileScreen() {
       }
   };
 
-  const renderConflictModal = () => {
-      if (!showConflictModal || conflictQueue.length === 0) return null;
-      const { local, remote } = conflictQueue[0];
-
-      return (
-          <Modal visible={showConflictModal} transparent animationType="slide" onRequestClose={() => {}}>
-              <View style={styles.modalOverlay}>
-                  <View style={[styles.modalContent, {backgroundColor: cardBackground, width: '90%', maxHeight:'85%'}]}>
-                      <ThemedText type="subtitle" style={{marginBottom: 8, color: '#FF9500'}}>{t('conflict_title', lang)}</ThemedText>
-                      <ThemedText style={{marginBottom: 16, fontSize: 14}}>{t('conflict_msg', lang)}</ThemedText>
-                      
-                      <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4}}>
-                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: tintColor, fontSize: 12}}>{t('local_version', lang)}</ThemedText>
-                          <View style={{width: 80}} />
-                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: '#FF3B30', fontSize: 12}}>{t('import_version', lang)}</ThemedText>
-                      </View>
-
-                      <ScrollView style={{maxHeight: 400, borderTopWidth:1, borderBottomWidth:1, borderColor: borderColor, marginVertical: 10}}>
-                          <ConflictRow label={t('food_name', lang)} val1={local.name} val2={remote.name} highlight={local.name !== remote.name} />
-                          <ConflictRow label={t('brand', lang)} val1={local.brand} val2={remote.brand} highlight={local.brand !== remote.brand} />
-                          <ConflictRow label={t('base_amount', lang)} val1={`${local.baseAmount}g`} val2={`${remote.baseAmount}g`} highlight={local.baseAmount !== remote.baseAmount} />
-                          <ConflictRow label={t('calories', lang)} val1={local.calories} val2={remote.calories} highlight={local.calories !== remote.calories} />
-                          <ConflictRow label={t('protein', lang)} val1={local.proteinG} val2={remote.proteinG} highlight={local.proteinG !== remote.proteinG} />
-                          <ConflictRow label={t('fat', lang)} val1={local.fatG} val2={remote.fatG} highlight={local.fatG !== remote.fatG} />
-                          <ConflictRow label={t('carbs', lang)} val1={local.carbsG} val2={remote.carbsG} highlight={local.carbsG !== remote.carbsG} />
-                          <ConflictRow label={t('sodium', lang)} val1={local.sodiumMg} val2={remote.sodiumMg} highlight={local.sodiumMg !== remote.sodiumMg} />
-                          <ConflictRow label={t('sugar', lang)} val1={local.sugarG} val2={remote.sugarG} highlight={local.sugarG !== remote.sugarG} />
-                          <ConflictRow label={t('fiber', lang)} val1={local.fiberG} val2={remote.fiberG} highlight={local.fiberG !== remote.fiberG} />
-                          <ConflictRow label={t('updated_at', lang)} val1={format(new Date(local.updatedAt), 'MM/dd HH:mm')} val2={remote.updatedAt ? format(new Date(remote.updatedAt), 'MM/dd HH:mm') : '-'} highlight />
-                      </ScrollView>
-
-                      <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
-                          <Pressable onPress={() => resolveConflict('keep')} style={[styles.btn, {flex:1, backgroundColor: '#8E8E93'}]}>
-                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('keep_local', lang)}</ThemedText>
-                          </Pressable>
-                          <Pressable onPress={() => resolveConflict('overwrite')} style={[styles.btn, {flex:1, backgroundColor: '#FF3B30'}]}>
-                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('overwrite', lang)}</ThemedText>
-                          </Pressable>
-                      </View>
-                      <ThemedText style={{textAlign:'center', marginTop:10, fontSize:12, color: textSecondary}}>
-                          {t('remaining', lang)}: {conflictQueue.length - 1}
-                      </ThemedText>
-                  </View>
-              </View>
-          </Modal>
-      );
-  };
 
   const ConflictRow = ({label, val1, val2, highlight}: any) => (
       <View style={{flexDirection:'row', paddingVertical: 8, borderBottomWidth: 0.5, borderColor: '#eee', alignItems: 'center'}}>
@@ -536,7 +453,6 @@ export default function ProfileScreen() {
         const s = await getSettings();
         if(s.apiKey) setApiKey(s.apiKey);
         if(s.model) setSelectedModel(s.model);
-        
         const result = await db.select().from(userProfiles).limit(1);
         if(result.length > 0) {
           const p = result[0];
@@ -544,7 +460,6 @@ export default function ProfileScreen() {
           setGender((p.gender as "male"|"female") || "male");
           if (p.birthDate && isValid(new Date(p.birthDate))) setBirthDate(new Date(p.birthDate));
           if (p.targetDate && isValid(new Date(p.targetDate))) setTargetDate(new Date(p.targetDate));
-          
           setHeightCm(p.heightCm?.toString() || "");
           setCurrentWeight(p.currentWeightKg?.toString() || "");
           setBodyFat(p.currentBodyFat?.toString() || "");
@@ -553,27 +468,22 @@ export default function ProfileScreen() {
           setActivityLevel(p.activityLevel || "sedentary");
           setTrainingGoal(p.goal || "maintain");
         }
-
         const reminderRes = await db.select().from(reminderSettings).limit(1);
         if (reminderRes.length > 0) {
-            const r = reminderRes[0];
-            const parseTime = (tStr: string | null, defaultH: number) => {
-               const d = new Date();
-               if(tStr) { const [h,m] = tStr.split(':'); d.setHours(parseInt(h), parseInt(m), 0, 0); }
-               else { d.setHours(defaultH, 0, 0, 0); }
-               return d;
-            };
-            setReminders({
-                breakfast: { enabled: !!r.breakfastReminderEnabled, time: parseTime(r.breakfastReminderTime, 8) },
-                lunch: { enabled: !!r.lunchReminderEnabled, time: parseTime(r.lunchReminderTime, 12) },
-                dinner: { enabled: !!r.dinnerReminderEnabled, time: parseTime(r.dinnerReminderTime, 18) },
-                water: { 
-                    enabled: !!r.waterReminderEnabled, 
-                    startTime: parseTime(r.waterReminderStartTime, 9),
-                    endTime: parseTime(r.waterReminderEndTime, 21),
-                    interval: r.waterReminderIntervalMinutes || 60 
-                }
-            });
+             // ... existing reminder parsing ...
+             const r = reminderRes[0];
+             const parseTime = (tStr: string | null, defaultH: number) => {
+                const d = new Date();
+                if(tStr) { const [h,m] = tStr.split(':'); d.setHours(parseInt(h), parseInt(m), 0, 0); }
+                else { d.setHours(defaultH, 0, 0, 0); }
+                return d;
+             };
+             setReminders({
+                 breakfast: { enabled: !!r.breakfastReminderEnabled, time: parseTime(r.breakfastReminderTime, 8) },
+                 lunch: { enabled: !!r.lunchReminderEnabled, time: parseTime(r.lunchReminderTime, 12) },
+                 dinner: { enabled: !!r.dinnerReminderEnabled, time: parseTime(r.dinnerReminderTime, 18) },
+                 water: { enabled: !!r.waterReminderEnabled, startTime: parseTime(r.waterReminderStartTime, 9), endTime: parseTime(r.waterReminderEndTime, 21), interval: r.waterReminderIntervalMinutes || 60 }
+             });
         }
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
@@ -660,66 +570,78 @@ export default function ProfileScreen() {
         let age = today.getFullYear() - safeBirth.getFullYear();
         const m = today.getMonth() - safeBirth.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < safeBirth.getDate())) age--;
-        
         let bmr = (10 * w) + (6.25 * h) - (5 * age) + (gender === 'male' ? 5 : -161);
         const activityMap: Record<string, number> = { 'sedentary': 1.2, 'lightly_active': 1.375, 'moderately_active': 1.55, 'very_active': 1.725, 'extra_active': 1.9 };
         const tdee = bmr * (activityMap[activityLevel] || 1.2);
-        
         let targetCal = tdee;
         if (trainingGoal === 'lose_weight') targetCal -= 500;
         else if (trainingGoal === 'gain_weight') targetCal += 300;
-
-        const profileData = {
-            gender, birthDate: format(safeBirth, "yyyy-MM-dd"), heightCm: h, currentWeightKg: w, 
-            currentBodyFat: parseFloat(bodyFat) || null, targetWeightKg: parseFloat(targetWeight) || null, 
-            targetBodyFat: parseFloat(targetBodyFat) || null, targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null,
-            activityLevel, goal: trainingGoal, dailyCalorieTarget: Math.round(targetCal), updatedAt: new Date()
-        };
-
+        const profileData = { gender, birthDate: format(safeBirth, "yyyy-MM-dd"), heightCm: h, currentWeightKg: w, currentBodyFat: parseFloat(bodyFat) || null, targetWeightKg: parseFloat(targetWeight) || null, targetBodyFat: parseFloat(targetBodyFat) || null, targetDate: targetDate ? format(targetDate, "yyyy-MM-dd") : null, activityLevel, goal: trainingGoal, dailyCalorieTarget: Math.round(targetCal), updatedAt: new Date() };
         if (profileId) await db.update(userProfiles).set(profileData).where(eq(userProfiles.id, profileId));
         else await db.insert(userProfiles).values(profileData);
-
+        // ... reminders save ...
         const fmtTime = (d: Date) => format(d, 'HH:mm');
-        const reminderData = {
-            breakfastReminderEnabled: reminders.breakfast.enabled,
-            breakfastReminderTime: fmtTime(reminders.breakfast.time),
-            lunchReminderEnabled: reminders.lunch.enabled,
-            lunchReminderTime: fmtTime(reminders.lunch.time),
-            dinnerReminderEnabled: reminders.dinner.enabled,
-            dinnerReminderTime: fmtTime(reminders.dinner.time),
-            waterReminderEnabled: reminders.water.enabled,
-            waterReminderStartTime: fmtTime(reminders.water.startTime),
-            waterReminderEndTime: fmtTime(reminders.water.endTime),
-            waterReminderIntervalMinutes: reminders.water.interval,
-        };
-        
+        const reminderData = { breakfastReminderEnabled: reminders.breakfast.enabled, breakfastReminderTime: fmtTime(reminders.breakfast.time), lunchReminderEnabled: reminders.lunch.enabled, lunchReminderTime: fmtTime(reminders.lunch.time), dinnerReminderEnabled: reminders.dinner.enabled, dinnerReminderTime: fmtTime(reminders.dinner.time), waterReminderEnabled: reminders.water.enabled, waterReminderStartTime: fmtTime(reminders.water.startTime), waterReminderEndTime: fmtTime(reminders.water.endTime), waterReminderIntervalMinutes: reminders.water.interval };
         await db.delete(reminderSettings);
         await db.insert(reminderSettings).values(reminderData);
-        
         await scheduleLocalNotifications();
-
         Alert.alert(t('save_settings', lang), t('success', lang));
-    } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } 
-    finally { setLoading(false); }
+    } catch (e) { console.error(e); Alert.alert(t('error', lang), "Failed"); } finally { setLoading(false); }
   };
 
   const onBirthDateChange = (event: any, selectedDate?: Date) => { setShowDatePicker(false); if (selectedDate) setBirthDate(selectedDate); };
   const onTargetDateChange = (event: any, selectedDate?: Date) => { setShowTargetDatePicker(false); if (selectedDate) setTargetDate(selectedDate); };
-  
-  const onTimeChange = (type: 'breakfast'|'lunch'|'dinner'|'waterStart'|'waterEnd', event: any, date?: Date) => {
-      setShowTimePicker(null);
-      if (date) {
-          if (type === 'waterStart') {
-              setReminders(prev => ({...prev, water: {...prev.water, startTime: date}}));
-          } else if (type === 'waterEnd') {
-              setReminders(prev => ({...prev, water: {...prev.water, endTime: date}}));
-          } else {
-              setReminders(prev => ({...prev, [type]: {...prev[type as 'breakfast'], time: date}}));
-          }
-      }
-  };
+  const onTimeChange = (type: 'breakfast'|'lunch'|'dinner'|'waterStart'|'waterEnd', event: any, date?: Date) => { setShowTimePicker(null); if (date) { if (type === 'waterStart') setReminders(p=>({...p,water:{...p.water,startTime:date}})); else if (type === 'waterEnd') setReminders(p=>({...p,water:{...p.water,endTime:date}})); else setReminders(p=>({...p,[type]:{...p[type as 'breakfast'],time:date}})); } };
 
   if (loading) return <View style={[styles.container, {backgroundColor, justifyContent:'center', alignItems: 'center'}]}><ActivityIndicator size="large"/></View>;
+  // --- Render 衝突 Modal (保持原樣) ---
+  const renderConflictModal = () => {
+      if (!showConflictModal || conflictQueue.length === 0) return null;
+      const { local, remote } = conflictQueue[0];
+
+      return (
+          <Modal visible={showConflictModal} transparent animationType="slide" onRequestClose={() => {}}>
+              <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, {backgroundColor: cardBackground, width: '90%', maxHeight:'85%'}]}>
+                      <ThemedText type="subtitle" style={{marginBottom: 8, color: '#FF9500'}}>{t('conflict_title', lang)}</ThemedText>
+                      <ThemedText style={{marginBottom: 16, fontSize: 14}}>{t('conflict_msg', lang)}</ThemedText>
+                      
+                      <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4}}>
+                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: tintColor, fontSize: 12}}>{t('local_version', lang)}</ThemedText>
+                          <View style={{width: 80}} />
+                          <ThemedText style={{flex:1, fontWeight:'bold', textAlign:'center', color: '#FF3B30', fontSize: 12}}>{t('import_version', lang)}</ThemedText>
+                      </View>
+
+                      <ScrollView style={{maxHeight: 400, borderTopWidth:1, borderBottomWidth:1, borderColor: borderColor, marginVertical: 10}}>
+                          <ConflictRow label={t('food_name', lang)} val1={local.name} val2={remote.name} highlight={local.name !== remote.name} />
+                          <ConflictRow label={t('brand', lang)} val1={local.brand} val2={remote.brand} highlight={local.brand !== remote.brand} />
+                          <ConflictRow label={t('base_amount', lang)} val1={`${local.baseAmount}g`} val2={`${remote.baseAmount}g`} highlight={local.baseAmount !== remote.baseAmount} />
+                          <ConflictRow label={t('calories', lang)} val1={local.calories} val2={remote.calories} highlight={local.calories !== remote.calories} />
+                          <ConflictRow label={t('protein', lang)} val1={local.proteinG} val2={remote.proteinG} highlight={local.proteinG !== remote.proteinG} />
+                          <ConflictRow label={t('fat', lang)} val1={local.fatG} val2={remote.fatG} highlight={local.fatG !== remote.fatG} />
+                          <ConflictRow label={t('carbs', lang)} val1={local.carbsG} val2={remote.carbsG} highlight={local.carbsG !== remote.carbsG} />
+                          <ConflictRow label={t('sodium', lang)} val1={local.sodiumMg} val2={remote.sodiumMg} highlight={local.sodiumMg !== remote.sodiumMg} />
+                          <ConflictRow label={t('sugar', lang)} val1={local.sugarG} val2={remote.sugarG} highlight={local.sugarG !== remote.sugarG} />
+                          <ConflictRow label={t('fiber', lang)} val1={local.fiberG} val2={remote.fiberG} highlight={local.fiberG !== remote.fiberG} />
+                          <ConflictRow label={t('updated_at', lang)} val1={format(new Date(local.updatedAt), 'MM/dd HH:mm')} val2={remote.updatedAt ? format(new Date(remote.updatedAt), 'MM/dd HH:mm') : '-'} highlight />
+                      </ScrollView>
+
+                      <View style={{flexDirection: 'row', gap: 10, marginTop: 10}}>
+                          <Pressable onPress={() => resolveConflict('keep')} style={[styles.btn, {flex:1, backgroundColor: '#8E8E93'}]}>
+                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('keep_local', lang)}</ThemedText>
+                          </Pressable>
+                          <Pressable onPress={() => resolveConflict('overwrite')} style={[styles.btn, {flex:1, backgroundColor: '#FF3B30'}]}>
+                              <ThemedText style={{color: 'white', fontWeight:'600'}}>{t('overwrite', lang)}</ThemedText>
+                          </Pressable>
+                      </View>
+                      <ThemedText style={{textAlign:'center', marginTop:10, fontSize:12, color: textSecondary}}>
+                          {t('remaining', lang)}: {conflictQueue.length - 1}
+                      </ThemedText>
+                  </View>
+              </View>
+          </Modal>
+      );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -731,29 +653,18 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* [修改] 綁定 ref */}
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* AI Settings */}
-         <TutorialTarget targetKey="profile_ai">
+         <TutorialTarget targetKey="profile_ai" adjustment={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_ai'] = y}>
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
+                {/* ... AI Inputs ... */}
                 <View style={{marginTop:12}}>
                   <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
-                  <TextInput 
-                      style={[styles.input, {color: textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} 
-                      value={apiKey} 
-                      onChangeText={setApiKey} 
-                      secureTextEntry 
-                      placeholder="AI Studio Key..." 
-                      placeholderTextColor="#999" 
-                  />
-                  <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}>
-                      <ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText>
-                  </Pressable>
+                  <TextInput style={[styles.input, {color: textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
+                  <Pressable onPress={() => setShowApiHelpModal(true)} style={{alignSelf: 'flex-end', marginTop: 8}}><ThemedText style={{fontSize:12, color: tintColor, textDecorationLine:'underline'}}>{t('how_to_get_key', lang)}</ThemedText></Pressable>
                 </View>
-                <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>
-                    {testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white', fontWeight:'600'}}>{t('test_key', lang)}</ThemedText>}
-                </Pressable>
+                <Pressable onPress={handleTestKey} disabled={testingKey || !apiKey} style={[styles.btn, {marginTop:12, padding:10, backgroundColor: (!apiKey || testingKey) ? '#ccc' : tintColor}]}>{testingKey ? <ActivityIndicator color="white"/> : <ThemedText style={{color:'white', fontWeight:'600'}}>{t('test_key', lang)}</ThemedText>}</Pressable>
                 <View style={{marginTop:12}}>
                     <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:4}}>{t('current_model', lang)}</ThemedText>
                     <Pressable style={[styles.input, {justifyContent:'center', borderColor, backgroundColor: inputBackground, borderWidth: 0}]} onPress={() => modelList.length > 0 ? setShowModelPicker(true) : Alert.alert(t('tip', lang), t('test_key_first', lang) || "Test Key First")}>
@@ -876,7 +787,11 @@ export default function ProfileScreen() {
          </View>
 
          {/* Basic Info */}
-         <TutorialTarget targetKey="profile_basic">
+         <TutorialTarget 
+            targetKey="profile_basic" 
+            adjustment={{ offsetY: -5 }}
+            onMeasure={(y) => targetPositions.current['profile_basic'] = y}
+         >
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                 <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
                 <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
@@ -925,7 +840,10 @@ export default function ProfileScreen() {
                  </View>
 
                 {/* 目標設定區 */}
-                <TutorialTarget targetKey="profile_goals">
+                <TutorialTarget 
+                    targetKey="profile_goals"
+                    onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y}
+                >
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
                         <View style={[styles.row, {marginBottom: 12}]}>
@@ -1001,7 +919,11 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* Save Button */}
-         <TutorialTarget targetKey="profile_save">
+         <TutorialTarget 
+            targetKey="profile_save" 
+            adjustment={{ heightAdd: 5 }}
+            onMeasure={(y) => targetPositions.current['profile_save'] = y}
+         >
              <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
                 <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
              </Pressable>
@@ -1017,16 +939,38 @@ export default function ProfileScreen() {
          </Pressable>
       </ScrollView>
 
+      {/* [新增] 自訂 Guide Menu Modal (取代 ActionSheet/Alert) */}
+      <Modal visible={showGuideMenuModal} transparent animationType="fade" onRequestClose={() => setShowGuideMenuModal(false)}>
+          <Pressable style={styles.modalOverlay} onPress={() => setShowGuideMenuModal(false)}>
+              <View style={[styles.modalContent, {backgroundColor: cardBackground, width: '80%'}]}>
+                  <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center'}}>{t('select_guide_topic', lang)}</ThemedText>
+                  
+                  <Pressable onPress={() => handleGuideSelection(0)} style={styles.menuItem}>
+                      <ThemedText style={{color: textColor}}>{t('tab_home', lang)}</ThemedText>
+                  </Pressable>
+                  <Pressable onPress={() => handleGuideSelection(1)} style={styles.menuItem}>
+                      <ThemedText style={{color: textColor}}>{t('tab_analysis', lang)}</ThemedText>
+                  </Pressable>
+                  <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}>
+                      <ThemedText style={{color: textColor}}>{t('tab_recipes', lang)}</ThemedText>
+                  </Pressable>
+                  <Pressable onPress={() => handleGuideSelection(3)} style={styles.menuItem}>
+                      <ThemedText style={{color: textColor}}>{t('tab_settings', lang)}</ThemedText>
+                  </Pressable>
+                  
+                  <Pressable onPress={() => setShowGuideMenuModal(false)} style={[styles.menuItem, {borderBottomWidth: 0, marginTop: 8}]}>
+                      <ThemedText style={{color: '#FF3B30', fontWeight: 'bold'}}>{t('cancel', lang)}</ThemedText>
+                  </Pressable>
+              </View>
+          </Pressable>
+      </Modal>
+      
       {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, {backgroundColor: cardBackground}]}>
             <ThemedText type="subtitle" style={{marginBottom:10}}>{t('language', lang)}</ThemedText>
-            {LANGUAGES.map(l => (
-                <Pressable key={l.code} onPress={()=>{ setAppLanguage(l.code); setShowLangPicker(false); }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}>
-                    <ThemedText style={{color: lang===l.code?tintColor:textColor, fontWeight: lang===l.code?'bold':'normal'}}>{l.label}</ThemedText>
-                </Pressable>
-            ))}
+            {LANGUAGES.map(l => (<Pressable key={l.code} onPress={()=>{ setAppLanguage(l.code); setShowLangPicker(false); }} style={{padding:15, borderBottomWidth:1, borderColor:'#eee'}}><ThemedText style={{color: lang===l.code?tintColor:textColor, fontWeight: lang===l.code?'bold':'normal'}}>{l.label}</ThemedText></Pressable>))}
             <Pressable onPress={()=>setShowLangPicker(false)} style={{padding:15, alignItems:'center'}}><ThemedText style={{color:textSecondary}}>{t('cancel', lang)}</ThemedText></Pressable>
           </View>
         </View>
@@ -1108,8 +1052,20 @@ const styles = StyleSheet.create({
   listOption: { padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   langBtn: { flexDirection: 'row', alignItems: 'center', padding: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 20 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 30 },
+  
+  // [修正] 增加 alignItems: 'center' 確保置中
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 30 },
   modalContent: { padding: 20, borderRadius: 16 },
+
+  // [新增] 補回遺漏的 menuItem 樣式
+  menuItem: { 
+      paddingVertical: 16, 
+      borderBottomWidth: 1, 
+      borderColor: '#eee', 
+      alignItems: 'center',
+      width: '100%' 
+  },
+  
   reminderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f0f0f0' },
   rowBetween: { flexDirection:'row', justifyContent:'space-between', alignItems:'center'}
 });

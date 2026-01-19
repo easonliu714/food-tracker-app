@@ -36,7 +36,7 @@ import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/sc
 
 import { initHealthConnect, getHealthData } from "@/lib/health";
 import { ActivityIcon, ACTIVITY_RAW } from '@/app/activity-editor'; 
-
+// [修改] 引入 TutorialContext 中需要的 onScrollRequest
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
@@ -52,31 +52,27 @@ export default function HomeScreen() {
   const lang = useLanguage();
   const dateLocale = LOCALE_MAP[lang] || enUS;
   
+  // [新增] 用於深色模式的軌道顏色 (淺灰 vs 深灰)
+  const isDark = useColorScheme() === 'dark';
+  const ringTrackColor = isDark ? '#333333' : '#E5E5EA';
+
   // ScrollView Ref 供自動捲動使用
   const scrollViewRef = useRef<ScrollView>(null);
-  const { startScenario, userName, activeScenario, currentStepIndex } = useTutorial();
+  
+  // [修改] 取得 onScrollRequest，並建立位置紀錄 ref
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial();
+  const targetPositions = useRef<Record<string, number>>({});
 
-  // [修改] 監聽引導步驟，精確捲動
+  // [修改] 改用 onScrollRequest 監聽導覽步驟，精確捲動
   useEffect(() => {
-    if (activeScenario === 'HOME_GUIDE' && scrollViewRef.current) {
-       // 根據 HOME_GUIDE 的步驟順序定義捲動位置 (Y軸)
-       // 0: Intro (Top)
-       // 1: Metrics (約 10px 處)
-       // 2: Water (約 100px 處)
-       // 3: Energy (約 200px 處)
-       // 4: Actions (Bottom)
-       
-       let yPos = 0;
-       if (currentStepIndex <= 1) yPos = 10;
-       else if (currentStepIndex === 2) yPos = 100;
-       else if (currentStepIndex === 3) yPos = 200;
-       else if (currentStepIndex >= 4) {
-           scrollViewRef.current.scrollToEnd({ animated: true });
-           return;
-       }
-       scrollViewRef.current.scrollTo({ y: yPos, animated: true });
-    }
-  }, [currentStepIndex, activeScenario]);
+      onScrollRequest((targetKey) => {
+          const y = targetPositions.current[targetKey];
+          if (y !== undefined && scrollViewRef.current) {
+              // 扣除 50px 緩衝，避免貼頂
+              scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
+          }
+      });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,8 +80,8 @@ export default function HomeScreen() {
             if (activeScenario === 'HOME_GUIDE') return;
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+            // 確保只在首次安裝且未看過時觸發，且當前無其他劇本執行中
             if (isFirst && !seen && !activeScenario) {
-                // [修改] 使用集中管理的腳本
                 const allSteps = getTutorialSteps(lang, userName);
                 startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
             }
@@ -494,7 +490,8 @@ export default function HomeScreen() {
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
   const renderBodyMetricsCard = () => (
-    <ThemedView style={[styles.card, { paddingVertical: 20 }]}> 
+    // [修改] style 加入 backgroundColor: theme.cardBackground
+    <ThemedView style={[styles.card, { paddingVertical: 20, backgroundColor: theme.cardBackground }]}> 
       <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
             <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
@@ -516,7 +513,8 @@ export default function HomeScreen() {
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
                 <TextInput 
-                    style={[styles.metricInput, {fontSize: 16, color:theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
+                    // [修改] 確保 TextInput 文字顏色適應主題
+                    style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
                     value={weight} 
                     onChangeText={setWeight} 
                     placeholder="--" 
@@ -529,7 +527,7 @@ export default function HomeScreen() {
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('body_fat', lang)}</ThemedText>
                 <TextInput 
-                    style={[styles.metricInput, {fontSize: 16, color:theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
+                    style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
                     value={bodyFat} 
                     onChangeText={setBodyFat} 
                     placeholder="--" 
@@ -547,7 +545,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={{borderTopWidth:1, borderColor:'#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
+      <View style={{borderTopWidth:1, borderColor: theme.border || '#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
           <View style={{flexDirection:'row', alignItems:'center'}}>
               <Ionicons name="footsteps" size={18} color="#FF9500"/>
               <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSteps} {t('steps', lang) || "steps"}</ThemedText>
@@ -567,7 +565,8 @@ export default function HomeScreen() {
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
 
       return (
-          <ThemedView style={styles.card}>
+          // [修改] style 加入 backgroundColor: theme.cardBackground
+          <ThemedView style={[styles.card, { backgroundColor: theme.cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
                   <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
                   <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
@@ -623,10 +622,12 @@ export default function HomeScreen() {
         <View style={{flexDirection:'row', marginBottom:20}}>
             <View style={{flex:1}}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}><ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText></View>
-                <View style={styles.barBg}><View style={[styles.barFill, {width:`${intakePct*100}%`, backgroundColor:'#34C759'}]}/></View>
-                <View style={[styles.barBg, {marginTop:8}]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
+                {/* [修改] Bar 背景色改用 ringTrackColor */}
+                <View style={[styles.barBg, { backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${intakePct*100}%`, backgroundColor:'#34C759'}]}/></View>
+                <View style={[styles.barBg, {marginTop:8, backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
             </View>
             <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
+                {/* ... (文字內容保持不變) ... */}
                 <ThemedText style={{fontSize:12, color:'#888'}}>{t('intake_target', lang)}: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
                 <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}: -{Math.round(burnedCalories)}</ThemedText>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}><ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText><ThemedText type="title">{netPct}%</ThemedText></View>
@@ -644,7 +645,8 @@ export default function HomeScreen() {
 
   const renderMacroRing = (label:string, val:number, target:number, color:string, key: string, unit="g") => {
       const realPct = target > 0 ? (val/target)*100 : 0; const visualPct = Math.min(realPct, 100); 
-      return (<TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}><View pointerEvents="none"><PieChart data={[{value: visualPct, color}, {value: 100-visualPct, color:'#E5E5EA'}]} donut radius={32} innerRadius={24} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}/></View><ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText></TouchableOpacity>);
+      // [修改] PieChart track color 改用 ringTrackColor
+      return (<TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}><View pointerEvents="none"><PieChart data={[{value: visualPct, color}, {value: 100-visualPct, color: ringTrackColor }]} donut radius={32} innerRadius={24} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}/></View><ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText></TouchableOpacity>);
   };
 
   const renderMacroDetailModal = () => { if (!selectedMacro) return null; const keyMap: any = {'protein': 'totalProteinG','fat': 'totalFatG','carbs': 'totalCarbsG','sodium': 'totalSodiumMg'}; const dbKey = keyMap[selectedMacro.key]; const sortedLogs = allDailyLogs.filter(l => (l[dbKey] || 0) > 0).sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0)); const totalVal = sortedLogs.reduce((sum, item) => sum + (item[dbKey] || 0), 0); return (<Modal visible={!!selectedMacro} transparent animationType="slide" onRequestClose={()=>setSelectedMacro(null)}><View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor: theme.cardBackground, maxHeight: '60%'}]}><View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16}}><ThemedText type="subtitle">{selectedMacro.label} {t('analysis', lang)}</ThemedText><TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity></View><ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>{t('total', lang)}: {Math.round(totalVal)} {selectedMacro.unit}</ThemedText><ScrollView>{sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : sortedLogs.map((log, idx) => { const val = log[dbKey] || 0; const pct = totalVal > 0 ? (val / totalVal * 100).toFixed(1) : "0"; return (<View key={idx} style={{flexDirection:'row', justifyContent:'space-between', paddingVertical:10, borderBottomWidth:1, borderColor:'#eee'}}><View style={{flex:1}}><ThemedText>{log.foodName}</ThemedText><View style={{width: '100%', height:4, backgroundColor:'#eee', marginTop:4, borderRadius:2}}><View style={{width: `${pct}%`, backgroundColor: theme.tint, height:'100%', borderRadius:2}}/></View></View><View style={{alignItems:'flex-end', marginLeft:10}}><ThemedText style={{fontWeight:'bold'}}>{Math.round(val)} {selectedMacro.unit}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{pct}%</ThemedText></View></View>);})}</ScrollView></View></View></Modal>);};
@@ -656,26 +658,26 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      {/* [修改] 綁定 ref */}
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         
-        <TutorialTarget targetKey="home_metrics">
+        {/* [修改] 加入 onMeasure 紀錄位置，供自動捲動使用 */}
+        <TutorialTarget targetKey="home_metrics" onMeasure={(y) => targetPositions.current['home_metrics'] = y}>
             {renderBodyMetricsCard()}
         </TutorialTarget>
 
-        <TutorialTarget targetKey="home_water">
+        <TutorialTarget targetKey="home_water" onMeasure={(y) => targetPositions.current['home_water'] = y}>
             {renderWaterSection()}
         </TutorialTarget>
 
-        <TutorialTarget targetKey="home_energy">
+        <TutorialTarget targetKey="home_energy" onMeasure={(y) => targetPositions.current['home_energy'] = y}>
             {renderEnergySection()}
         </TutorialTarget>
 
         {renderQuickAdd()}
         
         <View style={styles.recordSection}>
-            <TutorialTarget targetKey="home_actions">
+            <TutorialTarget targetKey="home_actions" onMeasure={(y) => targetPositions.current['home_actions'] = y}>
                <View style={styles.quickActionRow}>
                     <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
                     <ActionButton icon="barcode" label={t('scan_barcode', lang)} onPress={() => router.push("/barcode-scanner")} color="#007AFF" />
@@ -751,10 +753,11 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 40 },
   headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   dateDisplay: { alignItems: "center" },
-  card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4, backgroundColor:'white' },
+  // [修改] 移除 backgroundColor: 'white'，改由 component inline style 動態控制
+  card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4 }, 
   metricInput: { width: 70, fontSize: 18, fontWeight: "600", textAlign: "center", paddingVertical: 8, paddingHorizontal: 4 }, 
   sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
-  barBg: { height: 12, backgroundColor: "#E5E5EA", borderRadius: 6, overflow: "hidden" },
+  barBg: { height: 12, borderRadius: 6, overflow: "hidden" }, // [修改] 移除 backgroundColor (改為 inline)
   barFill: { height: "100%", borderRadius: 6 },
   recordSection: { marginTop: 24, paddingHorizontal: 16 },
   quickActionRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },

@@ -1,101 +1,81 @@
-import React from "react";
-import { View, StyleSheet } from "react-native";
-import Svg, { Circle } from "react-native-svg";
-import { ThemedText } from "./themed-text";
-import { useThemeColor } from "@/hooks/use-theme-color";
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Animated, TextInput, Text } from 'react-native';
+import Svg, { Circle, G } from 'react-native-svg';
 
 interface ProgressRingProps {
-  progress: number; // 0 to 1
-  size?: number;
-  strokeWidth?: number;
-  current: number;
-  target: number;
-  unit?: string;
+  radius: number;
+  stroke: number;
+  progress: number;
+  color: string;
+  trackColor?: string;
+  textColor?: string; // [新增]
+  children?: React.ReactNode;
 }
 
-export function ProgressRing({
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+export default function ProgressRing({
+  radius,
+  stroke,
   progress,
-  size = 200,
-  strokeWidth = 16,
-  current,
-  target,
-  unit = "kcal",
+  color,
+  trackColor = '#f2f2f2',
+  textColor = '#000', // [新增] 預設黑色，但會被覆寫
+  children,
 }: ProgressRingProps) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference - Math.min(progress, 1) * circumference;
+  const normalizedRadius = radius - stroke / 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
+  const animatedValue = useRef(new Animated.Value(0)).current;
 
-  const tintColor = useThemeColor({}, "tint");
-  const textColor = useThemeColor({}, "text");
-  const textSecondary = useThemeColor({}, "textSecondary");
-
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: progress,
+      duration: 1000,
+      useNativeDriver: true, // Circle props usually need standard animated or specialized library, ensuring compat.
+      // Note: Layout animation for SVG props might behave differently on Native.
+      // If native driver issues occur with SVG props, set to false.
+      // For simple implementation, usually false for width/stroke props, 
+      // but here we are animating strokeDashoffset via style or props? 
+      // React Native SVG supports Animated props.
+    }).start();
+  }, [progress]);
+  
+  // For simpler logic without complex reanimated integration:
+  const strokeDashoffset = circumference - (progress * circumference); // static for now to ensure stability, or use animatedValue with proper interpolation if setup allows.
+  
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size}>
-        {/* Background circle */}
-        <Circle
-          stroke="#E5E5EA"
-          fill="none"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-        />
-        {/* Progress circle */}
-        <Circle
-          stroke={tintColor}
-          fill="none"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
-        />
+    <View style={{ width: radius * 2, height: radius * 2, justifyContent: 'center', alignItems: 'center' }}>
+      <Svg
+        height={radius * 2}
+        width={radius * 2}
+        viewBox={`0 0 ${radius * 2} ${radius * 2}`}
+      >
+        <G rotation="-90" origin={`${radius}, ${radius}`}>
+          <Circle
+            cx={radius}
+            cy={radius}
+            r={normalizedRadius}
+            stroke={trackColor}
+            strokeWidth={stroke}
+            fill="transparent"
+          />
+          <Circle
+            cx={radius}
+            cy={radius}
+            r={normalizedRadius}
+            stroke={color}
+            strokeWidth={stroke}
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset} 
+            strokeLinecap="round"
+            fill="transparent"
+          />
+        </G>
       </Svg>
-      <View style={styles.textContainer}>
-        <ThemedText style={[styles.currentValue, { color: textColor }]}>
-          {current.toLocaleString()}
-        </ThemedText>
-        <ThemedText style={[styles.separator, { color: textSecondary }]}>/</ThemedText>
-        <ThemedText style={[styles.targetValue, { color: textSecondary }]}>
-          {target.toLocaleString()}
-        </ThemedText>
-        <ThemedText style={[styles.unit, { color: textSecondary }]}>{unit}</ThemedText>
+      <View style={StyleSheet.absoluteFillObject} justifyContent="center" alignItems="center">
+        {children} 
+        {/* 如果 children 沒有傳入，可以在這裡顯示預設文字並套用 textColor */}
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  textContainer: {
-    position: "absolute",
-    alignItems: "center",
-  },
-  currentValue: {
-    fontSize: 36,
-    fontWeight: "bold",
-    lineHeight: 42,
-  },
-  separator: {
-    fontSize: 20,
-    lineHeight: 24,
-    marginTop: -4,
-  },
-  targetValue: {
-    fontSize: 18,
-    lineHeight: 22,
-  },
-  unit: {
-    fontSize: 14,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-});
