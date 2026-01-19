@@ -9,7 +9,6 @@ export const LANGUAGES = [
   { code: 'zh-TW', label: '繁體中文' },
   { code: 'zh-CN', label: '简体中文' },
   { code: 'en', label: 'English' },
-  { code: 'zh-ch', label: '简体中文' },
   { code: 'ja', label: '日本語' },
   { code: 'ko', label: '한국어' },
 ];
@@ -346,19 +345,25 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_profile_restart_intro: "沒問題，讓我再為您介紹一次個人檔案頁面！",
 
     tutorial_home_intro: "歡迎來到首頁，{{name}}！這裡是你的每日健康儀表板。",
-    tutorial_home_metrics_hint: "這裡顯示你的身體數值，點擊睡眠可手動記錄，按 + 號記錄體重。",
+    tutorial_home_metrics_hint: "這裡顯示你的身體數值，點擊睡眠可手動記錄，按 + 號記錄體重和體脂率。",
     tutorial_home_water_hint: "記得多喝水！點擊 + 或 - 來記錄飲水量。",
     tutorial_home_energy_hint: "這是今日的熱量與營養攝取進度條，別超標囉！",
-    tutorial_home_actions_hint: "準備吃飯了嗎？點擊這裡拍照、掃描或手動記錄飲食！",
+    tutorial_home_actions_hint: "準備吃飯了嗎？點擊這裡拍照、掃描或手動記錄飲食！ 還有隨時動一動唷",
     
     tutorial_analysis_intro: "這裡是分析頁面，幫助你了解長期的健康趨勢。",
-    tutorial_analysis_chart_hint: "上方圖表顯示體重與體脂的變化曲線。",
-    tutorial_analysis_grid_hint: "下方是營養攝取的詳細分佈。",
+    tutorial_analysis_chart_hint: "下方圖表顯示體重與體脂的變化曲線。",
+    tutorial_analysis_grid_hint: "上方是營養攝取的詳細分佈。",
 
     tutorial_recipes_intro: "這裡是你的 AI 營養教練，隨時為你解答飲食疑問。",
     tutorial_recipes_input_hint: "在下方輸入你的問題，例如『冰箱剩番茄可以做什麼？』或『這餐熱量多少？』。",
-    tutorial_recipes_history_hint: "這裡會顯示你們的對話紀錄，長按可以複製或分享建議喔！",
+    tutorial_recipes_history_hint: "這裡會顯示你們的對話紀錄，長按可以複製或分享建議，也能匯出PDF喔！",
   
+    select_guide_topic: "選擇想了解的主題：",
+    skip_tutorial: "跳過教學",
+    next_step: "下一步",
+    prev_step: "上一步",
+    finish_tutorial: "完成教學",
+
   },
   // [新增] 簡體中文
   'zh-CN': {
@@ -688,18 +693,18 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_profile_restart_intro: "没问题，让我再为您介绍一次个人档案页面！",
 
     tutorial_home_intro: "欢迎来到首页，{{name}}！这里是你的每日健康仪表板。",
-    tutorial_home_metrics_hint: "这里显示你的身体数值，点击睡眠可手动记录，按 + 号记录体重。",
+    tutorial_home_metrics_hint: "这里显示你的身体数值，点击睡眠可手动记录，按 + 号记录体重和体脂率。",
     tutorial_home_water_hint: "记得多喝水！点击 + 或 - 来记录饮水量。",
     tutorial_home_energy_hint: "这是今日的热量与营养摄取进度条，别超标哦！",
-    tutorial_home_actions_hint: "准备吃饭了吗？点击这里拍照、扫码或手动记录饮食！",
+    tutorial_home_actions_hint: "准备吃饭了吗？点击这里拍照、扫描或手动记录饮食！ 还有随时动一动哦",
     
     tutorial_analysis_intro: "这里是分析页面，帮助你了解长期的健康趋势。",
-    tutorial_analysis_chart_hint: "上方图表显示体重与体脂的变化曲线。",
-    tutorial_analysis_grid_hint: "下方是营养摄取的详细分布。",
+    tutorial_analysis_chart_hint: "下方图表显示体重与体脂的变化曲线。",
+    tutorial_analysis_grid_hint: "上方是营养摄取的详细分布。",
 
     tutorial_recipes_intro: "这里是你的 AI 营养教练，随时为你解答饮食疑问。",
     tutorial_recipes_input_hint: "在下方输入你的问题，例如『冰箱剩番茄可以做什么？』或『这餐热量多少？』。",
-    tutorial_recipes_history_hint: "这里会显示你们的对话记录，长按可以复制或分享建议哦！",
+    tutorial_recipes_history_hint: "这里会显示你们的对话纪录，长按可以复制或分享建议，也能汇出PDF哦！",
   },
   'en': {
     // Tab Titles
@@ -1016,18 +1021,18 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_profile_restart_intro: "No problem, let me introduce the Profile page to you again!",
 
     tutorial_home_intro: "Welcome to the Home page, {{name}}! This is your daily health dashboard.",
-    tutorial_home_metrics_hint: "This shows your body metrics. Tap Sleep to manually log, press + to record weight.",
+    tutorial_home_metrics_hint: "This shows your body metrics. Tap Sleep to log manually, and press + to record weight and body fat.",
     tutorial_home_water_hint: "Remember to drink water! Tap + or - to log your intake.",
     tutorial_home_energy_hint: "This is today's calorie and nutrient intake progress bar. Don't exceed your limits!",
-    tutorial_home_actions_hint: "Ready to eat? Tap here to take photos, scan barcodes, or manually log your meals!",
+    tutorial_home_actions_hint: "Ready to eat? Tap here to take photos, scan, or log your meals manually! Also, remember to move around anytime.",
 
     tutorial_analysis_intro: "This is the Analysis page, helping you understand long-term health trends.",
-    tutorial_analysis_chart_hint: "The chart above shows weight and body fat trends.",
-    tutorial_analysis_grid_hint: "Below is a detailed breakdown of nutrient intake.",
+    tutorial_analysis_chart_hint: "The chart below shows weight and body fat trends.",
+    tutorial_analysis_grid_hint: "The grid above details nutrient intake distribution.",
 
     tutorial_recipes_intro: "This is your AI nutrition coach, ready to answer your dietary questions anytime.",
     tutorial_recipes_input_hint: "Type your questions below, like 'What can I make with leftover tomatoes?' or 'How many calories are in this meal?'.",
-    tutorial_recipes_history_hint: "This will show your conversation history. Long press to copy or share suggestions!",
+    tutorial_recipes_history_hint: "This shows your conversation history. Long press to copy or share suggestions, and you can export to PDF too!",
   },
   'ja': {
     tab_home: "ホーム", tab_analysis: "分析", tab_ai_coach: "AIコーチ", tab_settings: "設定",
@@ -1355,18 +1360,18 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_profile_restart_intro: "問題ありません。もう一度プロフィールページを紹介します！",
 
     tutorial_home_intro: "ホームページへようこそ、{{name}}さん！ここはあなたの日々の健康ダッシュボードです。",
-    tutorial_home_metrics_hint: "ここにはあなたの身体測定が表示されます。睡眠をタップして手動で記録し、+を押して体重を記録してください。",
+    tutorial_home_metrics_hint: "ここにはあなたの身体測定が表示されます。睡眠をタップして手動で記録し、+を押して体重と体脂肪率を記録してください。",
     tutorial_home_water_hint: "水分補給を忘れずに！+または-をタップして摂取量を記録してください。",
     tutorial_home_energy_hint: "これは今日のカロリーと栄養摂取の進捗バーです。制限を超えないようにしましょう！",
-    tutorial_home_actions_hint: "食事の準備はできましたか？ここをタップして写真を撮るか、バーコードをスキャンするか、食事を手動で記録してください！",
+    tutorial_home_actions_hint: "食事の準備はできましたか？ここをタップして写真を撮る、スキャンする、または手動で食事を記録してください！また、いつでも体を動かすことを忘れないでください。",
 
     tutorial_analysis_intro: "ここは分析ページで、長期的な健康傾向の理解を助けます。",
-    tutorial_analysis_chart_hint: "上のチャートは体重と体脂肪の傾向を示しています。",
-    tutorial_analysis_grid_hint: "下には栄養摂取の詳細な内訳があります。",
+    tutorial_analysis_chart_hint: "下のチャートは体重と体脂肪の傾向を示しています。",
+    tutorial_analysis_grid_hint: "上には栄養摂取の詳細な内訳があります。",
 
     tutorial_recipes_intro: "ここはあなたのAI栄養コーチで、いつでも食事に関する質問に答えます。",
     tutorial_recipes_input_hint: "以下に質問を入力してください。例えば、「余ったトマトで何が作れますか？」や「この食事のカロリーはどれくらいですか？」など。",
-    tutorial_recipes_history_hint: "ここにはあなたの会話履歴が表示されます。長押しして提案をコピーまたは共有できます！",
+    tutorial_recipes_history_hint: "これはあなたの会話履歴を示しています。長押しして提案をコピーまたは共有し、PDFにエクスポートすることもできます！",
   },
   'ko': {
     // Tab Titles
@@ -1684,21 +1689,21 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_profile_goals_hint: "목표 체중과 체지방률을 설정하세요. 저는 그것을 바탕으로 당신의 칼로리 필요량을 계획할 것입니다.",
     tutorial_profile_ai_hint: "가장 중요한 것은 여기에 Gemini API 키를 입력하고 테스트하는 것입니다. 이를 통해 제가 음식을 분석할 수 있게 됩니다.",
     tutorial_profile_save_hint: "설정이 완료되면 반드시 저장을 눌러주세요!",
-    tutorial_profile_restart_intro: "문제없어요. 다시 한 번 프로필 페이지를 소개할게요!",
+    tutorial_profile_restart_intro: "문제없어요. 프로필 페이지를 다시 소개해드릴게요!",
 
     tutorial_home_intro: "홈페이지에 오신 것을 환영합니다, {{name}}님! 여기는 당신의 일일 건강 대시보드입니다.",
-    tutorial_home_metrics_hint: "여기에는 당신의 신체 측정치가 표시됩니다. 수면을 탭하여 수동으로 기록하고, +를 눌러 체중을 기록하세요.",
+    tutorial_home_metrics_hint: "여기에는 당신의 신체 측정치가 표시됩니다. 수면을 탭하여 수동으로 기록하고, +를 눌러 체중과 체지방률을 기록하세요.",
     tutorial_home_water_hint: "수분 섭취를 잊지 마세요! + 또는 -를 탭하여 섭취량을 기록하세요.",
     tutorial_home_energy_hint: "이것은 오늘의 칼로리 및 영양 섭취 진행 바입니다. 한도를 초과하지 않도록 주의하세요!",
-    tutorial_home_actions_hint: "식사 준비가 되셨나요? 여기를 탭하여 사진을 찍거나, 바코드를 스캔하거나, 식사를 수동으로 기록하세요!",
+    tutorial_home_actions_hint: "식사 준비가 되셨나요? 여기를 탭하여 사진을 찍거나, 스캔하거나, 수동으로 식사를 기록하세요! 또한, 언제든지 몸을 움직이는 것을 잊지 마세요.",
 
     tutorial_analysis_intro: "여기는 분석 페이지로, 장기적인 건강 추세를 이해하는 데 도움을 줍니다.",
-    tutorial_analysis_chart_hint: "위의 차트는 체중 및 체지방 추세를 보여줍니다.",
-    tutorial_analysis_grid_hint: "아래에는 영양 섭취의 상세한 내역이 있습니다.",
+    tutorial_analysis_chart_hint: "아래 차트는 체중 및 체지방 추세를 보여줍니다.",
+    tutorial_analysis_grid_hint: "위에는 영양 섭취의 상세한 내역이 있습니다.",
 
     tutorial_recipes_intro: "여기는 당신의 AI 영양 코치로, 언제든지 식사 관련 질문에 답변해 드립니다.",
     tutorial_recipes_input_hint: "아래에 질문을 입력하세요. 예: '남은 토마토로 무엇을 만들 수 있나요?' 또는 '이 식사의 칼로리는 얼마인가요?' 등.",
-    tutorial_recipes_history_hint: "여기에는 당신의 대화 기록이 표시됩니다. 길게 눌러 제안을 복사하거나 공유할 수 있습니다!",
+    tutorial_recipes_history_hint: "이는 당신의 대화 기록을 보여줍니다. 길게 눌러 제안을 복사하거나 공유하고, PDF로 내보낼 수도 있습니다!",
   }
 };
 
@@ -1715,10 +1720,10 @@ const getDeviceLanguage = () => {
   
   // 簡單的對應邏輯
   if (deviceLang.includes('zh') && (deviceLang.includes('TW') || deviceLang.includes('HK'))) {
-    return 'zh-Hant';
+    return 'zh-TW'; // 繁體中文
   }
   if (deviceLang.includes('zh')) {
-    return 'zh-ch';
+    return 'zh-CN'; // 簡體中文
   }
   if (deviceLang.includes('ja')) return 'ja';
   if (deviceLang.includes('ko')) return 'ko';
@@ -1745,8 +1750,8 @@ export const setAppLanguage = (lang: string) => useLanguageStore.getState().setL
 
 // 5. 翻譯函式 t()
 export const t = (key: string, lang: string, params?: any) => {
-  // 容錯：若傳入的 lang 不在字典裡，回退到 en，再回退到 zh-Hant
-  const dict = TRANSLATIONS[lang] || TRANSLATIONS['en'] || TRANSLATIONS['zh-Hant'];
+  // 容錯：若傳入的 lang 不在字典裡，回退到 en，再回退到 zh-TW
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS['en'] || TRANSLATIONS['zh-TW'];
   
   let text = dict[key] || key; // 找不到就回傳 key 本身
 
@@ -1760,7 +1765,7 @@ export const t = (key: string, lang: string, params?: any) => {
 };
 
 // 版本履歷 (也可以放這裡)
-const LOGS_ZH = [
+const LOGS_TW = [
   {
     version: "V1.0.17",
     date: "2026-01-19",
@@ -2016,5 +2021,5 @@ const LOGS_KO = [
 ];
 
 export const getVersionLogs = (lang: string) => {
-    return lang === 'zh-TW' ? LOGS_ZH : lang === 'ja' ? LOGS_JP : lang === 'ko' ? LOGS_KO : LOGS_EN;
+    return lang === 'zh-TW' ? LOGS_TW : lang === 'zh-CN' ? LOGS_CN : lang === 'ja' ? LOGS_JP : lang === 'ko' ? LOGS_KO : LOGS_EN;
 };

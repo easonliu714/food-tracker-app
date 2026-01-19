@@ -27,8 +27,8 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   
   locales: {
-    "zh-Hant": "./locales/zh-Hant.json",
-    "zh-ch": "./locales/zh-ch.json",
+    "zh-TW": "./locales/zh-TW.json",
+    "zh-CN": "./locales/zh-CN.json",
     "en": "./locales/en.json",
     "ja": "./locales/ja.json",
     "ko": "./locales/ko.json"

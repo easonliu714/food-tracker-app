@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
-import { useState, useEffect, useCallback } from "react";
+// [修正] 在這裡補上 useRef
+import { useState, useEffect, useCallback, useRef } from "react"; 
 // [修正] 合併所有 react-native 的 import，移除重複的 Alert
 import { 
   ActivityIndicator, 
