@@ -1,11 +1,25 @@
 import { useRouter } from "expo-router";
-// [修正] 加入 useCallback
 import { useState, useEffect, useCallback } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Switch, Platform, Text } from "react-native";
+// [修正] 合併所有 react-native 的 import，移除重複的 Alert
+import { 
+  ActivityIndicator, 
+  Pressable, 
+  ScrollView, 
+  StyleSheet, 
+  TextInput, 
+  View, 
+  Alert, 
+  Modal, 
+  Linking, 
+  Switch, 
+  Platform, 
+  Text,
+  ActionSheetIOS // [新增] 確保 ActionSheetIOS 也被引入
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-// [修正] 加入 useFocusEffect
 import { useFocusEffect } from "expo-router";
+
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -23,12 +37,10 @@ import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 
 import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file-system/legacy';
-// [修改開始] 引入引導相關元件
+
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
-// [修改] 引入 Alert (用於選單) 和 centralized steps
-import { Alert, ActionSheetIOS, Platform } from "react-native";
 import { getTutorialSteps } from '@/constants/tutorial-steps';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
@@ -48,8 +60,8 @@ export default function ProfileScreen() {
   const { isAuthenticated } = useAuth();
   const lang = useLanguage();
   
-  // [修改開始] 引導邏輯
   const { startScenario, userName } = useTutorial();
+
   // [修改] 顯示功能選單
   const showGuideMenu = () => {
       const allSteps = getTutorialSteps(lang, userName);
@@ -101,16 +113,7 @@ export default function ProfileScreen() {
       }
   };
   
-  const restartTutorial = () => {
-      startScenario('PROFILE_GUIDE', [
-           { text: t('tutorial.profile_restart_intro', lang) },
-           { targetKey: 'profile_basic', text: t('tutorial.profile_basic_hint', lang) },
-           { targetKey: 'profile_goals', text: t('tutorial.profile_goals_hint', lang) },
-           { targetKey: 'profile_ai', text: t('tutorial.profile_ai_hint', lang) },
-           { targetKey: 'profile_save', text: t('tutorial.profile_save_hint', lang) }
-      ]);
-  };
-  
+  // 自動觸發 Profile 教學
   useFocusEffect(
     useCallback(() => {
         async function check() {
@@ -118,7 +121,7 @@ export default function ProfileScreen() {
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
             // 首次流程中自動觸發邏輯通常由 Context 控制，這裡可作為保險或單獨進入時觸發
             if (isFirst && !seen) {
-               // 這裡保留邏輯供未來擴充
+                 // 通常由 Context 的 navigate_profile 觸發，這裡保留 restartTutorial 供手動呼叫
             }
         }
         check();
@@ -145,7 +148,6 @@ export default function ProfileScreen() {
   const [activityLevel, setActivityLevel] = useState("sedentary");
   const [trainingGoal, setTrainingGoal] = useState("maintain");
 
-  // 提醒設定狀態
   const defaultTime = (h: number) => new Date(new Date().setHours(h, 0, 0, 0));
   const [reminders, setReminders] = useState({
       breakfast: { enabled: false, time: defaultTime(8) },
@@ -167,7 +169,6 @@ export default function ProfileScreen() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showApiHelpModal, setShowApiHelpModal] = useState(false);
 
-  // 衝突處理相關狀態
   const [conflictQueue, setConflictQueue] = useState<{local: any, remote: any}[]>([]);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [importStats, setImportStats] = useState({ added: 0, updated: 0, skipped: 0, identical: 0 });
@@ -178,7 +179,6 @@ export default function ProfileScreen() {
   const textColor = useThemeColor({}, "text");
   const textSecondary = useThemeColor({}, "textSecondary");
   const borderColor = useThemeColor({}, "border") || '#ccc';
-  // [修改開始] 取得新的 inputBackground
   const inputBackground = useThemeColor({}, "inputBackground");
 
   useEffect(() => {
@@ -200,7 +200,6 @@ export default function ProfileScreen() {
     initNotifications();
   }, []);
 
-  // 全資料庫備份
   const handleBackup = async () => {
       setLoading(true);
       try {
@@ -237,7 +236,6 @@ export default function ProfileScreen() {
       }
   };
 
-  // 全資料庫還原
   const handleRestore = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
@@ -288,7 +286,6 @@ export default function ProfileScreen() {
       } catch (e: any) { console.error("Restore Error:", e); Alert.alert(t('error', lang), "Restore failed"); setLoading(false); }
   };
 
-  // 僅匯出商品資料庫 (處理重複條碼只留最新)
   const handleExportProducts = async () => {
       setLoading(true);
       try {
@@ -338,7 +335,6 @@ export default function ProfileScreen() {
       }
   };
 
-  // 匯入商品資料庫 (包含詳細比對邏輯)
   const handleImportProducts = async () => {
       try {
           const result = await DocumentPicker.getDocumentAsync({ type: "application/json" });
@@ -372,7 +368,6 @@ export default function ProfileScreen() {
               const { id, ...itemData } = item; 
 
               if (localItem) {
-                  // 比對關鍵欄位以決定是否為「完全相同」
                   const checkFields = ['name', 'brand', 'baseAmount', 'calories', 'proteinG', 'fatG', 'carbsG', 'sodiumMg', 'sugarG', 'fiberG', 'saturatedFatG', 'transFatG'];
                   let isIdentical = true;
                   
@@ -386,10 +381,8 @@ export default function ProfileScreen() {
                   }
 
                   if (isIdentical) {
-                      console.log(`[Import] Identical item skipped: ${item.name} (${item.barcode})`);
                       identicalCount++;
                   } else {
-                      console.log(`[Import] Conflict found: ${item.name} (${item.barcode})`);
                       conflicts.push({ local: localItem, remote: itemData });
                   }
               } else {
@@ -397,13 +390,10 @@ export default function ProfileScreen() {
               }
           }
 
-          // 1. 寫入新增項目
           if (newItems.length > 0) {
               await db.insert(foodItems).values(newItems);
-              console.log(`[Import] Added ${newItems.length} new items.`);
           }
 
-          // 初始化統計數據
           const initialStats = {
               added: newItems.length,
               updated: 0,
@@ -412,12 +402,10 @@ export default function ProfileScreen() {
           };
           setImportStats(initialStats);
 
-          // 2. 處理衝突
           if (conflicts.length > 0) {
               setConflictQueue(conflicts);
               setShowConflictModal(true);
           } else {
-              // 若無衝突 (包含全部相同的情況)，直接顯示結果
               Alert.alert(t('import_complete', lang), 
                   t('import_stats_detail', lang, initialStats)
               );
@@ -431,7 +419,6 @@ export default function ProfileScreen() {
       }
   };
 
-  // 處理單一衝突的決策
   const resolveConflict = async (action: 'overwrite' | 'keep') => {
       const current = conflictQueue[0];
       if (!current) return;
@@ -451,14 +438,12 @@ export default function ProfileScreen() {
 
       if (nextQueue.length === 0) {
           setShowConflictModal(false);
-          // 使用 setTimeout 確保最後狀態已更新
           setTimeout(() => {
               const finalStats = {
                   ...importStats,
                   updated: importStats.updated + (action==='overwrite'?1:0),
                   skipped: importStats.skipped + (action==='keep'?1:0)
               };
-              
               Alert.alert(t('import_complete', lang), 
                   t('import_stats_detail', lang, finalStats)
               );
@@ -466,7 +451,6 @@ export default function ProfileScreen() {
       }
   };
 
-  // 衝突比對視窗 (包含所有項目)
   const renderConflictModal = () => {
       if (!showConflictModal || conflictQueue.length === 0) return null;
       const { local, remote } = conflictQueue[0];
@@ -726,7 +710,6 @@ export default function ProfileScreen() {
 
       <ScrollView style={{paddingHorizontal: 16}}>
          {/* AI Settings */}
-         {/* [修改開始] 包裹 AI 設定區 */}
          <TutorialTarget targetKey="profile_ai">
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
@@ -869,7 +852,6 @@ export default function ProfileScreen() {
          </View>
 
          {/* Basic Info */}
-         {/* [修改開始] 包裹基本資料區 */}
          <TutorialTarget targetKey="profile_basic">
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                 <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
@@ -918,7 +900,7 @@ export default function ProfileScreen() {
                     <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
                  </View>
 
-                {/* 包裹目標區 */}
+                {/* 目標設定區 */}
                 <TutorialTarget targetKey="profile_goals">
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
@@ -993,21 +975,18 @@ export default function ProfileScreen() {
 
              </View>
          </TutorialTarget>
-         {/* [修改結束] */}
-         
-         {/* [修改開始] 包裹儲存按鈕 */}
+
+         {/* Save Button */}
          <TutorialTarget targetKey="profile_save">
              <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
                 <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
              </Pressable>
          </TutorialTarget>
-         {/* [修改結束] */}
-
-         {/* [修改開始] 新增功能說明按鈕 */}
-         <Pressable onPress={restartTutorial} style={{padding: 16, alignItems:'center', marginTop: 10}}>
+         
+         {/* 功能說明按鈕 */}
+         <Pressable onPress={showGuideMenu} style={{padding: 16, alignItems:'center', marginTop: 10}}>
              <ThemedText style={{color: tintColor, fontSize: 14}}>❓ {t('feature_guide', lang) || "Feature Guide"}</ThemedText>
          </Pressable>
-         {/* [修改結束] */}
 
          <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center', marginBottom: 40}}>
              <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
@@ -1099,7 +1078,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
   card: { padding: 20, borderRadius: 16 },
-  // [修改開始] input 樣式: 移除固定 height: 48，改用 minHeight: 48，確保大字體可以撐開
   input: { borderRadius: 10, padding: 12, fontSize: 16, minHeight: 48, flexDirection:'row', alignItems:'center' },
   row: { flexDirection: 'row' },
   option: { flex: 1, padding: 10, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', borderRadius: 8, marginHorizontal: 2 },
