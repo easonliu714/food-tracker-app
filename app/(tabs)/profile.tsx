@@ -1,8 +1,11 @@
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+// [修正] 加入 useCallback
+import { useState, useEffect, useCallback } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, Alert, Modal, Linking, Switch, Platform, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+// [修正] 加入 useFocusEffect
+import { useFocusEffect } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { useAuth } from "@/hooks/use-auth";
 import { useThemeColor } from "@/hooks/use-theme-color";
@@ -24,6 +27,9 @@ import { cacheDirectory, writeAsStringAsync, readAsStringAsync } from 'expo-file
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
+// [修改] 引入 Alert (用於選單) 和 centralized steps
+import { Alert, ActionSheetIOS, Platform } from "react-native";
+import { getTutorialSteps } from '@/constants/tutorial-steps';
 
 const ACTIVITY_IDS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'];
 const GOAL_IDS = ['lose_weight', 'maintain', 'gain_weight', 'recomp', 'blood_sugar'];
@@ -43,8 +49,58 @@ export default function ProfileScreen() {
   const lang = useLanguage();
   
   // [修改開始] 引導邏輯
-  const { startScenario } = useTutorial();
+  const { startScenario, userName } = useTutorial();
+  // [修改] 顯示功能選單
+  const showGuideMenu = () => {
+      const allSteps = getTutorialSteps(lang, userName);
+      
+      const options = [
+          t('tab_home', lang),      // 0
+          t('tab_analysis', lang),  // 1
+          t('tab_settings', lang),  // 2
+          t('cancel', lang)         // 3
+      ];
 
+      if (Platform.OS === 'ios') {
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              options: options,
+              cancelButtonIndex: 3,
+              title: t('select_guide_topic', lang),
+            },
+            (buttonIndex) => {
+              if (buttonIndex === 0) {
+                  router.push('/(tabs)');
+                  setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
+              } else if (buttonIndex === 1) {
+                  router.push('/(tabs)/analysis');
+                  setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
+              } else if (buttonIndex === 2) {
+                  startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE);
+              }
+            }
+          );
+      } else {
+          // Android 使用 Alert
+          Alert.alert(
+              t('select_guide_topic', lang),
+              "",
+              [
+                  { text: t('tab_home', lang), onPress: () => {
+                      router.push('/(tabs)');
+                      setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
+                  }},
+                  { text: t('tab_analysis', lang), onPress: () => {
+                      router.push('/(tabs)/analysis');
+                      setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
+                  }},
+                  { text: t('tab_settings', lang), onPress: () => startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE) },
+                  { text: t('cancel', lang), style: "cancel" }
+              ]
+          );
+      }
+  };
+  
   const restartTutorial = () => {
       startScenario('PROFILE_GUIDE', [
            { text: t('tutorial.profile_restart_intro', lang) },
@@ -61,6 +117,9 @@ export default function ProfileScreen() {
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
             // 首次流程中自動觸發邏輯通常由 Context 控制，這裡可作為保險或單獨進入時觸發
+            if (isFirst && !seen) {
+               // 這裡保留邏輯供未來擴充
+            }
         }
         check();
     }, [lang])

@@ -47,6 +47,7 @@ export const TRANSLATIONS = {
     import_stats_detail: "匯入報告：\n✅ 新增: {added} 筆\n🔄 更新: {updated} 筆\n⏭️ 資料相同: {identical} 筆\n🛡️ 手動保留: {skipped} 筆",
     base_amount: "基準份量",
     updated_at: "更新時間",
+    feature_guide: "功能說明",
 
     // API Guide
     api_guide_title: "申請 Gemini API Key 步驟",
@@ -61,7 +62,7 @@ export const TRANSLATIONS = {
     body_metrics: "身體數值", record_metrics: "+ 紀錄", target_weight: "目標體重", target_body_fat: "目標體脂",
     intake: "攝取", burned: "消耗", net_intake_pct: "靜攝取 %", intake_target: "攝取/目標", 
     quick_record: "常用食物", no_recent_foods: "暫無常用紀錄", exercise: "運動", quick_add_activity: "常用運動", today: "今天", confirm: "確認",
-    sleep: "睡眠", sync_health_hint: "同步健康數據", quick_add: "常用",
+    sleep: "睡眠", sync_health_hint: "同步健康數據", quick_add: "常用", input_sleep: "輸入睡眠時長", sleep_hours: "睡眠時數",
     reminders_breakfast: "早餐提醒",
     reminders_breakfast_msg: "美好的一天從早餐開始，記得吃點東西喔！",
     reminders_lunch: "午餐提醒",
@@ -73,6 +74,7 @@ export const TRANSLATIONS = {
     water_intake: "喝水紀錄", tap_to_add_water: "點擊以新增喝水紀錄",
     reminders_water_move_title: "起身動動 & 喝水時間！",
     reminders_water_move_msg: "站起來伸展一下，喝杯水，保持健康活力。",
+    tap_buttons_to_adjust: "點擊按鈕以調整水量",
 
     // Actions
     camera: "拍照", scan_barcode: "掃碼", manual_input: "手輸", gallery: "相簿",
@@ -156,7 +158,7 @@ export const TRANSLATIONS = {
     activity_intensity: "運動強度", activity_details: "詳細數據", time_min: "時間 (分鐘)", distance_km: "距離 (km)", steps: "步數",
     floors: "樓層", est_calories: "預估消耗熱量", feeling_notes: "運動感受 & 筆記", enter_notes: "輸入筆記...",
     data_incomplete_msg: "請選擇運動項目，並至少輸入一項數據", activity_name: "運動名稱", category: "分類",
-    select_category_msg: "請選擇運動類別...", search_placeholder: "搜尋運動 (例如: 游泳)",
+    select_category_msg: "請選擇運動類別...", search_placeholder: "搜尋運動 (例如: 游泳)", edit_activity: "編輯運動",
     
     cat_cardio: "有氧與耐力", cat_gym: "健身房", cat_sport: "球類與競技", cat_life: "日常生活", cat_custom: "自訂",
     
@@ -360,6 +362,7 @@ export const TRANSLATIONS = {
     import_stats_detail: "导入报告：\n✅ 新增: {added} 笔\n🔄 更新: {updated} 笔\n⏭️ 数据相同: {identical} 笔\n🛡️ 手动保留: {skipped} 笔",
     base_amount: "基准份量",
     updated_at: "更新时间",
+    feature_guide: "功能说明",
 
     // API Guide
     api_guide_title: "申请 Gemini API Key 步骤",
@@ -374,7 +377,7 @@ export const TRANSLATIONS = {
     body_metrics: "身体数值", record_metrics: "+ 记录", target_weight: "目标体重", target_body_fat: "目标体脂",
     intake: "摄入", burned: "消耗", net_intake_pct: "净摄入 %", intake_target: "摄入/目标", 
     quick_record: "常用食物", no_recent_foods: "暂无常用记录", exercise: "运动", quick_add_activity: "常用运动", today: "今天", confirm: "确认",
-    seep: "睡眠", sync_health_hint: "同步健康数据", quick_add: "常用",
+    seep: "睡眠", sync_health_hint: "同步健康数据", quick_add: "常用",  input_sleep: "输入睡眠时长", sleep_hours: "睡眠时数",
     reminders_breakfast: "早餐提醒",
     reminders_breakfast_msg: "美好的一天从早餐开始，记得吃点东西哦！",
     reminders_lunch: "午餐提醒",
@@ -386,6 +389,7 @@ export const TRANSLATIONS = {
     water_intake: "喝水记录", tap_to_add_water: "点击以新增喝水记录",
     reminders_water_move_title: "起身动动 & 喝水时间！",
     reminders_water_move_msg: "站起来伸展一下，喝杯水，保持健康活力。",
+    tap_buttons_to_adjust: "点击按钮以调整水量",
 
     // Actions
     camera: "拍照", scan_barcode: "扫码", manual_input: "手输", gallery: "相册",
@@ -468,7 +472,7 @@ export const TRANSLATIONS = {
     activity_intensity: "运动强度", activity_details: "详细数据", time_min: "时间 (分钟)", distance_km: "距离 (km)", steps: "步数",
     floors: "楼层", est_calories: "预估消耗热量", feeling_notes: "运动感受 & 笔记", enter_notes: "输入笔记...",
     data_incomplete_msg: "请选择运动项目，并至少输入一项数据", activity_name: "运动名称", category: "分类",
-    select_category_msg: "请选择运动类别...", search_placeholder: "搜索运动 (例如: 游泳)",
+    select_category_msg: "请选择运动类别...", search_placeholder: "搜索运动 (例如: 游泳)", edit_activity: "编辑运动",
     
     cat_cardio: "有氧与耐力", cat_gym: "健身房", cat_sport: "球类与竞技", cat_life: "日常生活", cat_custom: "自定义",
     
@@ -669,6 +673,7 @@ export const TRANSLATIONS = {
     import_stats_detail: "Import Report:\n✅ Added: {added}\n🔄 Updated: {updated}\n⏭️ Identical: {identical}\n🛡️ Manually Kept: {skipped}",
     base_amount: "Base Amount",
     updated_at: "Updated At",
+    feature_guide: "Feature Guide",
 
     // API Guide
     api_guide_title: "Steps to Apply for Gemini API Key",
@@ -682,7 +687,7 @@ export const TRANSLATIONS = {
     body_metrics: "Body Metrics", record_metrics: "+ Record", target_weight: "Target Weight", target_body_fat: "Target Body Fat",
     intake: "Intake", burned: "Burned", net_intake_pct: "Net Intake %", intake_target: "Intake/Target",
     quick_record: "Frequent Foods", no_recent_foods: "No Frequent Records", exercise: "Exercise", quick_add_activity: "Frequent Exercises", today: "Today", confirm: "Confirm",
-    seep: "Sleep", sync_health_hint: "Sync Health Data", quick_add: "Frequent",
+    seep: "Sleep", sync_health_hint: "Sync Health Data", quick_add: "Frequent", input_sleep: "Input Sleep Duration", sleep_hours: "Sleep Hours",
     reminders_breakfast: "Breakfast Reminder",
     reminders_breakfast_msg: "A great day starts with breakfast, remember to eat something!",
     reminders_lunch: "Lunch Reminder",
@@ -694,6 +699,7 @@ export const TRANSLATIONS = {
     water_intake: "Water Intake", tap_to_add_water: "Tap to add water intake",
     reminders_water_move_title: "Time to Move & Hydrate!",
     reminders_water_move_msg: "Stand up and stretch, have a glass of water to stay healthy and energized.",
+    tap_buttons_to_adjust: "Tap buttons to adjust water amount",
 
     // Actions
     camera: "Camera", scan_barcode: "Scan", manual_input: "Manual Input", gallery: "Gallery",
@@ -767,7 +773,7 @@ export const TRANSLATIONS = {
     activity_intensity: "Intensity", activity_details: "Details", time_min: "Time (min)", distance_km: "Distance (km)", steps: "Steps",
     floors: "Floors", est_calories: "Estimated Burned Calories", feeling_notes: "Notes & Feelings", enter_notes: "Enter notes...",
     data_incomplete_msg: "Please select an activity and enter at least one value", activity_name: "Activity Name", category: "Category",
-    select_category_msg: "Please select an activity category...", search_placeholder: "Search activities (e.g., swimming)",
+    select_category_msg: "Please select an activity category...", search_placeholder: "Search activities (e.g., swimming)", edit_activity: "Edit Activity",
 
     cat_cardio: "Cardio & Endurance", cat_gym: "Gym", cat_sport: "Sports & Competition", cat_life: "Daily Life", cat_custom: "Custom",
     
@@ -967,6 +973,7 @@ export const TRANSLATIONS = {
     import_stats_detail: "インポートレポート:\n✅ 追加: {added}\n🔄 更新: {updated}\n⏭️ 同一: {identical}\n🛡️ 手動保持: {skipped}",
     base_amount: "基準量",
     updated_at: "更新日時",
+    feature_guide: "機能ガイド",
 
     // API Guide
     api_guide_title: "Gemini APIキーの取得手順",
@@ -981,7 +988,7 @@ export const TRANSLATIONS = {
     body_metrics: "身体測定", record_metrics: "+ 記録", target_weight: "目標体重", target_body_fat: "目標体脂肪率",
     intake: "摂取", burned: "消費", net_intake_pct: "純摂取 %", intake_target: "摂取/目標", 
     quick_record: "よく食べる物", no_recent_foods: "履歴なし", exercise: "運動", quick_add_activity: "よくする運動", today: "今日", confirm: "確認",
-    seep: "睡眠", sync_health_hint: "ヘルスデータを同期", quick_add: "よく使う",
+    seep: "睡眠", sync_health_hint: "ヘルスデータを同期", quick_add: "よく使う", input_sleep: "睡眠時間を入力", sleep_hours: "睡眠時間",
     reminders_breakfast: "朝食リマインダー",
     reminders_breakfast_msg: "良い一日は朝食から始まります。何か食べるのを忘れずに！",
     reminders_lunch: "昼食リマインダー",
@@ -993,6 +1000,7 @@ export const TRANSLATIONS = {
     water_intake: "水分摂取", tap_to_add_water: "タップして水分摂取を追加",
     reminders_water_move_title: "起身動動 & 喝水時間！",
     reminders_water_move_msg: "立ち上がってストレッチをし、健康と活力のために一杯の水を飲みましょう。",
+    tap_buttons_to_adjust: "ボタンをタップして水分量を調整",
 
     // Actions
     camera: "カメラ", scan_barcode: "スキャン", manual_input: "手入力", gallery: "ギャラリー",
@@ -1075,7 +1083,7 @@ export const TRANSLATIONS = {
     activity_intensity: "強度", activity_details: "詳細", time_min: "時間 (分)", distance_km: "距離 (km)", steps: "歩数",
     floors: "階数", est_calories: "推定消費カロリー", feeling_notes: "メモ & 感想", enter_notes: "メモを入力...",
     data_incomplete_msg: "運動を選択し、少なくとも1つの値を入力してください", activity_name: "運動名", category: "カテゴリ",
-    select_category_msg: "スポーツのカテゴリーを選択してください", search_placeholder: "運動を検索 (例: 水泳)",
+    select_category_msg: "スポーツのカテゴリーを選択してください", search_placeholder: "運動を検索 (例: 水泳)", edit_activity: "運動を編集",
 
     cat_cardio: "有酸素", cat_gym: "ジム", cat_sport: "スポーツ", cat_life: "生活活動", cat_custom: "カスタム",
     
@@ -1272,7 +1280,7 @@ export const TRANSLATIONS = {
     body_metrics: "신체 수치", record_metrics: "+ 기록", target_weight: "목표 체중", target_body_fat: "목표 체지방",
     intake: "섭취", burned: "소모", net_intake_pct: "순 섭취 %", intake_target: "섭취/목표", 
     quick_record: "즐겨찾기", no_recent_foods: "최근 기록 없음", exercise: "운동", quick_add_activity: "즐겨찾기 운동", today: "오늘", confirm: "확인",
-    seep: "수면", sync_health_hint: "건강 데이터 동기화", quick_add: "즐겨찾기",
+    seep: "수면", sync_health_hint: "건강 데이터 동기화", quick_add: "즐겨찾기", input_sleep: "수면 시간 입력", sleep_hours: "수면 시간",
     reminders_breakfast: "아침 식사 알림",
     reminders_breakfast_msg: "좋은 하루는 아침 식사로 시작됩니다. 꼭 챙겨 드세요!",
     reminders_lunch: "점심 식사 알림",
@@ -1294,12 +1302,14 @@ export const TRANSLATIONS = {
     import_stats_detail: "가져오기 보고서:\n✅ 추가됨: {added}\n🔄 업데이트됨: {updated}\n⏭️ 동일함: {identical}\n🛡️ 수동 유지됨: {skipped}",
     base_amount: "기준 양",
     updated_at: "업데이트 시간",
+    feature_guide: "기능 가이드",
 
     // Water
     water_intake: "수분 섭취", tap_to_add_water: "탭하여 수분 섭취 추가",
     reminders_water_move_title: "일어나서 움직이고 물을 마실 시간입니다!",
     reminders_water_move_msg: "일어나서 스트레칭을 하고, 건강과 활력을 위해 물 한 잔을 마시세요.",
-    
+    tap_buttons_to_adjust: "버튼을 탭하여 수분 섭취량을 조절하세요",
+
     // Actions
     camera: "카메라", scan_barcode: "스캔", manual_input: "직접 입력",  gallery: "갤러리",
     scan_hint: "바코드를 사각형 안에 맞추세요",allow: "권한 허용",
@@ -1377,7 +1387,7 @@ export const TRANSLATIONS = {
     activity_intensity: "강도", activity_details: "상세 정보", time_min: "시간 (분)", distance_km: "거리 (km)", steps: "걸음 수",
     floors: "층", est_calories: "예상 칼로리", feeling_notes: "메모 & 느낌", enter_notes: "메모 입력...",
     data_incomplete_msg: "운동을 선택하고 값을 입력하세요", activity_name: "운동명", category: "카테고리",
-    select_category_msg: "스포츠 카테고리를 선택해 주세요.", search_placeholder: "운동 검색 (예: 수영)",
+    select_category_msg: "스포츠 카테고리를 선택해 주세요.", search_placeholder: "운동 검색 (예: 수영)", edit_activity: "운동 편집",
 
     cat_cardio: "유산소", cat_gym: "헬스장", cat_sport: "스포츠", cat_life: "생활", cat_custom: "직접 입력",
     

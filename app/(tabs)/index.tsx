@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -10,9 +10,10 @@ import {
   Modal,
   RefreshControl,
   Text,
+  ActivityIndicator,
+  // [修正] 加入 KeyboardAvoidingView
   KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator
+  Platform
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -35,10 +36,11 @@ import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/sc
 
 import { initHealthConnect, getHealthData } from "@/lib/health";
 import { ActivityIcon, ACTIVITY_RAW } from '@/app/activity-editor'; 
-// [修改開始] 引入引導相關元件
+
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
+import { getTutorialSteps } from '@/constants/tutorial-steps';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
@@ -49,27 +51,43 @@ export default function HomeScreen() {
   const theme = Colors[useColorScheme() ?? "light"];
   const lang = useLanguage();
   const dateLocale = LOCALE_MAP[lang] || enUS;
+  
+  // ScrollView Ref 供自動捲動使用
+  const scrollViewRef = useRef<ScrollView>(null);
+  const { startScenario, userName, activeScenario, currentStepIndex } = useTutorial();
 
-  // [修改開始] 初始化引導
-  const { startScenario, userName, activeScenario } = useTutorial();
+  // [修改] 監聽引導步驟，精確捲動
+  useEffect(() => {
+    if (activeScenario === 'HOME_GUIDE' && scrollViewRef.current) {
+       // 根據 HOME_GUIDE 的步驟順序定義捲動位置 (Y軸)
+       // 0: Intro (Top)
+       // 1: Metrics (Top)
+       // 2: Water (約 250px 處)
+       // 3: Energy (約 450px 處)
+       // 4: Actions (Bottom)
+       
+       let yPos = 0;
+       if (currentStepIndex <= 1) yPos = 0;
+       else if (currentStepIndex === 2) yPos = 250;
+       else if (currentStepIndex === 3) yPos = 450;
+       else if (currentStepIndex >= 4) {
+           scrollViewRef.current.scrollToEnd({ animated: true });
+           return;
+       }
+       scrollViewRef.current.scrollTo({ y: yPos, animated: true });
+    }
+  }, [currentStepIndex, activeScenario]);
 
   useFocusEffect(
     useCallback(() => {
         async function checkTutorial() {
             if (activeScenario === 'HOME_GUIDE') return;
-
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-            
-            // 若為首次啟動且未看過首頁導覽，或從 Onboarding 流程導回
             if (isFirst && !seen && !activeScenario) {
-                startScenario('HOME_GUIDE', [
-                     { text: t('tutorial.home_intro', lang, { name: userName }) },
-                     { targetKey: 'home_metrics', text: t('tutorial.home_metrics_hint', lang) },
-                     { targetKey: 'home_water', text: t('tutorial.home_water_hint', lang) },
-                     { targetKey: 'home_energy', text: t('tutorial.home_energy_hint', lang) },
-                     { targetKey: 'home_actions', text: t('tutorial.home_actions_hint', lang) }
-                ]);
+                // [修改] 使用集中管理的腳本
+                const allSteps = getTutorialSteps(lang, userName);
+                startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
             }
         }
         checkTutorial();
@@ -77,10 +95,7 @@ export default function HomeScreen() {
   );
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  
-  // Modal 控制
   const [showCalendarModal, setShowCalendarModal] = useState(false);
-  
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false); 
   
@@ -89,15 +104,16 @@ export default function HomeScreen() {
   const [diffWeight, setDiffWeight] = useState<number | null>(null);
   const [diffFat, setDiffFat] = useState<number | null>(null);
   
-  // 飲水狀態
+  const [showSleepModal, setShowSleepModal] = useState(false);
+  const [manualSleep, setManualSleep] = useState("");
+
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(2000); 
   const WATER_CUP_SIZE = 250;
 
-  // Health Connect 顯示數據
   const [healthSteps, setHealthSteps] = useState(0);
   const [healthSleep, setHealthSleep] = useState(0);
-  const [isSyncing, setIsSyncing] = useState(false); // [新增] 同步狀態
+  const [isSyncing, setIsSyncing] = useState(false); 
 
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
   const [targetWeight, setTargetWeight] = useState(0);
@@ -116,28 +132,37 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
+  const handleSaveSleep = async () => {
+      const h = parseFloat(manualSleep);
+      if (isNaN(h)) return;
+      try {
+          const dateStr = format(currentDate, "yyyy-MM-dd");
+          const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
+          if(existing.length > 0) {
+              await db.update(dailyMetrics).set({ sleepHours: h }).where(eq(dailyMetrics.id, existing[0].id));
+          } else {
+              await db.insert(dailyMetrics).values({ date: dateStr, sleepHours: h });
+          }
+          setHealthSleep(h);
+          setShowSleepModal(false);
+          setManualSleep("");
+      } catch(e) { console.error(e); }
+  };
+
   const syncHealthData = async (dateStr: string) => {
       if (isSyncing) return;
       setIsSyncing(true);
       try {
           const authorized = await initHealthConnect();
-          
           if (!authorized) {
-              Alert.alert(
-                  t('tip', lang), 
-                  "無法連結 Health Connect。\n請確認：\n1. 已安裝 Google Health Connect (或內建)\n2. 已賦予讀取權限",
-                  [{ text: "OK" }]
-              );
+              Alert.alert(t('tip', lang), "Health Connect Authorization Failed");
               setIsSyncing(false);
               return;
           }
-
           const start = startOfDay(new Date(dateStr));
           const end = endOfDay(new Date(dateStr));
-          
           const { steps, sleep } = await getHealthData(start, end);
           
-          // 1. 處理步數
           const totalSteps = steps.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
           if (totalSteps > 0) {
               setHealthSteps(totalSteps);
@@ -157,7 +182,6 @@ export default function HomeScreen() {
               }
           }
 
-          // 2. 處理睡眠
           let totalSleepHours = 0;
           sleep.forEach((s: any) => {
               const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
@@ -178,7 +202,6 @@ export default function HomeScreen() {
 
       } catch (e: any) {
           console.log("Health Connect Sync Error:", e);
-          Alert.alert(t('error', lang), "Sync Failed: " + (e.message || "Unknown error"));
       } finally {
           setIsSyncing(false);
           loadData(); 
@@ -196,7 +219,6 @@ export default function HomeScreen() {
     try {
       const dateStr = format(currentDate, "yyyy-MM-dd");
 
-      // 1. 載入個人目標
       const profileRes = await db.select().from(userProfiles).limit(1);
       if (profileRes.length > 0) {
         const p = profileRes[0];
@@ -214,7 +236,6 @@ export default function HomeScreen() {
         setWaterGoal(dynamicWater);
       }
 
-      // 2. 身體數值
       const metricsRes = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
       if (metricsRes.length > 0) {
         const curW = metricsRes[0].weightKg || 0;
@@ -239,7 +260,6 @@ export default function HomeScreen() {
           }
       }
 
-      // 3. 飲食紀錄
       const logsRes = await db.select().from(foodLogs).where(eq(foodLogs.date, dateStr));
       setAllDailyLogs(logsRes);
 
@@ -259,15 +279,15 @@ export default function HomeScreen() {
       setIntake(newIntake);
       setDailyLogs(groupedLogs);
 
-      // 4. 運動與最近
       const activityRes = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
       const totalBurned = activityRes.reduce((sum, act) => sum + (act.caloriesBurned || 0), 0);
       setBurnedCalories(totalBurned);
       setDailyActivities(activityRes);
       
-      const stepLog = activityRes.find(a => a.activityName === "Daily Steps");
-      if (stepLog && stepLog.steps) setHealthSteps(stepLog.steps);
-      else setHealthSteps(0);
+      const dbSteps = activityRes.reduce((sum, act) => sum + (act.steps || 0), 0);
+      const healthConnectLog = activityRes.find(a => a.activityName === "Daily Steps");
+      const healthStepsVal = healthConnectLog ? (healthConnectLog.steps || 0) : 0;
+      setHealthSteps(healthStepsVal > 0 ? healthStepsVal : dbSteps);
 
       const frequentFoodsRes = await db
         .select({
@@ -290,7 +310,6 @@ export default function HomeScreen() {
 
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
-  // Save/Delete handlers
   const handleSaveMetrics = async () => {
       const w = parseFloat(weight);
       const bf = parseFloat(bodyFat);
@@ -320,7 +339,7 @@ export default function HomeScreen() {
 
   const addWater = async () => {
       const newAmount = waterMl + WATER_CUP_SIZE;
-      setWaterMl(newAmount); // Optimistic update
+      setWaterMl(newAmount); 
       
       const dateStr = format(currentDate, "yyyy-MM-dd");
       const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
@@ -348,7 +367,6 @@ export default function HomeScreen() {
       } catch(e) { console.error("Water update failed", e); }
   };
 
-  // 查找圖示的輔助函數
   const getActivityIconInfo = (name: string) => {
     for (const cat of ACTIVITY_RAW) {
         const item = cat.items.find(i => t(i.id, lang) === name);
@@ -359,7 +377,6 @@ export default function HomeScreen() {
     return { icon: 'walk', library: undefined };
   };
 
-  // --- 客製化月曆 Modal ---
   const CustomCalendarModal = () => {
     const [viewDate, setViewDate] = useState(currentDate);
     const [monthStats, setMonthStats] = useState<Record<string, any>>({});
@@ -476,7 +493,6 @@ export default function HomeScreen() {
 
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
-  // [修改開始] 修改 BodyMetricsCard 以支援深色模式輸入框
   const renderBodyMetricsCard = () => (
     <ThemedView style={[styles.card, { paddingVertical: 20 }]}> 
       <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
@@ -496,7 +512,6 @@ export default function HomeScreen() {
       </View>
 
       <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
-        {/* 左側：輸入區 - [修改] 增加 backgroundColor 和 borderRadius */}
         <View style={{gap: 10}}>
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
@@ -526,7 +541,6 @@ export default function HomeScreen() {
             </View>
         </View>
 
-        {/* 右側：目標區 */}
         <View style={{justifyContent:'center', alignItems:'flex-end', gap: 8}}>
             <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)}: {targetWeight} kg</ThemedText>
             <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)}: {targetBodyFat} %</ThemedText>
@@ -539,15 +553,15 @@ export default function HomeScreen() {
               <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSteps} {t('steps', lang) || "steps"}</ThemedText>
           </View>
           <View style={{height: '100%', width:1, backgroundColor:'#eee'}}/>
-          <View style={{flexDirection:'row', alignItems:'center'}}>
+          
+          <TouchableOpacity onPress={() => setShowSleepModal(true)} style={{flexDirection:'row', alignItems:'center'}}>
               <Ionicons name="bed" size={18} color="#5856D6"/>
               <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSleep} h {t('sleep', lang) || "sleep"}</ThemedText>
-          </View>
+          </TouchableOpacity>
       </View>
     </ThemedView>
   );
 
-  // [修改開始] 修改 WaterSection - 改為左右按鈕控制
   const renderWaterSection = () => {
       const totalCups = Math.ceil(waterGoal / WATER_CUP_SIZE);
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
@@ -559,44 +573,41 @@ export default function HomeScreen() {
                   <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
               </View>
               
-              <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'center'}}>
-                  {/* 減號按鈕 (左) */}
+              <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'space-between', minHeight: 50}}>
                   <TouchableOpacity 
                       onPress={removeWater}
-                      style={{width: 44, height: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 22, marginRight: 16}}
+                      style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}
                   >
                       <Ionicons name="remove" size={24} color={theme.text} />
                   </TouchableOpacity>
 
-                  {/* 水滴顯示區 (移除點擊事件，純顯示) */}
-                  <View style={{flexDirection:'row', flexWrap:'wrap', gap: 2, justifyContent:'center', maxWidth: SCREEN_WIDTH * 0.5}}>
+                  <View style={{flex: 1, flexDirection:'row', flexWrap:'wrap', justifyContent:'center', alignItems:'center', paddingHorizontal: 4}}>
                       {Array.from({length: totalCups}).map((_, idx) => (
                           <View 
                             key={idx} 
-                            style={{opacity: idx < currentCups ? 1 : 0.3}}
+                            style={{opacity: idx < currentCups ? 1 : 0.3, margin: 2}}
                           >
-                              <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={28} color="#007AFF" />
+                              <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={26} color="#007AFF" />
                           </View>
                       ))}
                       {currentCups > totalCups && (
-                           <View style={{flexDirection:'row', alignItems:'center'}}>
-                               <Ionicons name="add" size={16} color={theme.text}/>
-                               <Ionicons name="water" size={28} color="#007AFF" />
-                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:8}}>+{currentCups - totalCups}</ThemedText>
+                           <View style={{flexDirection:'row', alignItems:'center', margin: 2}}>
+                               <Ionicons name="add" size={14} color={theme.text}/>
+                               <Ionicons name="water" size={26} color="#007AFF" />
+                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:7}}>+{currentCups - totalCups}</ThemedText>
                            </View>
                       )}
                   </View>
 
-                  {/* 加號按鈕 (右) */}
                   <TouchableOpacity 
                       onPress={addWater}
-                      style={{width: 44, height: 44, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 22, marginLeft: 16}}
+                      style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}
                   >
                       <Ionicons name="add" size={24} color={theme.text} />
                   </TouchableOpacity>
               </View>
               
-              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:12}}>
+              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:8}}>
                   {t('tap_buttons_to_adjust', lang) || "Tap buttons to adjust (+/- 250ml)"}
               </ThemedText>
           </ThemedView>
@@ -645,10 +656,10 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      {/* [修改] 綁定 ref */}
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         
-        {/* [修改開始] 加入 TutorialTarget 包裹各區塊 */}
         <TutorialTarget targetKey="home_metrics">
             {renderBodyMetricsCard()}
         </TutorialTarget>
@@ -664,7 +675,6 @@ export default function HomeScreen() {
         {renderQuickAdd()}
         
         <View style={styles.recordSection}>
-            {/* [修改開始] 包裹記錄按鈕區 */}
             <TutorialTarget targetKey="home_actions">
                <View style={styles.quickActionRow}>
                     <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
@@ -707,12 +717,32 @@ export default function HomeScreen() {
         </View>
         {CustomCalendarModal()}
         {renderMacroDetailModal()}
+
+        <Modal visible={showSleepModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, {backgroundColor: theme.cardBackground}]}>
+                    <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_sleep', lang)}</ThemedText>
+                    <TextInput 
+                        style={[styles.metricInput, {width: '100%', backgroundColor: theme.inputBackground, borderRadius:8, padding:10, marginBottom:16}]}
+                        placeholder={t('sleep_hours', lang)}
+                        placeholderTextColor="#999"
+                        keyboardType="numeric"
+                        value={manualSleep}
+                        onChangeText={setManualSleep}
+                    />
+                    <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
+                        <TouchableOpacity onPress={()=>setShowSleepModal(false)}><ThemedText>{t('cancel', lang)}</ThemedText></TouchableOpacity>
+                        <TouchableOpacity onPress={handleSaveSleep}><ThemedText style={{color:theme.tint, fontWeight:'bold'}}>{t('confirm', lang)}</ThemedText></TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+
       </ScrollView>
     </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
-
 
 const ActionButton = ({ icon, label, onPress, color }: any) => (<TouchableOpacity style={styles.actionButton} onPress={onPress}><View style={[styles.iconCircle, { backgroundColor: color }]}><Ionicons name={icon} size={24} color="#FFF" /></View><ThemedText style={styles.actionLabel}>{label}</ThemedText></TouchableOpacity>);
 
@@ -722,7 +752,6 @@ const styles = StyleSheet.create({
   headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   dateDisplay: { alignItems: "center" },
   card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4, backgroundColor:'white' },
-  // [修改開始] metricInput 樣式調整，移除底部線條，增加區塊感
   metricInput: { width: 70, fontSize: 18, fontWeight: "600", textAlign: "center", paddingVertical: 8, paddingHorizontal: 4 }, 
   sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
   barBg: { height: 12, backgroundColor: "#E5E5EA", borderRadius: 6, overflow: "hidden" },

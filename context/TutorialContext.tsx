@@ -1,34 +1,28 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { View, Modal, StyleSheet, TouchableOpacity, Text, Dimensions, TextInput, Image, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { getTutorialState, setTutorialState, getUserName, setUserName, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-// [修改開始] 引入 i18n 工具與圖片
-import { useLanguage, t } from '@/lib/i18n';
-const GuideAvatarImage = require('@/assets/images/guide_avatar.png'); // 請確保圖片已存在
-// [修改結束]
+import { useLanguage } from '@/lib/i18n';
+// [修改] 引入腳本產生器
+import { getTutorialSteps, TutorialStep } from '@/constants/tutorial-steps';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const GuideAvatarImage = require('@/assets/images/guide_avatar.png'); 
 
-// 定義每一步驟的結構
-export type TutorialStep = {
-  targetKey?: string; // 對應 TutorialTarget 的名稱
-  text: string;       // 教練說的話
-  action?: 'input_name' | 'navigate_profile' | 'navigate_home' | 'end_onboarding'; // 特殊動作
-  forceNext?: boolean; // 是否強制下一步(不顯示Skip)
-};
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type TargetLayout = { x: number; y: number; w: number; h: number };
 
 interface TutorialContextType {
   registerTarget: (key: string, layout: TargetLayout) => void;
-  startScenario: (scenarioId: string, steps: TutorialStep[]) => void;
+  startScenario: (scenarioId: string, customSteps?: TutorialStep[]) => void;
   stopTutorial: () => void;
   userName: string;
   setUserNameState: (n: string) => void;
   activeScenario: string | null;
+  currentStepIndex: number;
 }
 
 const TutorialContext = createContext<TutorialContextType | null>(null);
@@ -41,24 +35,16 @@ export const useTutorial = () => {
 
 export const TutorialProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const segments = useSegments();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  
-  // [修改開始] 取得當前語言
   const lang = useLanguage();
-  // [修改結束]
 
   const [userName, setUserNameState] = useState("User");
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [steps, setSteps] = useState<TutorialStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targets, setTargets] = useState<Record<string, TargetLayout>>({});
-  
-  // 輸入框狀態
   const [inputName, setInputName] = useState("");
-
-  // 動畫值
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // 初始化檢查
@@ -69,19 +55,13 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       
       const notFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
       if (!notFirst) {
-        // [修改開始] 使用 t() 翻譯歡迎詞，並加入語言提示
-        startScenario('ONBOARDING_WELCOME', [
-          { text: t('tutorial.welcome_1', lang), forceNext: true },
-          { text: t('tutorial.welcome_lang_hint', lang), forceNext: true },
-          { text: t('tutorial.welcome_2', lang), forceNext: true },
-          { text: t('tutorial.welcome_ask_name', lang), action: 'input_name', forceNext: true },
-          { text: t('tutorial.welcome_goto_profile', lang), action: 'navigate_profile', forceNext: true }
-        ]);
-        // [修改結束]
+        // [修改] 使用集中管理的腳本
+        const allSteps = getTutorialSteps(lang, name || 'User');
+        startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
       }
     }
     init();
-  }, [lang]); // [修改] dependency 加入 lang
+  }, [lang]);
 
   const registerTarget = (key: string, layout: TargetLayout) => {
     setTargets(prev => {
@@ -91,11 +71,14 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     });
   };
 
-  const startScenario = (id: string, newSteps: TutorialStep[]) => {
-    setActiveScenario(id);
-    setSteps(newSteps);
-    setCurrentStepIndex(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  // [修改] 允許傳入 customSteps，若無則不執行（或可擴充自動抓取）
+  const startScenario = (id: string, customSteps?: TutorialStep[]) => {
+    if (customSteps) {
+        setActiveScenario(id);
+        setSteps(customSteps);
+        setCurrentStepIndex(0);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    }
   };
 
   const stopTutorial = async () => {
@@ -104,19 +87,15 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       setSteps([]);
     });
     
-    if (activeScenario === 'ONBOARDING_WELCOME') {
-       // Profile 頁面會接手
-    } else if (activeScenario === 'HOME_GUIDE') {
-       await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME, true);
-    } else if (activeScenario === 'PROFILE_GUIDE') {
-       await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE, true);
-    } else if (activeScenario === 'ANALYSIS_GUIDE') {
-       await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS, true);
-    }
+    if (activeScenario === 'HOME_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME, true);
+    else if (activeScenario === 'PROFILE_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE, true);
+    else if (activeScenario === 'ANALYSIS_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS, true);
   };
 
   const handleNext = async () => {
     const step = steps[currentStepIndex];
+    // 取得最新腳本以供跳轉使用
+    const allSteps = getTutorialSteps(lang, userName);
 
     if (step.action === 'input_name') {
       if (!inputName.trim()) return; 
@@ -125,29 +104,14 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     } else if (step.action === 'navigate_profile') {
       router.push('/(tabs)/profile');
       setTimeout(() => {
-         // [修改開始] 使用 t() 翻譯 Profile 引導
-         startScenario('ONBOARDING_PROFILE', [
-             { targetKey: 'profile_basic', text: t('tutorial.profile_basic_hint', lang) },
-             { targetKey: 'profile_goals', text: t('tutorial.profile_goals_hint', lang) },
-             { targetKey: 'profile_ai', text: t('tutorial.profile_ai_hint', lang) },
-             { targetKey: 'profile_save', text: t('tutorial.profile_save_hint', lang), action: 'end_onboarding' }
-         ]);
-         // [修改結束]
+         startScenario('ONBOARDING_PROFILE', allSteps.ONBOARDING_PROFILE);
       }, 500);
       return; 
     } else if (step.action === 'end_onboarding') {
       await setTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH, true);
       router.replace('/(tabs)');
       setTimeout(() => {
-         // [修改開始] 使用 t() 翻譯 Home 引導
-         startScenario('HOME_GUIDE', [
-             { text: t('tutorial.home_intro', lang, { name: userName }) },
-             { targetKey: 'home_metrics', text: t('tutorial.home_metrics_hint', lang) },
-             { targetKey: 'home_water', text: t('tutorial.home_water_hint', lang) },
-             { targetKey: 'home_energy', text: t('tutorial.home_energy_hint', lang) },
-             { targetKey: 'home_actions', text: t('tutorial.home_actions_hint', lang) }
-         ]);
-         // [修改結束]
+         startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
       }, 800);
       return;
     }
@@ -162,14 +126,12 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const currentStep = steps[currentStepIndex];
   const targetLayout = currentStep?.targetKey ? targets[currentStep.targetKey] : null;
 
-  if (!activeScenario || !currentStep) return <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario }}>{children}</TutorialContext.Provider>;
-
   return (
-    <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario }}>
+    <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario, currentStepIndex }}>
       {children}
       <Modal transparent visible={!!activeScenario} animationType="none">
         <View style={styles.overlay}>
-          {/* 背景遮罩 */}
+          {/* Highlight Box */}
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
              {targetLayout && (
                  <View style={{
@@ -187,23 +149,16 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
              )}
           </View>
 
-          {/* 教練與對話框 */}
           <Animated.View style={[styles.coachContainer, { opacity: fadeAnim }]}>
-             {/* [修改開始] 教練頭像替換為圖片 */}
              <View style={styles.avatarContainer}>
-                <Image 
-                    source={GuideAvatarImage} 
-                    style={styles.avatarImage} 
-                    resizeMode="contain"
-                />
+                {/* [修改] 確保背景透明，設定固定尺寸 100x100 (可調整) */}
+                <Image source={GuideAvatarImage} style={styles.avatarImage} resizeMode="contain" />
              </View>
-             {/* [修改結束] */}
 
-             {/* 對話氣泡 */}
              <View style={[styles.bubble, { backgroundColor: theme.cardBackground }]}>
-                <Text style={[styles.bubbleText, { color: theme.text }]}>{currentStep.text}</Text>
+                <Text style={[styles.bubbleText, { color: theme.text }]}>{currentStep?.text}</Text>
                 
-                {currentStep.action === 'input_name' && (
+                {currentStep?.action === 'input_name' && (
                     <TextInput 
                         style={[styles.input, { color: theme.text, borderColor: theme.border }]}
                         placeholder="Name..."
@@ -215,13 +170,13 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
                 )}
 
                 <View style={styles.btnRow}>
-                    {!currentStep.forceNext && (
+                    {!currentStep?.forceNext && (
                         <TouchableOpacity onPress={stopTutorial} style={styles.skipBtn}>
                             <Text style={{color: '#888'}}>Skip</Text>
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity onPress={handleNext} style={[styles.nextBtn, { backgroundColor: theme.tint }]}>
-                        <Text style={styles.nextText}>{currentStep.action === 'input_name' ? 'Confirm' : 'Next'}</Text>
+                        <Text style={styles.nextText}>{currentStep?.action === 'input_name' ? 'Confirm' : 'Next'}</Text>
                         <Ionicons name="arrow-forward" size={16} color="white" style={{marginLeft: 4}}/>
                     </TouchableOpacity>
                 </View>
@@ -235,29 +190,17 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
 
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
-  coachContainer: {
-    position: 'absolute',
-    bottom: 50, 
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  // [修改開始] 調整頭像樣式
+  coachContainer: { position: 'absolute', bottom: 50, left: 20, right: 20, flexDirection: 'row', alignItems: 'flex-end' },
   avatarContainer: { 
-      marginRight: 10,
-      shadowColor: '#000', 
-      shadowOpacity: 0.3, 
-      shadowRadius: 5,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 10,
+      marginRight: 10, 
+      shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5, shadowOffset: { width: 0, height: 3 }, elevation: 10,
+      backgroundColor: 'transparent' // [修改] 確保容器透明
   },
-  avatarImage: {
-      width: 80, 
-      height: 80, 
+  avatarImage: { 
+      width: 100, // [修改] 調整尺寸
+      height: 100, 
+      backgroundColor: 'transparent' // [修改] 確保圖片本身背景透明
   },
-  // [修改結束]
-  avatarCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor:'#000', shadowOpacity:0.3, shadowRadius:4 },
   bubble: { flex: 1, padding: 16, borderRadius: 16, borderBottomLeftRadius: 4, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, minHeight: 100, justifyContent: 'center' },
   bubbleText: { fontSize: 16, lineHeight: 24, marginBottom: 12 },
   btnRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 },
