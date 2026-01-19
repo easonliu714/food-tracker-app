@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+// [修正] 加入 useRef
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Vibration, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart } from "react-native-gifted-charts";
@@ -60,7 +61,7 @@ export default function AnalysisScreen() {
   // [修改] 取得導覽 Context
   const { startScenario, onScrollRequest, userName } = useTutorial(); // [修正] 解構出 onScrollRequest, userName
   
-  // [新增] ScrollView Ref 與位置紀錄
+  // [新增] ScrollView Ref 與位置紀錄 (現在 useRef 已被正確引入)
   const scrollViewRef = useRef<ScrollView>(null); // [新增]
   const targetPositions = useRef<Record<string, number>>({}); // [新增]
 
@@ -611,14 +612,25 @@ export default function AnalysisScreen() {
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
         
         {/* [修改] 加入 onMeasure 紀錄位置 */}
-        <TutorialTarget targetKey="analysis_grid" onMeasure={(y) => targetPositions.current['analysis_grid'] = y}>
+        <TutorialTarget
+         targetKey="analysis_grid" 
+         onMeasure={(y) => targetPositions.current['analysis_grid'] = y}
+         adjustment={{
+            offsetY: -10,
+            heightAdd: 0
+        }}
+        >   
             <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
                 {gridSlots.map((key, index) => renderGridItem(key, index))}
             </View>
         </TutorialTarget>
 
         {/* [修改] 加入 onMeasure 紀錄位置，並確保 chartCard 背景色動態化 */}
-        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y}>
+        <TutorialTarget
+         targetKey="analysis_chart" 
+         onMeasure={(y) => targetPositions.current['analysis_chart'] = y}
+         adjustment={{offsetY: -120}}
+         >
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                     <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>

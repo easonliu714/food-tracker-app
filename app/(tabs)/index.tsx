@@ -54,7 +54,7 @@ export default function HomeScreen() {
   
   // [新增] 用於深色模式的軌道顏色 (淺灰 vs 深灰)
   const isDark = useColorScheme() === 'dark';
-  const ringTrackColor = isDark ? '#333333' : '#E5E5EA';
+  const ringTrackColor = isDark ? '#555555' : '#e5e5ea';
 
   // ScrollView Ref 供自動捲動使用
   const scrollViewRef = useRef<ScrollView>(null);
@@ -644,9 +644,30 @@ export default function HomeScreen() {
   };
 
   const renderMacroRing = (label:string, val:number, target:number, color:string, key: string, unit="g") => {
-      const realPct = target > 0 ? (val/target)*100 : 0; const visualPct = Math.min(realPct, 100); 
-      // [修改] PieChart track color 改用 ringTrackColor
-      return (<TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}><View pointerEvents="none"><PieChart data={[{value: visualPct, color}, {value: 100-visualPct, color: ringTrackColor }]} donut radius={32} innerRadius={24} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold'}}>{Math.round(realPct)}%</ThemedText>}/></View><ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText></TouchableOpacity>);
+      const realPct = target > 0 ? (val/target)*100 : 0; 
+      const visualPct = Math.min(realPct, 100); 
+      
+      return (
+        <TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
+            <View pointerEvents="none">
+                {/* [修正] 加入 innerCircleColor 避免遮擋，並強制指定文字顏色 */}
+                <PieChart 
+                    data={[{value: visualPct, color}, {value: 100-visualPct, color: ringTrackColor }]} 
+                    donut 
+                    radius={32} 
+                    innerRadius={24} 
+                    innerCircleColor={theme.background} // [關鍵修正] 設定為背景色，解決深色模式變白圓的問題
+                    centerLabelComponent={() => (
+                        <ThemedText style={{fontSize:10, fontWeight:'bold', color: theme.text}}> 
+                            {Math.round(realPct)}%
+                        </ThemedText>
+                    )}
+                />
+            </View>
+            <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{label}</ThemedText>
+            <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(val)}/{target}{unit}</ThemedText>
+        </TouchableOpacity>
+      );
   };
 
   const renderMacroDetailModal = () => { if (!selectedMacro) return null; const keyMap: any = {'protein': 'totalProteinG','fat': 'totalFatG','carbs': 'totalCarbsG','sodium': 'totalSodiumMg'}; const dbKey = keyMap[selectedMacro.key]; const sortedLogs = allDailyLogs.filter(l => (l[dbKey] || 0) > 0).sort((a, b) => (b[dbKey] || 0) - (a[dbKey] || 0)); const totalVal = sortedLogs.reduce((sum, item) => sum + (item[dbKey] || 0), 0); return (<Modal visible={!!selectedMacro} transparent animationType="slide" onRequestClose={()=>setSelectedMacro(null)}><View style={styles.modalOverlay}><View style={[styles.modalContent, {backgroundColor: theme.cardBackground, maxHeight: '60%'}]}><View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:16}}><ThemedText type="subtitle">{selectedMacro.label} {t('analysis', lang)}</ThemedText><TouchableOpacity onPress={()=>setSelectedMacro(null)}><Ionicons name="close" size={24} color={theme.text}/></TouchableOpacity></View><ThemedText style={{marginBottom:10, color: theme.tint, fontWeight:'bold'}}>{t('total', lang)}: {Math.round(totalVal)} {selectedMacro.unit}</ThemedText><ScrollView>{sortedLogs.length === 0 ? <ThemedText style={{color:'#888'}}>{t('no_records', lang)}</ThemedText> : sortedLogs.map((log, idx) => { const val = log[dbKey] || 0; const pct = totalVal > 0 ? (val / totalVal * 100).toFixed(1) : "0"; return (<View key={idx} style={{flexDirection:'row', justifyContent:'space-between', paddingVertical:10, borderBottomWidth:1, borderColor:'#eee'}}><View style={{flex:1}}><ThemedText>{log.foodName}</ThemedText><View style={{width: '100%', height:4, backgroundColor:'#eee', marginTop:4, borderRadius:2}}><View style={{width: `${pct}%`, backgroundColor: theme.tint, height:'100%', borderRadius:2}}/></View></View><View style={{alignItems:'flex-end', marginLeft:10}}><ThemedText style={{fontWeight:'bold'}}>{Math.round(val)} {selectedMacro.unit}</ThemedText><ThemedText style={{fontSize:10, color:'#888'}}>{pct}%</ThemedText></View></View>);})}</ScrollView></View></View></Modal>);};
@@ -662,22 +683,62 @@ export default function HomeScreen() {
         {renderHeader()}
         
         {/* [修改] 加入 onMeasure 紀錄位置，供自動捲動使用 */}
-        <TutorialTarget targetKey="home_metrics" onMeasure={(y) => targetPositions.current['home_metrics'] = y}>
+        <TutorialTarget
+         targetKey="home_metrics"
+         onMeasure={(y) => targetPositions.current['home_metrics'] = y}
+         adjustment={{
+            padding: 10, // 可選的，增加額外的內邊距
+            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
+            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: 0,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 寬度
+         }}
+         >
             {renderBodyMetricsCard()}
         </TutorialTarget>
 
-        <TutorialTarget targetKey="home_water" onMeasure={(y) => targetPositions.current['home_water'] = y}>
+        <TutorialTarget
+         targetKey="home_water" 
+         onMeasure={(y) => targetPositions.current['home_water'] = y}
+         adjustment={{
+            padding: 10, // 可選的，增加額外的內邊距
+            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
+            offsetY: -50,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: 0,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 寬度
+         }}
+         >
             {renderWaterSection()}
         </TutorialTarget>
 
-        <TutorialTarget targetKey="home_energy" onMeasure={(y) => targetPositions.current['home_energy'] = y}>
+        <TutorialTarget
+         targetKey="home_energy" 
+         onMeasure={(y) => targetPositions.current['home_energy'] = y}
+         adjustment={{
+            padding: 10, // 可選的，增加額外的內邊距
+            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
+            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 寬度
+         }}
+         >
             {renderEnergySection()}
         </TutorialTarget>
 
         {renderQuickAdd()}
         
         <View style={styles.recordSection}>
-            <TutorialTarget targetKey="home_actions" onMeasure={(y) => targetPositions.current['home_actions'] = y}>
+            <TutorialTarget
+             targetKey="home_actions" 
+             onMeasure={(y) => targetPositions.current['home_actions'] = y}
+             adjustment={{
+                padding: 10, // 可選的，增加額外的內邊距
+                offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
+                offsetY: -200,    // 正數表示往下移動 (例如往下 20px)
+                heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
+                widthAdd: 0,    // 寬度
+             }}
+             >
                <View style={styles.quickActionRow}>
                     <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
                     <ActionButton icon="barcode" label={t('scan_barcode', lang)} onPress={() => router.push("/barcode-scanner")} color="#007AFF" />

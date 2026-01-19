@@ -655,7 +655,17 @@ export default function ProfileScreen() {
 
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* AI Settings */}
-         <TutorialTarget targetKey="profile_ai" adjustment={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_ai'] = y}>
+         <TutorialTarget
+          targetKey="profile_ai" 
+          onMeasure={(y) => targetPositions.current['profile_ai'] = y}
+          adjustment={{
+            padding: 10, // 可選的，增加額外的內邊距
+            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
+            offsetY: 50,    // 正數表示往下移動 (例如往下 20px)
+            heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
+            widthAdd: 0,    // 寬度
+        }}
+          >
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
                 {/* ... AI Inputs ... */}
@@ -952,7 +962,7 @@ export default function ProfileScreen() {
                       <ThemedText style={{color: textColor}}>{t('tab_analysis', lang)}</ThemedText>
                   </Pressable>
                   <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}>
-                      <ThemedText style={{color: textColor}}>{t('tab_recipes', lang)}</ThemedText>
+                      <ThemedText style={{color: textColor}}>{t('tab_ai_coach', lang)}</ThemedText>
                   </Pressable>
                   <Pressable onPress={() => handleGuideSelection(3)} style={styles.menuItem}>
                       <ThemedText style={{color: textColor}}>{t('tab_settings', lang)}</ThemedText>
