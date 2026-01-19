@@ -60,7 +60,25 @@ export default function ProfileScreen() {
   const { isAuthenticated } = useAuth();
   const lang = useLanguage();
   
-  const { startScenario, userName } = useTutorial();
+  // [新增] ScrollView Ref
+  const scrollViewRef = useRef<ScrollView>(null);
+  const { startScenario, userName, onScrollRequest } = useTutorial();
+
+  // [新增] 註冊捲動監聽
+  useEffect(() => {
+      // 當導覽步驟切換並要求捲動時
+      onScrollRequest((targetKey) => {
+          // 這裡做一個簡單的映射，根據 Key 決定捲動位置
+          // 若要精確對齊需要更複雜的 layout 計算，這裡示範針對長頁面的重點區域
+          if (targetKey === 'profile_save') {
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+          } else if (targetKey === 'profile_basic' || targetKey === 'profile_ai') {
+              // 這些通常在上方或中間，視情況捲動
+              // 簡單做法：回到頂部，確保用戶從頭看起
+              scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          }
+      });
+  }, []);
 
   // [修改] 顯示功能選單
   const showGuideMenu = () => {
@@ -69,44 +87,48 @@ export default function ProfileScreen() {
       const options = [
           t('tab_home', lang),      // 0
           t('tab_analysis', lang),  // 1
-          t('tab_settings', lang),  // 2
-          t('cancel', lang)         // 3
+          t('tab_ai_coach', lang),   // 2 [新增] AI 教練
+          t('tab_settings', lang),  // 3
+          t('cancel', lang)         // 4
       ];
+
+      const handleSelection = (index: number) => {
+          if (index === 0) {
+              router.push('/(tabs)');
+              setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
+          } else if (index === 1) {
+              router.push('/(tabs)/analysis');
+              setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
+          } else if (index === 2) {
+              // [新增] 跳轉到 AI 教練頁面
+              router.push('/(tabs)/recipes');
+              setTimeout(() => startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE), 500);
+          } else if (index === 3) {
+              // 停留在本頁，直接開始
+              scrollViewRef.current?.scrollTo({ y: 0, animated: false }); // 先回到頂部
+              startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE);
+          }
+      };
 
       if (Platform.OS === 'ios') {
           ActionSheetIOS.showActionSheetWithOptions(
             {
               options: options,
-              cancelButtonIndex: 3,
+              cancelButtonIndex: 4,
               title: t('select_guide_topic', lang),
             },
-            (buttonIndex) => {
-              if (buttonIndex === 0) {
-                  router.push('/(tabs)');
-                  setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
-              } else if (buttonIndex === 1) {
-                  router.push('/(tabs)/analysis');
-                  setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
-              } else if (buttonIndex === 2) {
-                  startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE);
-              }
-            }
+            handleSelection
           );
       } else {
-          // Android 使用 Alert
+          //Android 使用 Alert 作為替代
           Alert.alert(
               t('select_guide_topic', lang),
               "",
               [
-                  { text: t('tab_home', lang), onPress: () => {
-                      router.push('/(tabs)');
-                      setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 500);
-                  }},
-                  { text: t('tab_analysis', lang), onPress: () => {
-                      router.push('/(tabs)/analysis');
-                      setTimeout(() => startScenario('ANALYSIS_GUIDE', allSteps.ANALYSIS_GUIDE), 500);
-                  }},
-                  { text: t('tab_settings', lang), onPress: () => startScenario('PROFILE_GUIDE', allSteps.PROFILE_GUIDE) },
+                  { text: t('tab_home', lang), onPress: () => handleSelection(0) },
+                  { text: t('tab_analysis', lang), onPress: () => handleSelection(1) },
+                  { text: t('tab_ai_coach', lang), onPress: () => handleSelection(2) },
+                  { text: t('tab_settings', lang), onPress: () => handleSelection(3) },
                   { text: t('cancel', lang), style: "cancel" }
               ]
           );
@@ -708,7 +730,8 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={{paddingHorizontal: 16}}>
+      {/* [修改] 綁定 ref */}
+      <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* AI Settings */}
          <TutorialTarget targetKey="profile_ai">
              <View style={[styles.card, {backgroundColor: cardBackground}]}>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { View, ScrollView, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +17,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 // [FIX] 引入 Markdown 渲染套件 (需先 npm install)
 import Markdown from 'react-native-markdown-display';
 import { marked } from 'marked';
+
+// [修改開始] 引入導覽相關元件
+import { useTutorial } from '@/context/TutorialContext';
+import { TutorialTarget } from '@/components/TutorialTarget';
+import { TUTORIAL_KEYS, getTutorialState } from '@/lib/tutorial-storage';
+import { getTutorialSteps } from '@/constants/tutorial-steps';
+// [修改結束]
 
 interface Message {
     id: string;
@@ -39,6 +46,10 @@ export default function RecipesScreen() {
   const inputBg = useThemeColor({}, "cardBackground");
   const textColor = useThemeColor({}, "text");
 
+  // [修改開始] 取得導覽 Context 與使用者名稱
+  const { startScenario, userName } = useTutorial();
+  // [修改結束]
+
   // 自訂 Markdown 樣式
   const markdownStyles = {
       body: { color: textColor, fontSize: 15, lineHeight: 24 },
@@ -53,9 +64,29 @@ export default function RecipesScreen() {
       list_item: { marginBottom: 4 }
   };
 
+  // [修改開始] 整合 context 載入與導覽觸發邏輯
   useFocusEffect(
-      React.useCallback(() => { fetchContextData(); }, [])
+      useCallback(() => {
+          // 1. 載入當日數據
+          fetchContextData();
+
+          // 2. 檢查是否需要觸發導覽
+          async function checkTutorial() {
+            const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_RECIPES);
+            const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+            
+            // 如果是首次安裝流程中，且還沒看過此頁導覽
+            if (isFirst && !seen) {
+                setTimeout(() => {
+                    const allSteps = getTutorialSteps(lang, userName);
+                    startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE);
+                }, 500);
+            }
+          }
+          checkTutorial();
+      }, [lang, userName]) // 加入依賴以確保語言切換時能更新
   );
+  // [修改結束]
 
   const fetchContextData = async () => {
       try {
@@ -226,53 +257,61 @@ export default function RecipesScreen() {
           </View>
       </View>
 
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
-          {messages.length === 0 ? (
-              <View style={{marginTop: 10}}>
-                  <View style={{alignItems:'center', marginBottom: 20, opacity: 0.6}}>
-                      <Ionicons name="chatbubbles-outline" size={48} color={tintColor} />
-                      <ThemedText style={{marginTop:8, fontSize:12, textAlign:'center', maxWidth: '80%'}}>
-                          {t('ai_welcome_msg', lang)}
-                      </ThemedText>
-                  </View>
-
-                  {suggestionGroups.map((group, idx) => (
-                      <View key={idx} style={{marginBottom: 20}}>
-                          <ThemedText type="defaultSemiBold" style={{marginBottom: 8, fontSize: 14}}>{group.title}</ThemedText>
-                          <View style={{flexDirection: 'row', gap: 10}}>
-                              {group.items.map((item, i) => (
-                                  <TouchableOpacity key={i} style={[styles.chip, {borderColor: tintColor, backgroundColor: backgroundColor}]} onPress={() => handleSend(item.prompt, true)}>
-                                      <ThemedText style={{fontSize: 13, color: tintColor}}>{item.label}</ThemedText>
-                                  </TouchableOpacity>
-                              ))}
-                          </View>
+      {/* [修改開始] 包覆 ScrollView：導覽目標 recipes_history */}
+      <TutorialTarget targetKey="recipes_history" style={{flex: 1}}>
+          <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
+              {messages.length === 0 ? (
+                  <View style={{marginTop: 10}}>
+                      <View style={{alignItems:'center', marginBottom: 20, opacity: 0.6}}>
+                          <Ionicons name="chatbubbles-outline" size={48} color={tintColor} />
+                          <ThemedText style={{marginTop:8, fontSize:12, textAlign:'center', maxWidth: '80%'}}>
+                              {t('ai_welcome_msg', lang)}
+                          </ThemedText>
                       </View>
-                  ))}
-              </View>
-          ) : (
-              messages.map(msg => (
-                  <View key={msg.id} style={[styles.bubble, msg.role === 'user' ? { alignSelf: 'flex-end', backgroundColor: tintColor } : { alignSelf: 'flex-start', backgroundColor: inputBg }]}>
-                      {msg.role === 'user' ? (
-                          <ThemedText style={{color: 'white'}}>{msg.text}</ThemedText>
-                      ) : (
-                          // [FIX] 使用 Markdown 元件渲染 AI 回覆
-                          <Markdown style={markdownStyles as any}>
-                              {msg.text}
-                          </Markdown>
-                      )}
+
+                      {suggestionGroups.map((group, idx) => (
+                          <View key={idx} style={{marginBottom: 20}}>
+                              <ThemedText type="defaultSemiBold" style={{marginBottom: 8, fontSize: 14}}>{group.title}</ThemedText>
+                              <View style={{flexDirection: 'row', gap: 10}}>
+                                  {group.items.map((item, i) => (
+                                      <TouchableOpacity key={i} style={[styles.chip, {borderColor: tintColor, backgroundColor: backgroundColor}]} onPress={() => handleSend(item.prompt, true)}>
+                                          <ThemedText style={{fontSize: 13, color: tintColor}}>{item.label}</ThemedText>
+                                      </TouchableOpacity>
+                                  ))}
+                              </View>
+                          </View>
+                      ))}
                   </View>
-              ))
-          )}
-          {loading && <ActivityIndicator style={{marginTop: 10}} size="small" color={tintColor}/>}
-      </ScrollView>
+              ) : (
+                  messages.map(msg => (
+                      <View key={msg.id} style={[styles.bubble, msg.role === 'user' ? { alignSelf: 'flex-end', backgroundColor: tintColor } : { alignSelf: 'flex-start', backgroundColor: inputBg }]}>
+                          {msg.role === 'user' ? (
+                              <ThemedText style={{color: 'white'}}>{msg.text}</ThemedText>
+                          ) : (
+                              // [FIX] 使用 Markdown 元件渲染 AI 回覆
+                              <Markdown style={markdownStyles as any}>
+                                  {msg.text}
+                              </Markdown>
+                          )}
+                      </View>
+                  ))
+              )}
+              {loading && <ActivityIndicator style={{marginTop: 10}} size="small" color={tintColor}/>}
+          </ScrollView>
+      </TutorialTarget>
+      {/* [修改結束] */}
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
-          <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
-              <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
-              <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>
-                  <Ionicons name="send" size={24} color={inputText.trim() ? tintColor : '#ccc'} />
-              </TouchableOpacity>
-          </View>
+          {/* [修改開始] 包覆輸入框：導覽目標 recipes_input */}
+          <TutorialTarget targetKey="recipes_input">
+              <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
+                  <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
+                  <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>
+                      <Ionicons name="send" size={24} color={inputText.trim() ? tintColor : '#ccc'} />
+                  </TouchableOpacity>
+              </View>
+          </TutorialTarget>
+          {/* [修改結束] */}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
