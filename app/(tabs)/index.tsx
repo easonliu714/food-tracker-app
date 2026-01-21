@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Text,
   ActivityIndicator,
-  // [修正] 加入 KeyboardAvoidingView
   KeyboardAvoidingView,
   Platform
 } from "react-native";
@@ -36,7 +35,6 @@ import { userProfiles, foodLogs, activityLogs, dailyMetrics } from "@/drizzle/sc
 
 import { initHealthConnect, getHealthData } from "@/lib/health";
 import { ActivityIcon, ACTIVITY_RAW } from '@/app/activity-editor'; 
-// [修改] 引入 TutorialContext 中需要的 onScrollRequest
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
@@ -46,7 +44,6 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
 const LOCALE_MAP: any = { 'zh-TW': zhTW, 'en': enUS, 'ja': ja, 'ko': ko, 'fr': fr, 'ru': ru };
 
-// [新增] 時間格式轉換 Helper
 const decimalToHHMM = (decimal: number) => {
   if (!decimal && decimal !== 0) return "";
   const hours = Math.floor(decimal);
@@ -56,9 +53,7 @@ const decimalToHHMM = (decimal: number) => {
 
 const hhmmToDecimal = (hhmm: string) => {
   if (!hhmm) return 0;
-  // 支援 HH:MM 或 HHMM
   const clean = hhmm.replace(':', '');
-  // 如果長度不足(例如輸入"7"或"75")，暫時視為純數字直接轉，或是直接回傳0避免錯誤
   if (clean.length < 3) return parseFloat(clean) || 0; 
   
   let h = 0, m = 0;
@@ -67,7 +62,6 @@ const hhmmToDecimal = (hhmm: string) => {
       h = parseInt(parts[0]) || 0;
       m = parseInt(parts[1]) || 0;
   } else {
-      // 處理純數字輸入 (如 0730)
       if (clean.length === 3) {
           h = parseInt(clean.substring(0, 1));
           m = parseInt(clean.substring(1));
@@ -76,24 +70,28 @@ const hhmmToDecimal = (hhmm: string) => {
           m = parseInt(clean.substring(2));
       }
   }
-  
   const totalHours = h + (m / 60);
-  // [修改] 保持小數點後兩位
   return Math.round(totalHours * 100) / 100;
 };
 
 const formatTimeInput = (text: string) => {
-    // 移除非數字
     const cleaned = text.replace(/[^0-9]/g, '');
-    
-    // 限制長度 (HHMM = 4位)
     const trimmed = cleaned.substring(0, 4);
-
     if (trimmed.length >= 3) {
         return `${trimmed.substring(0, 2)}:${trimmed.substring(2)}`;
     }
     return trimmed;
 };
+
+// [修正] 將 ActionButton 定義移到上方，避免 ReferenceError
+const ActionButton = ({ icon, label, onPress, color }: any) => (
+  <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+    <View style={[styles.iconCircle, { backgroundColor: color }]}>
+      <Ionicons name={icon} size={24} color="#FFF" />
+    </View>
+    <ThemedText style={styles.actionLabel}>{label}</ThemedText>
+  </TouchableOpacity>
+);
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -101,34 +99,29 @@ export default function HomeScreen() {
   const lang = useLanguage();
   const dateLocale = LOCALE_MAP[lang] || enUS;
   
-  // [新增] 用於深色模式的軌道顏色 (淺灰 vs 深灰)
   const isDark = useColorScheme() === 'dark';
   const ringTrackColor = isDark ? '#555555' : '#e5e5ea';
 
-  // ScrollView Ref 供自動捲動使用
   const scrollViewRef = useRef<ScrollView>(null);
   
-  // [修改] 取得 onScrollRequest，並建立位置紀錄 ref
-  // [修改] 取得導覽 Context
-  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial();
   const targetPositions = useRef<Record<string, number>>({});
 
-  // [新增] 當導覽開始時，自動捲動至頂部
+  // [修改] 導覽開始時，自動捲動至頂部
   useEffect(() => {
       if (activeScenario === 'HOME_GUIDE') {
           scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       }
   }, [activeScenario]);
 
-  // [修改] 改用 onScrollRequest 監聽導覽步驟，精確捲動
+  // 捲動監聽
   useEffect(() => {
       onScrollRequest((targetKey) => {
           const y = targetPositions.current[targetKey];
           if (y !== undefined && scrollViewRef.current) {
-              // [修正] 增加延遲確保畫面渲染完畢，並保留上方緩衝空間
+              // 增加延遲與緩衝距離，確保滾動到位
               setTimeout(() => {
-			  // 扣除 80px 緩衝，避免貼頂
-                  scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+                  scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
               }, 100);
           }
       });
@@ -140,7 +133,6 @@ export default function HomeScreen() {
             if (activeScenario === 'HOME_GUIDE') return;
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-            // 確保只在首次安裝且未看過時觸發，且當前無其他劇本執行中
             if (isFirst && !seen && !activeScenario) {
                 const allSteps = getTutorialSteps(lang, userName);
                 startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
@@ -161,14 +153,14 @@ export default function HomeScreen() {
   const [diffFat, setDiffFat] = useState<number | null>(null);
   
   const [showSleepModal, setShowSleepModal] = useState(false);
-  const [manualSleep, setManualSleep] = useState(""); // 這裡存的是 HH:MM 字串
+  const [manualSleep, setManualSleep] = useState("");
 
   const [waterMl, setWaterMl] = useState(0);
   const [waterGoal, setWaterGoal] = useState(2000); 
   const WATER_CUP_SIZE = 250;
 
   const [healthSteps, setHealthSteps] = useState(0);
-  const [healthSleep, setHealthSleep] = useState(0); // 這裡存的是 decimal 小時
+  const [healthSleep, setHealthSleep] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false); 
 
   const [targets, setTargets] = useState({ calories: 2000, protein: 150, fat: 60, carbs: 200, sodium: 2300 });
@@ -188,12 +180,9 @@ export default function HomeScreen() {
     useCallback(() => { loadData(); }, [currentDate])
   );
 
-  // [修正] 儲存睡眠時間：轉為 decimal 儲存
   const handleSaveSleep = async () => {
-      // 解析 HH:MM 為 小時數 (例如 07:30 -> 7.5)
       const h = hhmmToDecimal(manualSleep);
       if (isNaN(h)) return;
-      
       try {
           const dateStr = format(currentDate, "yyyy-MM-dd");
           const existing = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
@@ -204,7 +193,6 @@ export default function HomeScreen() {
           }
           setHealthSleep(h);
           setShowSleepModal(false);
-          // 保持 manualSleep 為格式化字串，以便下次打開直接顯示
           setManualSleep(decimalToHHMM(h)); 
       } catch(e) { console.error(e); }
   };
@@ -251,7 +239,7 @@ export default function HomeScreen() {
           if (totalSleepHours > 0) {
               const fixedSleep = parseFloat(totalSleepHours.toFixed(1));
               setHealthSleep(fixedSleep);
-              setManualSleep(decimalToHHMM(fixedSleep)); // Sync manual input display
+              setManualSleep(decimalToHHMM(fixedSleep));
               const existingMetrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
               if (existingMetrics.length > 0) {
                   await db.update(dailyMetrics).set({ sleepHours: fixedSleep }).where(eq(dailyMetrics.id, existingMetrics[0].id));
@@ -276,7 +264,6 @@ export default function HomeScreen() {
     setDiffWeight(null);
     setDiffFat(null);
     setWaterMl(0);
-    // 先清空，避免顯示上一筆資料
     setManualSleep(""); 
     setHealthSleep(0);
 
@@ -308,17 +295,15 @@ export default function HomeScreen() {
         setBodyFat(curF > 0 ? String(curF) : "");
         setWaterMl(metricsRes[0].waterMl || 0);
         
-        // [修正] 讀取並轉換睡眠時間
         if (metricsRes[0].sleepHours) {
             const h = metricsRes[0].sleepHours;
             setHealthSleep(h);
-            setManualSleep(decimalToHHMM(h)); // 轉回 HH:MM 格式供編輯
+            setManualSleep(decimalToHHMM(h));
         } else {
             setHealthSleep(0);
-            setManualSleep(""); // 明確清空
+            setManualSleep("");
         }
       } else {
-        // [修正] 無資料時，確保為空
         setHealthSleep(0);
         setManualSleep("");
       }
@@ -569,7 +554,6 @@ export default function HomeScreen() {
   const renderDiffBadge = (val: number | null, unit: string) => { if(val===null) return null; const c=val>0?'#FF3B30':(val<0?'#34C759':'#888'); return (<View style={{flexDirection:'row',marginLeft:8,backgroundColor:c+'20',paddingHorizontal:6,borderRadius:4}}><Ionicons name={val>0?'arrow-up':(val<0?'arrow-down':'remove')} size={12} color={c}/><ThemedText style={{fontSize:10,color:c,fontWeight:'bold'}}>{Math.abs(val)} {unit}</ThemedText></View>);};
   
   const renderBodyMetricsCard = () => (
-    // [修改] style 加入 backgroundColor: theme.cardBackground
     <ThemedView style={[styles.card, { paddingVertical: 20, backgroundColor: theme.cardBackground }]}> 
       <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
@@ -592,7 +576,6 @@ export default function HomeScreen() {
             <View style={{flexDirection:'row',alignItems:'center'}}>
                 <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
                 <TextInput 
-                    // [修改] 確保 TextInput 文字顏色適應主題
                     style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} 
                     value={weight} 
                     onChangeText={setWeight} 
@@ -644,7 +627,6 @@ export default function HomeScreen() {
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
 
       return (
-          // [修改] style 加入 backgroundColor: theme.cardBackground
           <ThemedView style={[styles.card, { backgroundColor: theme.cardBackground }]}>
               <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
                   <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
@@ -701,12 +683,10 @@ export default function HomeScreen() {
         <View style={{flexDirection:'row', marginBottom:20}}>
             <View style={{flex:1}}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}><ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText></View>
-                {/* [修改] Bar 背景色改用 ringTrackColor */}
                 <View style={[styles.barBg, { backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${intakePct*100}%`, backgroundColor:'#34C759'}]}/></View>
                 <View style={[styles.barBg, {marginTop:8, backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
             </View>
             <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
-                {/* ... (文字內容保持不變) ... */}
                 <ThemedText style={{fontSize:12, color:'#888'}}>{t('intake_target', lang)}: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
                 <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}: -{Math.round(burnedCalories)}</ThemedText>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}><ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText><ThemedText type="title">{netPct}%</ThemedText></View>
@@ -729,13 +709,12 @@ export default function HomeScreen() {
       return (
         <TouchableOpacity onPress={() => setSelectedMacro({label, key, unit})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
             <View pointerEvents="none">
-                {/* [修正] 加入 innerCircleColor 避免遮擋，並強制指定文字顏色 */}
                 <PieChart 
                     data={[{value: visualPct, color}, {value: 100-visualPct, color: ringTrackColor }]} 
                     donut 
                     radius={32} 
                     innerRadius={24} 
-                    innerCircleColor={theme.cardBackground} // [關鍵修正] 設定為背景色，解決深色模式變白圓的問題
+                    innerCircleColor={theme.cardBackground}
                     centerLabelComponent={() => (
                         <ThemedText style={{fontSize:10, fontWeight:'bold', color: theme.text}}> 
                             {Math.round(realPct)}%
@@ -761,168 +740,52 @@ export default function HomeScreen() {
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         {renderHeader()}
         
-        {/* [修改] 加入 onMeasure 紀錄位置，供自動捲動使用 */}
         <TutorialTarget
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
          adjustment={{
-            padding: 50, // 可選的，增加額外的內邊距
-            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 負數表示減少寬度
+            padding: 10,
+            offsetY: 0, 
+            heightAdd: 0,
+            widthAdd: 0,
          }}
          >
-            {/* 這裡需要填回 renderBodyMetricsCard() 的完整內容 */}
-            <ThemedView style={[styles.card, { paddingVertical: 20, backgroundColor: theme.cardBackground }]}> 
-              {/* ... (Body Metrics Content) ... */}
-              <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
-                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                    <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
-                    <TouchableOpacity onPress={handleSaveMetrics} style={{marginLeft: 12}}>
-                       <Ionicons name="add-circle" size={24} color={theme.tint} />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{flexDirection:'row', gap: 12}}>
-                     <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: theme.inputBackground, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12}}>
-                        <ThemedText style={{fontSize: 10, color: '#888', marginRight: 4}}>{t('sync_health_hint', lang)}</ThemedText>
-                        {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={16} color={theme.tint} />}
-                     </TouchableOpacity>
-                  </View>
-              </View>
-              <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
-                <View style={{gap: 10}}>
-                    <View style={{flexDirection:'row',alignItems:'center'}}>
-                        <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
-                        <TextInput style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                        <ThemedText style={{fontSize:14, marginLeft: 4}}>kg</ThemedText>
-                        {renderDiffBadge(diffWeight,'kg')}
-                    </View>
-                    <View style={{flexDirection:'row',alignItems:'center'}}>
-                        <ThemedText style={{width: 95, fontSize: 14}}>{t('body_fat', lang)}</ThemedText>
-                        <TextInput style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
-                        <ThemedText style={{fontSize:14, marginLeft: 4}}>% </ThemedText>
-                        {renderDiffBadge(diffFat,'%')}
-                    </View>
-                </View>
-                <View style={{justifyContent:'center', alignItems:'flex-end', gap: 8}}>
-                    <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)}: {targetWeight} kg</ThemedText>
-                    <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)}: {targetBodyFat} %</ThemedText>
-                </View>
-              </View>
-              <View style={{borderTopWidth:1, borderColor: theme.border || '#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
-                  <View style={{flexDirection:'row', alignItems:'center'}}>
-                      <Ionicons name="footsteps" size={18} color="#FF9500"/>
-                      <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSteps} {t('steps', lang) || "steps"}</ThemedText>
-                  </View>
-                  <View style={{height: '100%', width:1, backgroundColor:'#eee'}}/>
-                  <TouchableOpacity onPress={() => setShowSleepModal(true)} style={{flexDirection:'row', alignItems:'center'}}>
-                      <Ionicons name="bed" size={18} color="#5856D6"/>
-                      <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSleep} h {t('sleep', lang) || "sleep"}</ThemedText>
-                  </TouchableOpacity>
-              </View>
-            </ThemedView>
+            {renderBodyMetricsCard()}
         </TutorialTarget>
 
         <TutorialTarget
          targetKey="home_water" 
          onMeasure={(y) => targetPositions.current['home_water'] = y}
          adjustment={{
-            padding: 50, // 可選的，增加額外的內邊距
-            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 負數表示減少寬度
+            padding: 10,
+            offsetY: 0,
+            heightAdd: 0,
+            widthAdd: 0,
          }}
          >
-            {/* 填回 renderWaterSection() 內容 */}
-            <ThemedView style={[styles.card, { backgroundColor: theme.cardBackground }]}>
-              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
-                  <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
-                  <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
-              </View>
-              <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'space-between', minHeight: 50}}>
-                  <TouchableOpacity onPress={removeWater} style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}><Ionicons name="remove" size={24} color={theme.text} /></TouchableOpacity>
-                  <View style={{flex: 1, flexDirection:'row', flexWrap:'wrap', justifyContent:'center', alignItems:'center', paddingHorizontal: 4}}>
-                      {Array.from({length: Math.ceil(waterGoal / WATER_CUP_SIZE)}).map((_, idx) => (
-                          <View key={idx} style={{opacity: idx < Math.floor(waterMl / WATER_CUP_SIZE) ? 1 : 0.3, margin: 2}}>
-                              <Ionicons name={idx < Math.floor(waterMl / WATER_CUP_SIZE) ? "water" : "water-outline"} size={26} color="#007AFF" />
-                          </View>
-                      ))}
-                      {Math.floor(waterMl / WATER_CUP_SIZE) > Math.ceil(waterGoal / WATER_CUP_SIZE) && (
-                           <View style={{flexDirection:'row', alignItems:'center', margin: 2}}>
-                               <Ionicons name="add" size={14} color={theme.text}/>
-                               <Ionicons name="water" size={26} color="#007AFF" />
-                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:7}}>+{Math.floor(waterMl / WATER_CUP_SIZE) - Math.ceil(waterGoal / WATER_CUP_SIZE)}</ThemedText>
-                           </View>
-                      )}
-                  </View>
-                  <TouchableOpacity onPress={addWater} style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}><Ionicons name="add" size={24} color={theme.text} /></TouchableOpacity>
-              </View>
-              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:8}}>{t('tap_buttons_to_adjust', lang) || "Tap buttons to adjust (+/- 250ml)"}</ThemedText>
-            </ThemedView>
+            {renderWaterSection()}
         </TutorialTarget>
 
         <TutorialTarget
          targetKey="home_energy" 
          onMeasure={(y) => targetPositions.current['home_energy'] = y}
          adjustment={{
-            padding: 50, // 可選的，增加額外的內邊距
-            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 負數表示減少寬度
+            padding: 10,
+            offsetY: 0,
+            heightAdd: 0,
+            widthAdd: 0,
          }}
          >
-            {/* 填回 renderEnergySection() 內容 */}
-            <View style={styles.sectionContainer}>
-                <View style={{flexDirection:'row', marginBottom:20}}>
-                    <View style={{flex:1}}>
-                        <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}><ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText></View>
-                        <View style={[styles.barBg, { backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${(targets.calories>0?Math.min(intake.calories/targets.calories,1):0)*100}%`, backgroundColor:'#34C759'}]}/></View>
-                        <View style={[styles.barBg, {marginTop:8, backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
-                    </View>
-                    <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
-                        <ThemedText style={{fontSize:12, color:'#888'}}>{t('intake_target', lang)}: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
-                        <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}: -{Math.round(burnedCalories)}</ThemedText>
-                        <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}><ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText><ThemedText type="title">{targets.calories>0?Math.round(((intake.calories-burnedCalories)/targets.calories)*100):0}%</ThemedText></View>
-                    </View>
-                </View>
-                <View style={{flexDirection:'row', justifyContent:'space-between'}}>
-                    {/* Render Rings */}
-                    {[
-                        {l: t('protein',lang), v: intake.protein, t: targets.protein, c: "#FF3B30", k: "protein"},
-                        {l: t('fat',lang), v: intake.fat, t: targets.fat, c: "#FFcc00", k: "fat"},
-                        {l: t('carbs',lang), v: intake.carbs, t: targets.carbs, c: "#5856D6", k: "carbs"},
-                        {l: t('sodium',lang), v: intake.sodium, t: targets.sodium, c: "#AF52DE", k: "sodium", u:"mg"}
-                    ].map((item:any, i) => {
-                        const rp = item.t > 0 ? (item.v/item.t)*100 : 0;
-                        const vp = Math.min(rp, 100);
-                        return (
-                            <TouchableOpacity key={i} onPress={() => setSelectedMacro({label:item.l, key:item.k, unit:item.u||"g"})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
-                                <View pointerEvents="none">
-                                    <PieChart data={[{value: vp, color: item.c}, {value: 100-vp, color: ringTrackColor }]} donut radius={32} innerRadius={24} innerCircleColor={theme.background} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold', color: theme.text}}>{Math.round(rp)}%</ThemedText>}/>
-                                </View>
-                                <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{item.l}</ThemedText>
-                                <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(item.v)}/{item.t}{item.u||"g"}</ThemedText>
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-            </View>
+            {renderEnergySection()}
         </TutorialTarget>
 
-        {/* [排版調整] 5. Actions (原在下方，現移至此) */}
-        <View style={styles.recordSection}>
-            <TutorialTarget
+        <TutorialTarget
              targetKey="home_actions" 
              onMeasure={(y) => targetPositions.current['home_actions'] = y}
-             adjustment={{
-                padding: 50, // 可選的，增加額外的內邊距
-                offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-                offsetY: 0,    // 正數表示往下移動 (例如往下 20px)
-                heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
-                widthAdd: 0,    // 負數表示減少寬度
+             style={[styles.recordSection, { marginBottom: 0 }]} 
+             adjustment={{ 
+                padding: 10, 
+                offsetY: 0 
              }}
              >
                <View style={styles.quickActionRow}>
@@ -931,57 +794,55 @@ export default function HomeScreen() {
                     <ActionButton icon="create" label={t('manual_input', lang)} onPress={() => router.push("/food-editor")} color="#5856D6" />
                     <ActionButton icon="fitness" label={t('exercise', lang)} onPress={() => router.push("/activity-editor")} color="#FF9500" />
                </View>
-            </TutorialTarget>
+        </TutorialTarget>
 
-            {/* [排版調整] 6. Logs & Recent Foods (原在上方，現移至此，統一為 home_logs) */}
-            <TutorialTarget targetKey="home_logs" onMeasure={(y) => targetPositions.current['home_logs'] = y}>
-                <View>
-                    {renderQuickAdd()} 
-                    
-                    <View style={styles.logsContainer}>
-                        {MEAL_ORDER.map((mealType) => {
-                            // ... render logs
-                            const logs = dailyLogs[mealType] || [];
-                            return (
-                                <View key={mealType} style={styles.mealGroup}>
-                                    <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum:any, item:any) => sum + item.totalCalories, 0))} kcal</ThemedText></View>
-                                    {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : logs.map((log:any) => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
-                                </View>
-                            );
-                        })}
-                    </View>
-                    {/* Activity Logs */}
-                    
-                    {/* [修正] 常用運動與運動紀錄 - 確保標題可見 */}
-                    <View style={{marginTop: 20, marginBottom: 8}}>
-                        <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
-                        {frequentActivities.length > 0 ? (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>
-                                {frequentActivities.map((name, idx) => {
-                                    const { icon, library } = getActivityIconInfo(name);
-                                    return (
-                                        <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
-                                            <ActivityIcon library={library} name={icon} size={16} color={theme.text} style={{marginRight: 4}} />
-                                            <ThemedText>{name}</ThemedText>
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-                        ) : (
-                            <ThemedText style={{color: '#888', fontSize: 13, fontStyle: 'italic'}}>{t('no_recent_activities', lang) || "No recent activities"}</ThemedText>
-                        )}
-                    </View>
-
-                    <View style={[styles.mealGroup, {marginTop: 20}]}>
-                        <View style={styles.mealHeader}>
-                            <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
-                            <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
-                        </View>
-                        {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
-                    </View>
+        <TutorialTarget 
+            targetKey="home_logs" 
+            onMeasure={(y) => targetPositions.current['home_logs'] = y}
+            style={{ paddingHorizontal: 16 }} 
+            adjustment={{ padding: 10, offsetY: 0 }}
+        >
+            <View>
+                {renderQuickAdd()} 
+                
+                <View style={styles.logsContainer}>
+                    {MEAL_ORDER.map((mealType) => {
+                        const logs = dailyLogs[mealType] || [];
+                        return (
+                            <View key={mealType} style={styles.mealGroup}>
+                                <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal</ThemedText></View>
+                                {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : logs.map(log => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
+                            </View>
+                        );
+                    })}
                 </View>
-            </TutorialTarget>
-        </View>
+                
+                <View style={{marginTop: 20, marginBottom: 8}}>
+                    <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8, minHeight: 40}}>
+                        {frequentActivities.length > 0 ? frequentActivities.map((name, idx) => {
+                            const { icon, library } = getActivityIconInfo(name);
+                            return (
+                                <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
+                                    <ActivityIcon library={library} name={icon} size={16} color={theme.text} style={{marginRight: 4}} />
+                                    <ThemedText>{name}</ThemedText>
+                                </TouchableOpacity>
+                            );
+                        }) : (
+                             <ThemedText style={{color: '#888', fontSize: 13, fontStyle: 'italic', paddingVertical: 10}}>{t('no_recent_activities', lang) || "No recent activities"}</ThemedText>
+                        )}
+                    </ScrollView>
+                </View>
+
+                <View style={[styles.mealGroup, {marginTop: 20}]}>
+                    <View style={styles.mealHeader}>
+                        <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
+                        <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
+                    </View>
+                    {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
+                </View>
+            </View>
+        </TutorialTarget>
         
         {CustomCalendarModal()}
         {renderMacroDetailModal()}
@@ -990,7 +851,6 @@ export default function HomeScreen() {
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.cardBackground}]}>
                     <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_sleep', lang)}</ThemedText>
-                    {/* [修正] 輸入框: 純數字鍵盤, 限制長度4, 顯示 HH:MM 格式 */}
                     <TextInput 
                         style={[styles.metricInput, {width: '100%', backgroundColor: theme.inputBackground, borderRadius:8, padding:10, marginBottom:16, color: theme.text}]}
                         placeholder={t('sleep_hours', lang) || "HHMM"} // e.g. 0730
@@ -1014,18 +874,15 @@ export default function HomeScreen() {
   );
 }
 
-const ActionButton = ({ icon, label, onPress, color }: any) => (<TouchableOpacity style={styles.actionButton} onPress={onPress}><View style={[styles.iconCircle, { backgroundColor: color }]}><Ionicons name={icon} size={24} color="#FFF" /></View><ThemedText style={styles.actionLabel}>{label}</ThemedText></TouchableOpacity>);
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
   headerContainer: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   dateDisplay: { alignItems: "center" },
-  // [修改] 移除 backgroundColor: 'white'，改由 component inline style 動態控制
   card: { marginHorizontal: 16, marginVertical: 8, padding: 16, borderRadius: 16, elevation: 2, shadowOpacity: 0.1, shadowRadius: 4 }, 
   metricInput: { width: 70, fontSize: 18, fontWeight: "600", textAlign: "center", paddingVertical: 8, paddingHorizontal: 4 }, 
   sectionContainer: { paddingHorizontal: 16, marginTop: 16 },
-  barBg: { height: 12, borderRadius: 6, overflow: "hidden" }, // [修改] 移除 backgroundColor (改為 inline)
+  barBg: { height: 12, borderRadius: 6, overflow: "hidden" }, 
   barFill: { height: "100%", borderRadius: 6 },
   recordSection: { marginTop: 24, paddingHorizontal: 16 },
   quickActionRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },

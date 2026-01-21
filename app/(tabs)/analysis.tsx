@@ -72,7 +72,7 @@ export default function AnalysisScreen() {
           scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       }
   }, [activeScenario]);
-  
+
   // [修改] 使用 useFocusEffect 管理 scroll listener
   useFocusEffect(
       useCallback(() => {
@@ -611,7 +611,7 @@ export default function AnalysisScreen() {
         </View>
         
         {/* 2. 週期選擇區塊 (analysis_period) */}
-        <TutorialTarget targetKey="analysis_period" onMeasure={(y) => targetPositions.current['analysis_period'] = y} adjustment={{offsetY: -30}}>
+        <TutorialTarget targetKey="analysis_period" onMeasure={(y) => targetPositions.current['analysis_period'] = y} adjustment={{offsetY: 100}}>
             <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
                 {['week', 'month', 'custom'].map((p) => (
                     <TouchableOpacity key={p} onPress={() => setPeriod(p as any)} style={{flex: 1, paddingVertical: 6, alignItems:'center', borderRadius:6, backgroundColor: period === p ? theme.tint : 'transparent'}}>
@@ -624,21 +624,21 @@ export default function AnalysisScreen() {
         </TutorialTarget>
 
         {/* 3. 日期範圍區塊 (analysis_range) */}
-        <TutorialTarget targetKey="analysis_range" onMeasure={(y) => targetPositions.current['analysis_range'] = y} adjustment={{offsetY: -30}}>
+        <TutorialTarget targetKey="analysis_range" onMeasure={(y) => targetPositions.current['analysis_range'] = y} adjustment={{offsetY: 100}}>
             {renderCustomRangePicker()}
         </TutorialTarget>
 
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
         
         {/* 4. 統計數據區塊 (analysis_grid) */}
-        <TutorialTarget targetKey="analysis_grid" onMeasure={(y) => targetPositions.current['analysis_grid'] = y} adjustment={{offsetY: -30}}>
+        <TutorialTarget targetKey="analysis_grid" onMeasure={(y) => targetPositions.current['analysis_grid'] = y} adjustment={{offsetY: 0}}>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
                 {gridSlots.map((key, index) => renderGridItem(key, index))}
             </View>
         </TutorialTarget>
 
         {/* 5. 趨勢圖表區塊 (analysis_chart) */}
-        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y} adjustment={{offsetY: -30}}>
+        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y} adjustment={{offsetY: -50}}>
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                     <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
