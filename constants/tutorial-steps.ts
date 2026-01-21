@@ -19,7 +19,7 @@ export const getTutorialSteps = (lang: string, userName: string): Record<string,
       { targetKey: 'profile_basic', text: t('tutorial_profile_basic_1', lang) || "性別、年齡與身高是計算基礎代謝率的關鍵。" },
       { targetKey: 'profile_basic', text: t('tutorial_profile_basic_2', lang) || "我會自動更新您最近在首頁輸入的體重、體脂率，讓 AI 運算更精準。" },
       { targetKey: 'profile_goals', text: t('tutorial_profile_goals_1', lang) || "設定您的體重目標與活動量，我會自動為您計算每日熱量預算。" },
-      { targetKey: 'profile_goals', text: t('tutorial_profile_goals_2', lang) || "當您的目標改變（例如想增肌或減脂），記得來這裡調整目標設定。" }
+      { targetKey: 'profile_goals', text: t('tutorial_profile_goals_2', lang) || "當您的目標改變（例如想增肌或減脂），記得來這裡調整目標設定。" },
       { targetKey: 'profile_save', text: t('tutorial_profile_save', lang) || "填寫完畢後，別忘了按儲存喔！", action: 'end_onboarding' }
     ],
     
@@ -41,14 +41,14 @@ export const getTutorialSteps = (lang: string, userName: string): Record<string,
     ],
 
     HOME_GUIDE: [
-      { targetKey: 'home_header', text: t('tutorial_home_header', lang) || `早安，${userName}！點擊這裡可以快速切換日期。` },
+      { targetKey: 'home_header', text: t('tutorial_home_header', lang) || "早安，${userName}！點擊這裡可以快速切換日期。" },
       { targetKey: 'home_metrics', text: t('tutorial_home_metrics_1', lang) || "這裡顯示您當前的體重、體脂以及今日的步數與睡眠。" },
       { targetKey: 'home_metrics', text: t('tutorial_home_metrics_2', lang) || "請輸入體重和體脂率後，點擊 + 號新增今日的身體數值。" },
       { targetKey: 'home_metrics', text: t('tutorial_home_metrics_3', lang) || "步數會依據運動紀錄自動統計，請點擊睡眠輸入昨晚的睡眠時長(hhmm)。" },
       { targetKey: 'home_water', text: t('tutorial_home_water', lang) || "別忘了喝水！點擊 + 號可以快速記錄每次的飲水量，- 號則會扣除唷。" },
       { targetKey: 'home_energy', text: t('tutorial_home_energy', lang) || "這是最重要的能量儀表板，即時監控熱量攝取與消耗的平衡。" },
       { targetKey: 'home_actions', text: t('tutorial_home_actions', lang) || "想要記錄飲食或運動？這裡有四個快速入口：拍照、掃碼、手輸與運動紀錄。" },
-      { targetKey: 'home_logs', text: t('tutorial_home_logs_1', lang) || "下方是您的飲食與運動流水帳，也包含常用食物的快速新增功能。" }
+      { targetKey: 'home_logs', text: t('tutorial_home_logs_1', lang) || "下方是您的飲食與運動流水帳，也包含常用食物的快速新增功能。" },
       { targetKey: 'home_logs', text: t('tutorial_home_logs_2', lang) || "按住項目右滑可以編輯，按住項目左滑可以複製或刪除。" }
     ],
 

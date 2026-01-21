@@ -653,7 +653,7 @@ export default function ProfileScreen() {
 
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* 1. AI Key */}
-         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10 }}>
+         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10, offsetY: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
                 <View style={{marginTop:12}}>
@@ -673,7 +673,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 2. Notification */}
-         <TutorialTarget targetKey="profile_notify" onMeasure={(y) => targetPositions.current['profile_notify'] = y}>
+         <TutorialTarget targetKey="profile_notify" onMeasure={(y) => targetPositions.current['profile_notify'] = y} adjustment={{ offsetY: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                  <ThemedText type="subtitle" style={{marginBottom:12}}>🔔 {t('notifications', lang)}</ThemedText>
                  <View style={styles.reminderRow}>
@@ -748,7 +748,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 3. Backup */}
-         <TutorialTarget targetKey="profile_backup" onMeasure={(y) => targetPositions.current['profile_backup'] = y}>
+         <TutorialTarget targetKey="profile_backup" onMeasure={(y) => targetPositions.current['profile_backup'] = y} adjustment={{ offsetY: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                  <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('backup_desc', lang)}</ThemedText>
@@ -777,7 +777,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 4. Basic Info */}
-         <TutorialTarget targetKey="profile_basic" onMeasure={(y) => targetPositions.current['profile_basic'] = y} adjustment={{ offsetY: -5 }}>
+         <TutorialTarget targetKey="profile_basic" onMeasure={(y) => targetPositions.current['profile_basic'] = y} adjustment={{ offsetY: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                 <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
                 <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
@@ -901,7 +901,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 6. Save Button */}
-         <TutorialTarget targetKey="profile_save" onMeasure={(y) => targetPositions.current['profile_save'] = y} adjustment={{ heightAdd: 5 }}>
+         <TutorialTarget targetKey="profile_save" onMeasure={(y) => targetPositions.current['profile_save'] = y} adjustment={{ offsetY: -30, heightAdd: 5 }}>
              <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
                 <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
              </Pressable>
@@ -928,7 +928,7 @@ export default function ProfileScreen() {
                   
                   <Pressable onPress={() => handleGuideSelection(0)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_home', lang)}</ThemedText></Pressable>
                   <Pressable onPress={() => handleGuideSelection(1)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_analysis', lang)}</ThemedText></Pressable>
-                  <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_recipes', lang)}</ThemedText></Pressable>
+                  <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_ai_coach', lang)}</ThemedText></Pressable>
                   <Pressable onPress={() => handleGuideSelection(3)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_settings', lang)}</ThemedText></Pressable>
                   
                   <Pressable onPress={() => setShowGuideMenuModal(false)} style={[styles.menuItem, {borderBottomWidth: 0, marginTop: 8}]}>

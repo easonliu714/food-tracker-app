@@ -235,11 +235,7 @@ export default function RecipesScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
       
       {/* 1. Title & Exports */}
-      <TutorialTarget 
-        targetKey="Recipe_title" 
-        adjustment={{padding: 5}}
-        onMeasure={(y) => targetPositions.current['Recipe_title'] = y}
-      >
+      <TutorialTarget targetKey="Recipe_title" onMeasure={(y) => targetPositions.current['Recipe_title'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
           <View style={styles.header}>
               <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
               <View style={{flexDirection:'row', gap: 16}}>
@@ -250,11 +246,7 @@ export default function RecipesScreen() {
       </TutorialTarget>
 
       {/* 2. Energy Stats */}
-      <TutorialTarget 
-        targetKey="Recipe_energy" 
-        adjustment={{padding: 5}}
-        onMeasure={(y) => targetPositions.current['Recipe_energy'] = y}
-      >
+      <TutorialTarget targetKey="Recipe_energy" onMeasure={(y) => targetPositions.current['Recipe_energy'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
           <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
               <View style={styles.statusItem}>
                   <ThemedText style={{fontSize:10, color:'#888'}}>{t('daily_calorie_target', lang)}</ThemedText>
@@ -276,11 +268,7 @@ export default function RecipesScreen() {
       </TutorialTarget>
 
       {/* 3. Hotkeys & Chat History */}
-      <TutorialTarget 
-        targetKey="Recipe_hotkeys" 
-        style={{flex: 1}}
-        onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y}
-      >
+      <TutorialTarget targetKey="Recipe_hotkeys" onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
           <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
               {messages.length === 0 ? (
                   <View style={{marginTop: 10}}>
@@ -323,10 +311,7 @@ export default function RecipesScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
           {/* 4. Chat Input */}
-          <TutorialTarget 
-            targetKey="Recipe_chat"
-            onMeasure={(y) => targetPositions.current['Recipe_chat'] = y}
-          >
+          <TutorialTarget targetKey="Recipe_chat" onMeasure={(y) => targetPositions.current['Recipe_chat'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
               <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
                   <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
                   <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>

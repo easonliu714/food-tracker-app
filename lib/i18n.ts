@@ -374,6 +374,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_recipes_export: "對話結束後，您可以將建議匯出成 PDF 保存。",
     tutorial_recipes_history_hint: "這裡會顯示你們的對話紀錄，長按可以複製或分享建議。",
   
+    tutorial_home_header: "早安，{{Name}}！點擊這裡可以快速切換日期。",
     select_guide_topic: "選擇想了解的主題：",
     skip_tutorial: "跳過教學",
     next_step: "下一步",

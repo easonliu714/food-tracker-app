@@ -117,8 +117,11 @@ export default function HomeScreen() {
       onScrollRequest((targetKey) => {
           const y = targetPositions.current[targetKey];
           if (y !== undefined && scrollViewRef.current) {
-              // 扣除 50px 緩衝，避免貼頂
-              scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
+              // [修正] 增加延遲確保畫面渲染完畢，並保留上方緩衝空間
+              setTimeout(() => {
+			  // 扣除 80px 緩衝，避免貼頂
+                  scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+              }, 100);
           }
       });
   }, []);
@@ -762,7 +765,55 @@ export default function HomeScreen() {
             widthAdd: 0,    // 負數表示減少寬度
          }}
          >
-            {renderBodyMetricsCard()}
+            {/* 這裡需要填回 renderBodyMetricsCard() 的完整內容 */}
+            <ThemedView style={[styles.card, { paddingVertical: 20, backgroundColor: theme.cardBackground }]}> 
+              {/* ... (Body Metrics Content) ... */}
+              <View style={{flexDirection:'row',justifyContent:'space-between',marginBottom:16}}>
+                  <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <ThemedText type="defaultSemiBold" style={{fontSize: 18}}>{t('body_metrics',lang)}</ThemedText>
+                    <TouchableOpacity onPress={handleSaveMetrics} style={{marginLeft: 12}}>
+                       <Ionicons name="add-circle" size={24} color={theme.tint} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{flexDirection:'row', gap: 12}}>
+                     <TouchableOpacity onPress={() => syncHealthData(format(currentDate, 'yyyy-MM-dd'))} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: theme.inputBackground, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12}}>
+                        <ThemedText style={{fontSize: 10, color: '#888', marginRight: 4}}>{t('sync_health_hint', lang)}</ThemedText>
+                        {isSyncing ? <ActivityIndicator size="small" color={theme.tint}/> : <Ionicons name="sync" size={16} color={theme.tint} />}
+                     </TouchableOpacity>
+                  </View>
+              </View>
+              <View style={{flexDirection:'row',justifyContent:'space-between', marginBottom: 16}}>
+                <View style={{gap: 10}}>
+                    <View style={{flexDirection:'row',alignItems:'center'}}>
+                        <ThemedText style={{width: 95, fontSize: 14}}>{t('weight', lang)}</ThemedText>
+                        <TextInput style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} value={weight} onChangeText={setWeight} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                        <ThemedText style={{fontSize:14, marginLeft: 4}}>kg</ThemedText>
+                        {renderDiffBadge(diffWeight,'kg')}
+                    </View>
+                    <View style={{flexDirection:'row',alignItems:'center'}}>
+                        <ThemedText style={{width: 95, fontSize: 14}}>{t('body_fat', lang)}</ThemedText>
+                        <TextInput style={[styles.metricInput, {fontSize: 16, color: theme.text, backgroundColor: theme.inputBackground, borderRadius: 8, borderWidth: 0}]} value={bodyFat} onChangeText={setBodyFat} placeholder="--" placeholderTextColor="#999" keyboardType="numeric"/>
+                        <ThemedText style={{fontSize:14, marginLeft: 4}}>% </ThemedText>
+                        {renderDiffBadge(diffFat,'%')}
+                    </View>
+                </View>
+                <View style={{justifyContent:'center', alignItems:'flex-end', gap: 8}}>
+                    <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_weight',lang)}: {targetWeight} kg</ThemedText>
+                    <ThemedText style={{fontSize:12,color:'#888'}}>{t('target_body_fat',lang)}: {targetBodyFat} %</ThemedText>
+                </View>
+              </View>
+              <View style={{borderTopWidth:1, borderColor: theme.border || '#eee', paddingTop:12, flexDirection:'row', justifyContent:'space-around'}}>
+                  <View style={{flexDirection:'row', alignItems:'center'}}>
+                      <Ionicons name="footsteps" size={18} color="#FF9500"/>
+                      <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSteps} {t('steps', lang) || "steps"}</ThemedText>
+                  </View>
+                  <View style={{height: '100%', width:1, backgroundColor:'#eee'}}/>
+                  <TouchableOpacity onPress={() => setShowSleepModal(true)} style={{flexDirection:'row', alignItems:'center'}}>
+                      <Ionicons name="bed" size={18} color="#5856D6"/>
+                      <ThemedText style={{fontSize:14, marginLeft:6, fontWeight:'500'}}>{healthSleep} h {t('sleep', lang) || "sleep"}</ThemedText>
+                  </TouchableOpacity>
+              </View>
+            </ThemedView>
         </TutorialTarget>
 
         <TutorialTarget
@@ -771,12 +822,37 @@ export default function HomeScreen() {
          adjustment={{
             padding: 50, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
+            offsetY: 130,    // 正數表示往下移動 (例如往下 20px)
             heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
             widthAdd: 0,    // 負數表示減少寬度
          }}
          >
-            {renderWaterSection()}
+            {/* 填回 renderWaterSection() 內容 */}
+            <ThemedView style={[styles.card, { backgroundColor: theme.cardBackground }]}>
+              <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
+                  <ThemedText type="defaultSemiBold">💧 {t('water_intake', lang) || "Water Intake"}</ThemedText>
+                  <ThemedText style={{color: theme.tint}}>{waterMl} / {waterGoal} ml</ThemedText>
+              </View>
+              <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'space-between', minHeight: 50}}>
+                  <TouchableOpacity onPress={removeWater} style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}><Ionicons name="remove" size={24} color={theme.text} /></TouchableOpacity>
+                  <View style={{flex: 1, flexDirection:'row', flexWrap:'wrap', justifyContent:'center', alignItems:'center', paddingHorizontal: 4}}>
+                      {Array.from({length: Math.ceil(waterGoal / WATER_CUP_SIZE)}).map((_, idx) => (
+                          <View key={idx} style={{opacity: idx < Math.floor(waterMl / WATER_CUP_SIZE) ? 1 : 0.3, margin: 2}}>
+                              <Ionicons name={idx < Math.floor(waterMl / WATER_CUP_SIZE) ? "water" : "water-outline"} size={26} color="#007AFF" />
+                          </View>
+                      ))}
+                      {Math.floor(waterMl / WATER_CUP_SIZE) > Math.ceil(waterGoal / WATER_CUP_SIZE) && (
+                           <View style={{flexDirection:'row', alignItems:'center', margin: 2}}>
+                               <Ionicons name="add" size={14} color={theme.text}/>
+                               <Ionicons name="water" size={26} color="#007AFF" />
+                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:7}}>+{Math.floor(waterMl / WATER_CUP_SIZE) - Math.ceil(waterGoal / WATER_CUP_SIZE)}</ThemedText>
+                           </View>
+                      )}
+                  </View>
+                  <TouchableOpacity onPress={addWater} style={{width: 30, height: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.inputBackground, borderRadius: 20, zIndex: 10}}><Ionicons name="add" size={24} color={theme.text} /></TouchableOpacity>
+              </View>
+              <ThemedText style={{fontSize:10, color:'#888', textAlign:'center', marginTop:8}}>{t('tap_buttons_to_adjust', lang) || "Tap buttons to adjust (+/- 250ml)"}</ThemedText>
+            </ThemedView>
         </TutorialTarget>
 
         <TutorialTarget
@@ -790,7 +866,42 @@ export default function HomeScreen() {
             widthAdd: 0,    // 負數表示減少寬度
          }}
          >
-            {renderEnergySection()}
+            {/* 填回 renderEnergySection() 內容 */}
+            <View style={styles.sectionContainer}>
+                <View style={{flexDirection:'row', marginBottom:20}}>
+                    <View style={{flex:1}}>
+                        <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:4}}><ThemedText style={{fontSize:12, color:'#34C759'}}>{t('intake', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}</ThemedText></View>
+                        <View style={[styles.barBg, { backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${(targets.calories>0?Math.min(intake.calories/targets.calories,1):0)*100}%`, backgroundColor:'#34C759'}]}/></View>
+                        <View style={[styles.barBg, {marginTop:8, backgroundColor: ringTrackColor }]}><View style={[styles.barFill, {width:`${Math.min(burnedCalories/1000, 1)*100}%`, backgroundColor:'#FF9500'}]}/></View>
+                    </View>
+                    <View style={{flex:0.8, paddingLeft:16, justifyContent:'center'}}>
+                        <ThemedText style={{fontSize:12, color:'#888'}}>{t('intake_target', lang)}: {Math.round(intake.calories)}/{targets.calories}</ThemedText>
+                        <ThemedText style={{fontSize:12, color:'#FF9500'}}>{t('burned', lang)}: -{Math.round(burnedCalories)}</ThemedText>
+                        <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:8}}><ThemedText style={{fontSize:12}}>{t('net_intake_pct', lang)}</ThemedText><ThemedText type="title">{targets.calories>0?Math.round(((intake.calories-burnedCalories)/targets.calories)*100):0}%</ThemedText></View>
+                    </View>
+                </View>
+                <View style={{flexDirection:'row', justifyContent:'space-between'}}>
+                    {/* Render Rings */}
+                    {[
+                        {l: t('protein',lang), v: intake.protein, t: targets.protein, c: "#FF3B30", k: "protein"},
+                        {l: t('fat',lang), v: intake.fat, t: targets.fat, c: "#FFcc00", k: "fat"},
+                        {l: t('carbs',lang), v: intake.carbs, t: targets.carbs, c: "#5856D6", k: "carbs"},
+                        {l: t('sodium',lang), v: intake.sodium, t: targets.sodium, c: "#AF52DE", k: "sodium", u:"mg"}
+                    ].map((item:any, i) => {
+                        const rp = item.t > 0 ? (item.v/item.t)*100 : 0;
+                        const vp = Math.min(rp, 100);
+                        return (
+                            <TouchableOpacity key={i} onPress={() => setSelectedMacro({label:item.l, key:item.k, unit:item.u||"g"})} style={{alignItems:'center', width: SCREEN_WIDTH/4.5}}>
+                                <View pointerEvents="none">
+                                    <PieChart data={[{value: vp, color: item.c}, {value: 100-vp, color: ringTrackColor }]} donut radius={32} innerRadius={24} innerCircleColor={theme.background} centerLabelComponent={()=><ThemedText style={{fontSize:10, fontWeight:'bold', color: theme.text}}>{Math.round(rp)}%</ThemedText>}/>
+                                </View>
+                                <ThemedText style={{fontSize:12, marginTop:8, fontWeight:'600'}}>{item.l}</ThemedText>
+                                <ThemedText style={{fontSize:10, color:'#888'}}>{Math.round(item.v)}/{item.t}{item.u||"g"}</ThemedText>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+            </View>
         </TutorialTarget>
 
         {/* [排版調整] 5. Actions (原在下方，現移至此) */}
@@ -832,8 +943,32 @@ export default function HomeScreen() {
                         })}
                     </View>
                     {/* Activity Logs */}
-                    {/* ... code for activities ... */}
+                    
+                    {/* [修正] 常用運動與運動紀錄 - 確保標題可見 */}
+                    <View style={{marginTop: 20, marginBottom: 8}}>
+                        <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
+                        {frequentActivities.length > 0 ? (
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>
+                                {frequentActivities.map((name, idx) => {
+                                    const { icon, library } = getActivityIconInfo(name);
+                                    return (
+                                        <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
+                                            <ActivityIcon library={library} name={icon} size={16} color={theme.text} style={{marginRight: 4}} />
+                                            <ThemedText>{name}</ThemedText>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        ) : (
+                            <ThemedText style={{color: '#888', fontSize: 13, fontStyle: 'italic'}}>{t('no_recent_activities', lang) || "No recent activities"}</ThemedText>
+                        )}
+                    </View>
+
                     <View style={[styles.mealGroup, {marginTop: 20}]}>
+                        <View style={styles.mealHeader}>
+                            <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
+                            <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
+                        </View>
                         {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
                     </View>
                 </View>
