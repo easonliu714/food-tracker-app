@@ -109,8 +109,16 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   
   // [修改] 取得 onScrollRequest，並建立位置紀錄 ref
-  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial();
+  // [修改] 取得導覽 Context
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
   const targetPositions = useRef<Record<string, number>>({});
+
+  // [新增] 當導覽開始時，自動捲動至頂部
+  useEffect(() => {
+      if (activeScenario === 'HOME_GUIDE') {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+  }, [activeScenario]);
 
   // [修改] 改用 onScrollRequest 監聽導覽步驟，精確捲動
   useEffect(() => {
@@ -822,7 +830,7 @@ export default function HomeScreen() {
          adjustment={{
             padding: 50, // 可選的，增加額外的內邊距
             offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 130,    // 正數表示往下移動 (例如往下 20px)
+            offsetY: 150,    // 正數表示往下移動 (例如往下 20px)
             heightAdd: -100,  // 負數表示減少高度 (例如減少 20px)
             widthAdd: 0,    // 負數表示減少寬度
          }}

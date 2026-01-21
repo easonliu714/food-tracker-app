@@ -59,7 +59,8 @@ export default function ProfileScreen() {
   const lang = useLanguage();
   
   // [修改] 取得導覽 Context 與 Scroll 請求
-  const { startScenario, userName, onScrollRequest } = useTutorial();
+  // [修改] 取得導覽 Context
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
   
   // [新增] ScrollView Ref 與位置紀錄
   const scrollViewRef = useRef<ScrollView>(null);
@@ -67,6 +68,13 @@ export default function ProfileScreen() {
 
   // [新增] 自訂功能選單 Modal 狀態
   const [showGuideMenuModal, setShowGuideMenuModal] = useState(false);
+
+  // [新增] 當導覽開始時，自動捲動至頂部
+  useEffect(() => {
+      if (activeScenario === 'PROFILE_GUIDE') {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+  }, [activeScenario]);
 
   // [新增] 捲動監聽
   useEffect(() => {

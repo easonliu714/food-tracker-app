@@ -59,12 +59,20 @@ export default function AnalysisScreen() {
   const weightColor = '#007AFF';
 
   // [修改] 取得導覽 Context
-  const { startScenario, onScrollRequest, userName } = useTutorial(); 
+  // [修改] 取得導覽 Context
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
   
   // [新增] ScrollView Ref 與位置紀錄 (現在 useRef 已被正確引入)
   const scrollViewRef = useRef<ScrollView>(null); 
   const targetPositions = useRef<Record<string, number>>({}); 
 
+  // [新增] 當導覽開始時，自動捲動至頂部
+  useEffect(() => {
+      if (activeScenario === 'ANALYSIS_GUIDE') {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+  }, [activeScenario]);
+  
   // [修改] 使用 useFocusEffect 管理 scroll listener
   useFocusEffect(
       useCallback(() => {

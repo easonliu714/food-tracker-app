@@ -49,7 +49,7 @@ export default function RecipesScreen() {
   const textColor = useThemeColor({}, "text");
 
   // [修改] 取得導覽 Context
-  const { startScenario, userName, onScrollRequest } = useTutorial();
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
 
   // 自訂 Markdown 樣式
   const markdownStyles = {
@@ -65,6 +65,13 @@ export default function RecipesScreen() {
       list_item: { marginBottom: 4 }
   };
 
+  // [新增] 當導覽開始時，自動捲動至頂部
+  useEffect(() => {
+      if (activeScenario === 'RECIPES_GUIDE') {
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+  }, [activeScenario]);
+
   // [修改] 整合 context 載入與導覽觸發邏輯
   useFocusEffect(
       useCallback(() => {
@@ -73,9 +80,6 @@ export default function RecipesScreen() {
 
           // 2. 註冊捲動監聽
           onScrollRequest((targetKey) => {
-              // 由於此頁面是透過 ScrollView 呈現，除了 Input 區域外
-              // 簡單處理：如果是 hotkeys 或 history，捲動到頂部
-              // Input 區域由 KeyboardAvoidingView 處理，通常在底部
               const y = targetPositions.current[targetKey];
               if (y !== undefined && scrollViewRef.current) {
                   scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
@@ -235,7 +239,11 @@ export default function RecipesScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
       
       {/* 1. Title & Exports */}
-      <TutorialTarget targetKey="Recipe_title" onMeasure={(y) => targetPositions.current['Recipe_title'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
+      <TutorialTarget 
+        targetKey="Recipe_title" 
+        adjustment={{padding: 5, offsetY: -30}}
+        onMeasure={(y) => targetPositions.current['Recipe_title'] = y}
+      >
           <View style={styles.header}>
               <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
               <View style={{flexDirection:'row', gap: 16}}>
@@ -246,7 +254,11 @@ export default function RecipesScreen() {
       </TutorialTarget>
 
       {/* 2. Energy Stats */}
-      <TutorialTarget targetKey="Recipe_energy" onMeasure={(y) => targetPositions.current['Recipe_energy'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
+      <TutorialTarget 
+        targetKey="Recipe_energy" 
+        adjustment={{padding: 5, offsetY: -30}}
+        onMeasure={(y) => targetPositions.current['Recipe_energy'] = y}
+      >
           <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
               <View style={styles.statusItem}>
                   <ThemedText style={{fontSize:10, color:'#888'}}>{t('daily_calorie_target', lang)}</ThemedText>
@@ -268,7 +280,12 @@ export default function RecipesScreen() {
       </TutorialTarget>
 
       {/* 3. Hotkeys & Chat History */}
-      <TutorialTarget targetKey="Recipe_hotkeys" onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
+      <TutorialTarget 
+        targetKey="Recipe_hotkeys" 
+        style={{flex: 1}}
+        onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y}
+        adjustment={{ padding: 5, offsetY: -30 }}
+      >
           <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
               {messages.length === 0 ? (
                   <View style={{marginTop: 10}}>
@@ -311,7 +328,11 @@ export default function RecipesScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
           {/* 4. Chat Input */}
-          <TutorialTarget targetKey="Recipe_chat" onMeasure={(y) => targetPositions.current['Recipe_chat'] = y} adjustment={{ padding: 5, offsetY: -30 }}>
+          <TutorialTarget 
+            targetKey="Recipe_chat"
+            onMeasure={(y) => targetPositions.current['Recipe_chat'] = y}
+            adjustment={{ padding: 5, offsetY: -30 }}
+          >
               <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
                   <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
                   <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>
