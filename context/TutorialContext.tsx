@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { View, Modal, StyleSheet, TouchableOpacity, Text, Dimensions, TextInput, Image, Animated, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, Modal, StyleSheet, Text, Dimensions, TextInput, Image, Animated, Platform, KeyboardAvoidingView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { getTutorialState, setTutorialState, getUserName, setUserName, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
@@ -7,15 +7,14 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLanguage, t } from '@/lib/i18n';
 import { getTutorialSteps, TutorialStep } from '@/constants/tutorial-steps';
-
 // [新增] 引入 DB 相關，以便在輸入名字時直接寫入資料庫，達成「登入」效果
-import { db } from '@/lib/db';
+import { db } from '@/lib/db'; 
 import { userProfiles } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
 
 const GuideAvatarImage = require('@/assets/images/guide_avatar.png'); 
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
-// ... (TargetAdjustment 與 TargetLayout 介面保持不變)
 export interface TargetAdjustment {
   padding?: number;
   offsetX?: number;
@@ -29,7 +28,6 @@ type TargetLayout = {
   adjustment?: TargetAdjustment;
 };
 
-// ... (Context 定義保持不變)
 interface TutorialContextType {
   registerTarget: (key: string, layout: TargetLayout) => void;
   startScenario: (scenarioId: string, customSteps?: TutorialStep[]) => void;
@@ -51,9 +49,7 @@ export const useTutorial = () => {
 
 export const TutorialProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
-  const pathname = usePathname();
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const theme = Colors[useColorScheme() ?? 'light'];
   const lang = useLanguage();
 
   const [userName, setUserNameState] = useState("User");
@@ -62,6 +58,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [targets, setTargets] = useState<Record<string, TargetLayout>>({});
   const [inputName, setInputName] = useState("");
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollCallbackRef = useRef<((key: string) => void) | null>(null);
 
@@ -72,9 +69,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       
       const notFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
       if (!notFirst) {
-        // [關鍵邏輯] 初次啟動時，無論在哪個頁面，都強制啟動歡迎流程
-        // 這裡可以依需求判斷，如果想確保只在根路徑觸發可保留 pathname 檢查
-        // 建議移除 pathname 限制，確保首次安裝一定會跳出
+        // [優先權] 強制啟動歡迎流程，覆蓋底層畫面
         const allSteps = getTutorialSteps(lang, name || 'User');
         startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
       }
@@ -82,12 +77,16 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     init();
   }, [lang]);
 
-  // ... (useEffect for scrolling, onScrollRequest, registerTarget, startScenario, handlePrev, stopTutorial 保持不變) ...
-  
+  // [修改] 捲動邏輯：避免同區塊重複捲動
   useEffect(() => {
       const step = steps[currentStepIndex];
+      const prevStep = steps[currentStepIndex - 1];
+
       if (step?.targetKey && activeScenario && scrollCallbackRef.current) {
-          scrollCallbackRef.current(step.targetKey);
+          // 只有當 targetKey 改變時才觸發捲動，避免畫面抖動
+          if (!prevStep || prevStep.targetKey !== step.targetKey) {
+              scrollCallbackRef.current(step.targetKey);
+          }
       }
   }, [currentStepIndex, activeScenario, steps]);
 
@@ -99,7 +98,8 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     if (layout.w === 0 || layout.h === 0) return;
     setTargets(prev => {
       const old = prev[key];
-      if (old && Math.abs(old.x - layout.x) < 2 && Math.abs(old.y - layout.y) < 2 && Math.abs(old.w - layout.w) < 2) return prev;
+      // 簡單防抖動
+      if (old && Math.abs(old.x - layout.x) < 5 && Math.abs(old.y - layout.y) < 5) return prev;
       return { ...prev, [key]: layout };
     });
   };
@@ -129,7 +129,6 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       setCurrentStepIndex(prev => prev - 1);
     }
   };
-
   // [重點修改] 處理下一步與名稱輸入邏輯
   const handleNext = async () => {
     const step = steps[currentStepIndex];
@@ -137,54 +136,36 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
 
     if (step.action === 'input_name') {
       // 1. 決定最終名稱：有輸入用輸入值，沒輸入用預設值
-      // 這裡您可以自訂預設名稱，例如 "親愛的用戶" 或 "User"
       const defaultName = lang === 'zh-TW' ? "親愛的用戶" : "Dear User";
       const finalName = inputName.trim() || defaultName;
-      
       // 2. 更新 Context 狀態
       setUserNameState(finalName);
-      
       // 3. 持久化存儲 (Local Storage)
       await setUserName(finalName);
-
       // 4. [新增] 同步寫入資料庫 (模擬登入/註冊行為)
       try {
-          // 檢查是否已有 user profile，若無則建立
           const existingUsers = await db.select().from(userProfiles).limit(1);
           if (existingUsers.length > 0) {
               await db.update(userProfiles).set({ name: finalName }).where(eq(userProfiles.id, existingUsers[0].id));
           } else {
               // 建立新用戶，這裡填入基本預設值
               await db.insert(userProfiles).values({
-                  name: finalName,
-                  gender: 'male', // 預設，稍後設定頁可改
-                  heightCm: 170,
-                  currentWeightKg: 60,
-                  dailyCalorieTarget: 2000,
-                  createdAt: new Date(),
-                  updatedAt: new Date()
+                  name: finalName, gender: 'male', heightCm: 170, currentWeightKg: 60, dailyCalorieTarget: 2000, createdAt: new Date(), updatedAt: new Date()
               });
           }
-      } catch (e) {
-          console.error("Failed to auto-create user profile:", e);
-      }
+      } catch (e) { console.error(e); }
 
-      // 5. [關鍵] 如果現在是在 Login 頁面，強制跳轉到首頁 (Tabs)
-      // 這會讓底層的 Login 畫面被替換掉，解決畫面遮擋問題
+      // [畫面切換] 強制替換路由，移除底層登入頁
       router.replace('/(tabs)'); 
 
     } else if (step.action === 'navigate_profile') {
       router.push('/(tabs)/profile');
-      setTimeout(() => {
-         startScenario('ONBOARDING_PROFILE', allSteps.ONBOARDING_PROFILE);
-      }, 600);
+      setTimeout(() => startScenario('ONBOARDING_PROFILE', allSteps.ONBOARDING_PROFILE), 600);
       return; 
     } else if (step.action === 'end_onboarding') {
       await setTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH, true);
       router.replace('/(tabs)');
-      setTimeout(() => {
-         startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
-      }, 800);
+      setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 800);
       return;
     }
 
@@ -196,9 +177,12 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const currentStep = steps[currentStepIndex];
-  // ... (Layout 計算保持不變) ...
   const rawLayout = currentStep?.targetKey ? targets[currentStep.targetKey] : null;
+  
   let finalLayout = null;
+  // [智慧定位] 預設對話框在下方
+  let bubblePosition: 'top' | 'bottom' = 'bottom';
+
   if (rawLayout) {
       const adj = rawLayout.adjustment || {};
       const padding = adj.padding || 0;
@@ -207,23 +191,31 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       const wAdd = adj.widthAdd || 0;
       const hAdd = adj.heightAdd || 0;
       const basePadding = 5;
+      
       finalLayout = {
           x: rawLayout.x - basePadding - padding + offX,
           y: rawLayout.y - basePadding - padding + offY,
           w: rawLayout.w + (basePadding * 2) + (padding * 2) + wAdd,
           h: rawLayout.h + (basePadding * 2) + (padding * 2) + hAdd
       };
+
+      // [智慧定位] 若目標中心在螢幕下半部，對話框移至上方
+      const targetCenterY = finalLayout.y + (finalLayout.h / 2);
+      if (targetCenterY > SCREEN_HEIGHT * 0.55) {
+          bubblePosition = 'top';
+      }
   }
+
+  const bubbleContainerStyle = bubblePosition === 'bottom' 
+      ? { bottom: 50, top: undefined } 
+      : { top: 100, bottom: undefined }; // 上方預留 Header 空間
 
   return (
     <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario, currentStepIndex, onScrollRequest }}>
       {children}
       <Modal transparent visible={!!activeScenario} animationType="none" onRequestClose={stopTutorial}>
         {/* 使用 KeyboardAvoidingView 避免輸入法遮擋導覽員對話框 */}
-        <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-            style={styles.overlay}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
           {/* Highlight Box Layer */}
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
              {finalLayout && (
@@ -242,7 +234,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
              )}
           </View>
 
-          <Animated.View style={[styles.coachContainer, { opacity: fadeAnim }]}>
+          <Animated.View style={[styles.coachContainer, bubbleContainerStyle, { opacity: fadeAnim }]}>
              <View style={styles.avatarContainer}>
                 <Image source={GuideAvatarImage} style={styles.avatarImage} resizeMode="contain" />
              </View>
@@ -289,20 +281,17 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' }, // 修改：讓 KeyboardAvoidingView 生效
+  //overlay: { flex: 1, justifyContent: 'flex-end' }, // 修改：讓 KeyboardAvoidingView 生效
+  overlay: { flex: 1 }, 
   coachContainer: { 
       position: 'absolute', 
-      bottom: 50, 
       left: 20, 
       right: 20, 
       flexDirection: 'row', 
       alignItems: 'flex-end',
       zIndex: 9999 // [關鍵] 確保在最上層
   },
-  avatarContainer: { 
-      marginRight: 10, 
-      backgroundColor: 'transparent'
-  },
+  avatarContainer: { marginRight: 10, backgroundColor: 'transparent' },
   avatarImage: { width: 90, height: 90 },
   bubble: { flex: 1, padding: 16, borderRadius: 16, borderBottomLeftRadius: 4, elevation: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, minHeight: 100, justifyContent: 'center' },
   bubbleText: { fontSize: 16, lineHeight: 24, marginBottom: 12 },

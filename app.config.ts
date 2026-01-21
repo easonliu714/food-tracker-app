@@ -19,11 +19,10 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   // [修改開始] 新增 owner 欄位 (根據您的 EAS CLI 提示)
   owner: "easonliu714s-personal-trainer",
-  version: "1.0.17", // 建議進版，確保安裝時視為新版本
+  version: "1.0.18", // 建議再次進版，例如 1.0.18
   orientation: "portrait",
   scheme: "nourish_me", 
-
-// [新增] EAS Updates 設定 (解決 Build 錯誤)
+  // [新增] EAS Updates 設定 (解決 Build 錯誤)
   updates: {
     url: "https://u.expo.dev/00f07adb-465c-4dfc-baef-d332d062f34b"
   },
@@ -69,7 +68,7 @@ const config: ExpoConfig = {
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
-      "android.permission.health.WRITE_STEPS", // 如果有的話
+      "android.permission.health.WRITE_STEPS",
     ],
     intentFilters: [
       {
@@ -95,9 +94,8 @@ const config: ExpoConfig = {
     // [重要] 加回官方插件，讓它負責產生基礎設定
     // [修正] 改用完整的 Class Name，確保插件能找到正確的 Activity
     ["react-native-health-connect", { 
-        "rationalActivityClassName": `${bundleId}.MainActivity`
+        "rationaleActivityClassName": `${bundleId}.MainActivity`
     }],
-    
     // [重要] 我們的修正腳本放在後面，用來修復官方插件產生的錯誤 Action
     "./plugins/withHealthConnectFix",
     
@@ -161,4 +159,5 @@ const config: ExpoConfig = {
     },
   },
 };
+
 export default config;

@@ -59,21 +59,27 @@ export default function AnalysisScreen() {
   const weightColor = '#007AFF';
 
   // [修改] 取得導覽 Context
-  const { startScenario, onScrollRequest, userName } = useTutorial(); // [修正] 解構出 onScrollRequest, userName
+  const { startScenario, onScrollRequest, userName } = useTutorial(); 
   
   // [新增] ScrollView Ref 與位置紀錄 (現在 useRef 已被正確引入)
-  const scrollViewRef = useRef<ScrollView>(null); // [新增]
-  const targetPositions = useRef<Record<string, number>>({}); // [新增]
+  const scrollViewRef = useRef<ScrollView>(null); 
+  const targetPositions = useRef<Record<string, number>>({}); 
 
-  // [新增] 監聽導覽捲動請求
-  useEffect(() => {
-      onScrollRequest((targetKey) => {
-          const y = targetPositions.current[targetKey];
-          if (y !== undefined) {
-              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 50), animated: true });
-          }
-      });
-  }, []);
+  // [修改] 使用 useFocusEffect 管理 scroll listener
+  useFocusEffect(
+      useCallback(() => {
+          // 註冊：當導覽請求捲動時執行
+          onScrollRequest((targetKey) => {
+              const y = targetPositions.current[targetKey];
+              if (y !== undefined && scrollViewRef.current) {
+                  scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
+              }
+          });
+
+          // 清理：離開頁面時不做任何事
+          return () => {};
+      }, [])
+  );
   
   // [修改] 導覽觸發邏輯：改用集中管理的 Steps
   useFocusEffect(useCallback(()=>{
@@ -586,7 +592,6 @@ export default function AnalysisScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* [修改] 綁定 ref */}
       <ScrollView ref={scrollViewRef} contentContainerStyle={{padding: 16}} scrollEnabled={true}>
         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 16}}>
               <ThemedText type="title">{t('analysis', lang)}</ThemedText>
@@ -597,40 +602,35 @@ export default function AnalysisScreen() {
               )}
         </View>
         
-        <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
-            {['week', 'month', 'custom'].map((p) => (
-                <TouchableOpacity key={p} onPress={() => setPeriod(p as any)} style={{flex: 1, paddingVertical: 6, alignItems:'center', borderRadius:6, backgroundColor: period === p ? theme.tint : 'transparent'}}>
-                    <ThemedText style={{fontSize:12, fontWeight:'bold', color: period === p ? 'white' : theme.text}}>
-                        {p === 'week' ? t('last_7_days', lang) : (p === 'month' ? t('last_30_days', lang) : t('custom', lang))}
-                    </ThemedText>
-                </TouchableOpacity>
-            ))}
-        </View>
+        {/* 2. 週期選擇區塊 (analysis_period) */}
+        <TutorialTarget targetKey="analysis_period" onMeasure={(y) => targetPositions.current['analysis_period'] = y}>
+            <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
+                {['week', 'month', 'custom'].map((p) => (
+                    <TouchableOpacity key={p} onPress={() => setPeriod(p as any)} style={{flex: 1, paddingVertical: 6, alignItems:'center', borderRadius:6, backgroundColor: period === p ? theme.tint : 'transparent'}}>
+                        <ThemedText style={{fontSize:12, fontWeight:'bold', color: period === p ? 'white' : theme.text}}>
+                            {p === 'week' ? t('last_7_days', lang) : (p === 'month' ? t('last_30_days', lang) : t('custom', lang))}
+                        </ThemedText>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </TutorialTarget>
 
-        {renderCustomRangePicker()}
+        {/* 3. 日期範圍區塊 (analysis_range) */}
+        <TutorialTarget targetKey="analysis_range" onMeasure={(y) => targetPositions.current['analysis_range'] = y}>
+            {renderCustomRangePicker()}
+        </TutorialTarget>
 
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
         
-        {/* [修改] 加入 onMeasure 紀錄位置 */}
-        <TutorialTarget
-         targetKey="analysis_grid" 
-         onMeasure={(y) => targetPositions.current['analysis_grid'] = y}
-         adjustment={{
-            offsetY: -50,
-            heightAdd: 0
-        }}
-        >   
+        {/* 4. 統計數據區塊 (analysis_grid) */}
+        <TutorialTarget targetKey="analysis_grid" onMeasure={(y) => targetPositions.current['analysis_grid'] = y}>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
                 {gridSlots.map((key, index) => renderGridItem(key, index))}
             </View>
         </TutorialTarget>
 
-        {/* [修改] 加入 onMeasure 紀錄位置，並確保 chartCard 背景色動態化 */}
-        <TutorialTarget
-         targetKey="analysis_chart" 
-         onMeasure={(y) => targetPositions.current['analysis_chart'] = y}
-         adjustment={{offsetY: -130}}
-         >
+        {/* 5. 趨勢圖表區塊 (analysis_chart) */}
+        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y}>
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                     <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
@@ -653,7 +653,6 @@ export default function AnalysisScreen() {
                                 noOfSections={5}
                                 
                                 yAxisThickness={0}
-                                // [修正] 確保 Y 軸文字顏色在深色模式下可見
                                 yAxisTextStyle={{color: theme.text, fontSize: 10}} 
                                 maxValue={axisConfig.maxCal}
                                 minValue={axisConfig.minCal}
@@ -695,8 +694,8 @@ export default function AnalysisScreen() {
                                 }}
                                 
                                 xAxisThickness={1}
-                                xAxisColor={theme.border} // [修正] 動態邊框色
-                                rulesColor={theme.border} // [修正] 動態格線色
+                                xAxisColor={theme.border} 
+                                rulesColor={theme.border} 
                                 rulesType="solid"
                                 height={280}
                                 width={VISIBLE_CHART_WIDTH}
@@ -714,7 +713,6 @@ export default function AnalysisScreen() {
             </ThemedView>
         </TutorialTarget>
         
-        {/* Add Item Modal */}
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={()=>setShowAddModal(false)}>
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.card}]}>
@@ -739,7 +737,6 @@ export default function AnalysisScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  // [修正] 移除 backgroundColor: 'white'，改由 inline style 動態控制
   chartCard: { padding: 16, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
   dateBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   tooltipRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },

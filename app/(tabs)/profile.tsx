@@ -12,10 +12,8 @@ import {
   Linking, 
   Switch, 
   Platform, 
-  Text,
-  // [修正] 移除 ActionSheetIOS，改用自訂 Modal 以確保跨平台一致性
+  Text
 } from "react-native";
-// ... (保留原本的 imports)
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
@@ -70,6 +68,7 @@ export default function ProfileScreen() {
   // [新增] 自訂功能選單 Modal 狀態
   const [showGuideMenuModal, setShowGuideMenuModal] = useState(false);
 
+  // [新增] 捲動監聽
   useEffect(() => {
       onScrollRequest((targetKey) => {
           const y = targetPositions.current[targetKey];
@@ -105,15 +104,15 @@ export default function ProfileScreen() {
       }
   };
   
-  // 自動觸發 Profile 教學
+  // 自動觸發 Profile 教學 (通常由 Context 流程控制，此處保留作為備援)
   useFocusEffect(
     useCallback(() => {
         async function check() {
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-            // 首次流程中自動觸發邏輯通常由 Context 控制，這裡可作為保險或單獨進入時觸發
+            // 若為首次流程且未看過 (通常由 Context 的 navigate_profile 觸發)
             if (isFirst && !seen) {
-                 // 通常由 Context 的 navigate_profile 觸發，這裡保留作為備用
+                 // Context logic usually handles this
             }
         }
         check();
@@ -470,7 +469,6 @@ export default function ProfileScreen() {
         }
         const reminderRes = await db.select().from(reminderSettings).limit(1);
         if (reminderRes.length > 0) {
-             // ... existing reminder parsing ...
              const r = reminderRes[0];
              const parseTime = (tStr: string | null, defaultH: number) => {
                 const d = new Date();
@@ -654,21 +652,10 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
-         {/* AI Settings */}
-         <TutorialTarget
-          targetKey="profile_ai" 
-          onMeasure={(y) => targetPositions.current['profile_ai'] = y}
-          adjustment={{
-            padding: 80, // 可選的，增加額外的內邊距
-            offsetX: 0,     // 正數表示往右移動 (例如往右 20px)
-            offsetY: 80,    // 正數表示往下移動 (例如往下 20px)
-            heightAdd: -50,  // 負數表示減少高度 (例如減少 20px)
-            widthAdd: 0,    // 負數表示寬度
-        }}
-          >
+         {/* 1. AI Key */}
+         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10 }}>
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
-                {/* ... AI Inputs ... */}
                 <View style={{marginTop:12}}>
                   <ThemedText style={{fontSize:12, color:textSecondary, marginBottom: 4}}>{t('api_key_placeholder', lang)}</ThemedText>
                   <TextInput style={[styles.input, {color: textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={apiKey} onChangeText={setApiKey} secureTextEntry placeholder="AI Studio Key..." placeholderTextColor="#999" />
@@ -685,123 +672,112 @@ export default function ProfileScreen() {
              </View>
          </TutorialTarget>
 
-         {/* Notification Settings */}
-         <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
-             <ThemedText type="subtitle" style={{marginBottom:12}}>🔔 {t('notifications', lang) || "Notifications"}</ThemedText>
-             
-             {/* Breakfast */}
-             <View style={styles.reminderRow}>
-                 <View style={{flexDirection:'row', alignItems:'center'}}>
-                     <Switch value={reminders.breakfast.enabled} onValueChange={v => setReminders(p => ({...p, breakfast:{...p.breakfast, enabled:v}}))} trackColor={{true: tintColor}}/>
-                     <ThemedText style={{marginLeft:8}}>{t('breakfast', lang)}</ThemedText>
-                 </View>
-                 <Pressable onPress={()=>setShowTimePicker('breakfast')} disabled={!reminders.breakfast.enabled}>
-                     <ThemedText style={{color: reminders.breakfast.enabled ? tintColor : '#999'}}>{format(reminders.breakfast.time, 'HH:mm')}</ThemedText>
-                 </Pressable>
-             </View>
-             {showTimePicker === 'breakfast' && <DateTimePicker value={reminders.breakfast.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('breakfast', e, d)} />}
-
-             {/* Lunch */}
-             <View style={styles.reminderRow}>
-                 <View style={{flexDirection:'row', alignItems:'center'}}>
-                     <Switch value={reminders.lunch.enabled} onValueChange={v => setReminders(p => ({...p, lunch:{...p.lunch, enabled:v}}))} trackColor={{true: tintColor}}/>
-                     <ThemedText style={{marginLeft:8}}>{t('lunch', lang)}</ThemedText>
-                 </View>
-                 <Pressable onPress={()=>setShowTimePicker('lunch')} disabled={!reminders.lunch.enabled}>
-                     <ThemedText style={{color: reminders.lunch.enabled ? tintColor : '#999'}}>{format(reminders.lunch.time, 'HH:mm')}</ThemedText>
-                 </Pressable>
-             </View>
-             {showTimePicker === 'lunch' && <DateTimePicker value={reminders.lunch.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('lunch', e, d)} />}
-
-             {/* Dinner */}
-             <View style={styles.reminderRow}>
-                 <View style={{flexDirection:'row', alignItems:'center'}}>
-                     <Switch value={reminders.dinner.enabled} onValueChange={v => setReminders(p => ({...p, dinner:{...p.dinner, enabled:v}}))} trackColor={{true: tintColor}}/>
-                     <ThemedText style={{marginLeft:8}}>{t('dinner', lang)}</ThemedText>
-                 </View>
-                 <Pressable onPress={()=>setShowTimePicker('dinner')} disabled={!reminders.dinner.enabled}>
-                     <ThemedText style={{color: reminders.dinner.enabled ? tintColor : '#999'}}>{format(reminders.dinner.time, 'HH:mm')}</ThemedText>
-                 </Pressable>
-             </View>
-             {showTimePicker === 'dinner' && <DateTimePicker value={reminders.dinner.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('dinner', e, d)} />}
-
-             {/* Water / Move (Interval) */}
-             <View style={{marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: '#f0f0f0'}}>
-                 <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: 12}}>
+         {/* 2. Notification */}
+         <TutorialTarget targetKey="profile_notify" onMeasure={(y) => targetPositions.current['profile_notify'] = y}>
+             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
+                 <ThemedText type="subtitle" style={{marginBottom:12}}>🔔 {t('notifications', lang)}</ThemedText>
+                 <View style={styles.reminderRow}>
                      <View style={{flexDirection:'row', alignItems:'center'}}>
-                        <Switch value={reminders.water.enabled} onValueChange={v => setReminders(p => ({...p, water:{...p.water, enabled:v}}))} trackColor={{true: tintColor}}/>
-                        <ThemedText style={{marginLeft:8}}>💧 {t('water_move', lang) || "Water & Move"}</ThemedText>
+                         <Switch value={reminders.breakfast.enabled} onValueChange={v => setReminders(p => ({...p, breakfast:{...p.breakfast, enabled:v}}))} trackColor={{true: tintColor}}/>
+                         <ThemedText style={{marginLeft:8}}>{t('breakfast', lang)}</ThemedText>
                      </View>
+                     <Pressable onPress={()=>setShowTimePicker('breakfast')} disabled={!reminders.breakfast.enabled}>
+                         <ThemedText style={{color: reminders.breakfast.enabled ? tintColor : '#999'}}>{format(reminders.breakfast.time, 'HH:mm')}</ThemedText>
+                     </Pressable>
                  </View>
-                 
-                 {reminders.water.enabled && (
-                     <View style={{paddingLeft: 10}}>
-                         <View style={[styles.rowBetween, {marginBottom:8}]}>
-                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('interval', lang) || "Interval (min)"}</ThemedText>
-                             <TextInput 
-                                style={{borderBottomWidth:1, borderColor: '#ccc', width: 50, textAlign:'center', color: textColor}} 
-                                value={String(reminders.water.interval)} 
-                                keyboardType="numeric"
-                                onChangeText={t => setReminders(p => ({...p, water:{...p.water, interval: parseInt(t)||60}}))}
-                             />
-                         </View>
-                         <View style={styles.rowBetween}>
-                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('start_time', lang) || "Start Time"}</ThemedText>
-                             <Pressable onPress={()=>setShowTimePicker('waterStart')}>
-                                <ThemedText style={{color:tintColor}}>{format(reminders.water.startTime, 'HH:mm')}</ThemedText>
-                             </Pressable>
-                         </View>
-                         <View style={[styles.rowBetween, {marginTop: 8}]}>
-                             <ThemedText style={{fontSize:12, color:textSecondary}}>{t('end_time', lang) || "End Time"}</ThemedText>
-                             <Pressable onPress={()=>setShowTimePicker('waterEnd')}>
-                                <ThemedText style={{color:tintColor}}>{format(reminders.water.endTime, 'HH:mm')}</ThemedText>
-                             </Pressable>
+                 {showTimePicker === 'breakfast' && <DateTimePicker value={reminders.breakfast.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('breakfast', e, d)} />}
+
+                 <View style={styles.reminderRow}>
+                     <View style={{flexDirection:'row', alignItems:'center'}}>
+                         <Switch value={reminders.lunch.enabled} onValueChange={v => setReminders(p => ({...p, lunch:{...p.lunch, enabled:v}}))} trackColor={{true: tintColor}}/>
+                         <ThemedText style={{marginLeft:8}}>{t('lunch', lang)}</ThemedText>
+                     </View>
+                     <Pressable onPress={()=>setShowTimePicker('lunch')} disabled={!reminders.lunch.enabled}>
+                         <ThemedText style={{color: reminders.lunch.enabled ? tintColor : '#999'}}>{format(reminders.lunch.time, 'HH:mm')}</ThemedText>
+                     </Pressable>
+                 </View>
+                 {showTimePicker === 'lunch' && <DateTimePicker value={reminders.lunch.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('lunch', e, d)} />}
+
+                 <View style={styles.reminderRow}>
+                     <View style={{flexDirection:'row', alignItems:'center'}}>
+                         <Switch value={reminders.dinner.enabled} onValueChange={v => setReminders(p => ({...p, dinner:{...p.dinner, enabled:v}}))} trackColor={{true: tintColor}}/>
+                         <ThemedText style={{marginLeft:8}}>{t('dinner', lang)}</ThemedText>
+                     </View>
+                     <Pressable onPress={()=>setShowTimePicker('dinner')} disabled={!reminders.dinner.enabled}>
+                         <ThemedText style={{color: reminders.dinner.enabled ? tintColor : '#999'}}>{format(reminders.dinner.time, 'HH:mm')}</ThemedText>
+                     </Pressable>
+                 </View>
+                 {showTimePicker === 'dinner' && <DateTimePicker value={reminders.dinner.time} mode="time" display="spinner" onChange={(e,d) => onTimeChange('dinner', e, d)} />}
+
+                 <View style={{marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderColor: '#f0f0f0'}}>
+                     <View style={{flexDirection:'row', alignItems:'center', justifyContent:'space-between', marginBottom: 12}}>
+                         <View style={{flexDirection:'row', alignItems:'center'}}>
+                            <Switch value={reminders.water.enabled} onValueChange={v => setReminders(p => ({...p, water:{...p.water, enabled:v}}))} trackColor={{true: tintColor}}/>
+                            <ThemedText style={{marginLeft:8}}>💧 {t('water_move', lang) || "Water & Move"}</ThemedText>
                          </View>
                      </View>
-                 )}
+                     {reminders.water.enabled && (
+                         <View style={{paddingLeft: 10}}>
+                             <View style={[styles.rowBetween, {marginBottom:8}]}>
+                                 <ThemedText style={{fontSize:12, color:textSecondary}}>{t('interval', lang) || "Interval (min)"}</ThemedText>
+                                 <TextInput 
+                                    style={{borderBottomWidth:1, borderColor: '#ccc', width: 50, textAlign:'center', color: textColor}} 
+                                    value={String(reminders.water.interval)} 
+                                    keyboardType="numeric"
+                                    onChangeText={t => setReminders(p => ({...p, water:{...p.water, interval: parseInt(t)||60}}))}
+                                 />
+                             </View>
+                             <View style={styles.rowBetween}>
+                                 <ThemedText style={{fontSize:12, color:textSecondary}}>{t('start_time', lang) || "Start Time"}</ThemedText>
+                                 <Pressable onPress={()=>setShowTimePicker('waterStart')}>
+                                    <ThemedText style={{color:tintColor}}>{format(reminders.water.startTime, 'HH:mm')}</ThemedText>
+                                 </Pressable>
+                             </View>
+                             <View style={[styles.rowBetween, {marginTop: 8}]}>
+                                 <ThemedText style={{fontSize:12, color:textSecondary}}>{t('end_time', lang) || "End Time"}</ThemedText>
+                                 <Pressable onPress={()=>setShowTimePicker('waterEnd')}>
+                                    <ThemedText style={{color:tintColor}}>{format(reminders.water.endTime, 'HH:mm')}</ThemedText>
+                                 </Pressable>
+                             </View>
+                         </View>
+                     )}
+                 </View>
+                 {showTimePicker === 'waterStart' && <DateTimePicker value={reminders.water.startTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterStart', e, d)} />}
+                 {showTimePicker === 'waterEnd' && <DateTimePicker value={reminders.water.endTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterEnd', e, d)} />}
              </View>
+         </TutorialTarget>
 
-             {showTimePicker === 'waterStart' && <DateTimePicker value={reminders.water.startTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterStart', e, d)} />}
-             {showTimePicker === 'waterEnd' && <DateTimePicker value={reminders.water.endTime} mode="time" display="spinner" onChange={(e,d) => onTimeChange('waterEnd', e, d)} />}
-         </View>
-
-         {/* Backup & Restore Section */}
-         <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
-             <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
-             
-             {/* Full DB */}
-             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('backup_desc', lang)}</ThemedText>
-             <View style={{flexDirection:'row', gap:10, marginBottom: 16}}>
-                 <Pressable onPress={handleBackup} style={[styles.btn, {flex:1, backgroundColor: '#007AFF', padding:12}]}>
-                     <Ionicons name="cloud-upload-outline" size={20} color="white" style={{marginBottom:4}}/>
-                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('backup_db', lang)}</ThemedText>
-                 </Pressable>
-                 <Pressable onPress={handleRestore} style={[styles.btn, {flex:1, backgroundColor: '#FF9500', padding:12}]}>
-                     <Ionicons name="cloud-download-outline" size={20} color="white" style={{marginBottom:4}}/>
-                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('restore_db', lang)}</ThemedText>
-                 </Pressable>
+         {/* 3. Backup */}
+         <TutorialTarget targetKey="profile_backup" onMeasure={(y) => targetPositions.current['profile_backup'] = y}>
+             <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
+                 <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
+                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('backup_desc', lang)}</ThemedText>
+                 <View style={{flexDirection:'row', gap:10, marginBottom: 16}}>
+                     <Pressable onPress={handleBackup} style={[styles.btn, {flex:1, backgroundColor: '#007AFF', padding:12}]}>
+                         <Ionicons name="cloud-upload-outline" size={20} color="white" style={{marginBottom:4}}/>
+                         <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('backup_db', lang)}</ThemedText>
+                     </Pressable>
+                     <Pressable onPress={handleRestore} style={[styles.btn, {flex:1, backgroundColor: '#FF9500', padding:12}]}>
+                         <Ionicons name="cloud-download-outline" size={20} color="white" style={{marginBottom:4}}/>
+                         <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('restore_db', lang)}</ThemedText>
+                     </Pressable>
+                 </View>
+                 <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('product_export_desc', lang)}</ThemedText>
+                 <View style={{flexDirection:'row', gap:10}}>
+                     <Pressable onPress={handleExportProducts} style={[styles.btn, {flex:1, backgroundColor: '#34C759', padding:12}]}>
+                         <Ionicons name="barcode-outline" size={20} color="white" style={{marginBottom:4}}/>
+                         <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('export_products', lang)}</ThemedText>
+                     </Pressable>
+                     <Pressable onPress={handleImportProducts} style={[styles.btn, {flex:1, backgroundColor: '#5856D6', padding:12}]}>
+                         <Ionicons name="download-outline" size={20} color="white" style={{marginBottom:4}}/>
+                         <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('import_products', lang)}</ThemedText>
+                     </Pressable>
+                 </View>
              </View>
+         </TutorialTarget>
 
-             {/* Product DB Only */}
-             <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('product_export_desc', lang)}</ThemedText>
-             <View style={{flexDirection:'row', gap:10}}>
-                 <Pressable onPress={handleExportProducts} style={[styles.btn, {flex:1, backgroundColor: '#34C759', padding:12}]}>
-                     <Ionicons name="barcode-outline" size={20} color="white" style={{marginBottom:4}}/>
-                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('export_products', lang)}</ThemedText>
-                 </Pressable>
-                 <Pressable onPress={handleImportProducts} style={[styles.btn, {flex:1, backgroundColor: '#5856D6', padding:12}]}>
-                     <Ionicons name="download-outline" size={20} color="white" style={{marginBottom:4}}/>
-                     <ThemedText style={{color:'white', fontSize:12, fontWeight:'600'}}>{t('import_products', lang)}</ThemedText>
-                 </Pressable>
-             </View>
-         </View>
-
-         {/* Basic Info */}
-         <TutorialTarget 
-            targetKey="profile_basic" 
-            adjustment={{ offsetY: -5 }}
-            onMeasure={(y) => targetPositions.current['profile_basic'] = y}
-         >
+         {/* 4. Basic Info */}
+         <TutorialTarget targetKey="profile_basic" onMeasure={(y) => targetPositions.current['profile_basic'] = y} adjustment={{ offsetY: -5 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                 <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
                 <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
@@ -849,11 +825,8 @@ export default function ProfileScreen() {
                     <TextInput style={[styles.input, {color:textColor, borderColor, backgroundColor: inputBackground, borderWidth: 0}]} value={bodyFat} onChangeText={setBodyFat} keyboardType="numeric"/>
                  </View>
 
-                {/* 目標設定區 */}
-                <TutorialTarget 
-                    targetKey="profile_goals"
-                    onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y}
-                >
+                {/* 5. Goals */}
+                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y}>
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
                         <View style={[styles.row, {marginBottom: 12}]}>
@@ -924,49 +897,39 @@ export default function ProfileScreen() {
                         </View>
                     </View>
                 </TutorialTarget>
-
              </View>
          </TutorialTarget>
 
-         {/* Save Button */}
-         <TutorialTarget 
-            targetKey="profile_save" 
-            adjustment={{ heightAdd: 5 }}
-            onMeasure={(y) => targetPositions.current['profile_save'] = y}
-         >
+         {/* 6. Save Button */}
+         <TutorialTarget targetKey="profile_save" onMeasure={(y) => targetPositions.current['profile_save'] = y} adjustment={{ heightAdd: 5 }}>
              <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
                 <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
              </Pressable>
          </TutorialTarget>
          
-         {/* 功能說明按鈕 */}
-         <Pressable onPress={showGuideMenu} style={{padding: 16, alignItems:'center', marginTop: 10}}>
-             <ThemedText style={{color: tintColor, fontSize: 14}}>❓ {t('feature_guide', lang) || "Feature Guide"}</ThemedText>
-         </Pressable>
-
-         <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center', marginBottom: 40}}>
-             <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
-         </Pressable>
+         {/* 7. Guide & History */}
+         <TutorialTarget targetKey="profile_guide" onMeasure={(y) => targetPositions.current['profile_guide'] = y}>
+             <View style={{marginTop: 10, marginBottom: 40}}>
+                 <Pressable onPress={showGuideMenu} style={{padding: 16, alignItems:'center', marginTop: 10}}>
+                     <ThemedText style={{color: tintColor, fontSize: 14}}>❓ {t('feature_guide', lang) || "Feature Guide"}</ThemedText>
+                 </Pressable>
+                 <Pressable onPress={() => setShowVersionModal(true)} style={{padding: 16, alignItems:'center'}}>
+                     <ThemedText style={{color: tintColor, textDecorationLine: 'underline'}}>{t('version_history', lang)}</ThemedText>
+                 </Pressable>
+             </View>
+         </TutorialTarget>
       </ScrollView>
 
-      {/* [新增] 自訂 Guide Menu Modal (取代 ActionSheet/Alert) */}
+      {/* Guide Menu Modal */}
       <Modal visible={showGuideMenuModal} transparent animationType="fade" onRequestClose={() => setShowGuideMenuModal(false)}>
           <Pressable style={styles.modalOverlay} onPress={() => setShowGuideMenuModal(false)}>
               <View style={[styles.modalContent, {backgroundColor: cardBackground, width: '80%'}]}>
                   <ThemedText type="subtitle" style={{marginBottom: 16, textAlign: 'center'}}>{t('select_guide_topic', lang)}</ThemedText>
                   
-                  <Pressable onPress={() => handleGuideSelection(0)} style={styles.menuItem}>
-                      <ThemedText style={{color: textColor}}>{t('tab_home', lang)}</ThemedText>
-                  </Pressable>
-                  <Pressable onPress={() => handleGuideSelection(1)} style={styles.menuItem}>
-                      <ThemedText style={{color: textColor}}>{t('tab_analysis', lang)}</ThemedText>
-                  </Pressable>
-                  <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}>
-                      <ThemedText style={{color: textColor}}>{t('tab_ai_coach', lang)}</ThemedText>
-                  </Pressable>
-                  <Pressable onPress={() => handleGuideSelection(3)} style={styles.menuItem}>
-                      <ThemedText style={{color: textColor}}>{t('tab_settings', lang)}</ThemedText>
-                  </Pressable>
+                  <Pressable onPress={() => handleGuideSelection(0)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_home', lang)}</ThemedText></Pressable>
+                  <Pressable onPress={() => handleGuideSelection(1)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_analysis', lang)}</ThemedText></Pressable>
+                  <Pressable onPress={() => handleGuideSelection(2)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_recipes', lang)}</ThemedText></Pressable>
+                  <Pressable onPress={() => handleGuideSelection(3)} style={styles.menuItem}><ThemedText style={{color: textColor}}>{t('tab_settings', lang)}</ThemedText></Pressable>
                   
                   <Pressable onPress={() => setShowGuideMenuModal(false)} style={[styles.menuItem, {borderBottomWidth: 0, marginTop: 8}]}>
                       <ThemedText style={{color: '#FF3B30', fontWeight: 'bold'}}>{t('cancel', lang)}</ThemedText>
@@ -974,7 +937,7 @@ export default function ProfileScreen() {
               </View>
           </Pressable>
       </Modal>
-      
+
       {/* Language Modal */}
       <Modal visible={showLangPicker} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -1062,20 +1025,9 @@ const styles = StyleSheet.create({
   listOption: { padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 12 },
   btn: { padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   langBtn: { flexDirection: 'row', alignItems: 'center', padding: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 20 },
-  
-  // [修正] 增加 alignItems: 'center' 確保置中
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 30 },
   modalContent: { padding: 20, borderRadius: 16 },
-
-  // [新增] 補回遺漏的 menuItem 樣式
-  menuItem: { 
-      paddingVertical: 16, 
-      borderBottomWidth: 1, 
-      borderColor: '#eee', 
-      alignItems: 'center',
-      width: '100%' 
-  },
-  
+  menuItem: { paddingVertical: 16, borderBottomWidth: 1, borderColor: '#eee', alignItems: 'center', width: '100%' },
   reminderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: '#f0f0f0' },
   rowBetween: { flexDirection:'row', justifyContent:'space-between', alignItems:'center'}
 });

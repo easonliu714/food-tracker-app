@@ -14,16 +14,15 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useFocusEffect, useRouter } from "expo-router";
 
-// [FIX] 引入 Markdown 渲染套件 (需先 npm install)
+// [FIX] 引入 Markdown 渲染套件
 import Markdown from 'react-native-markdown-display';
 import { marked } from 'marked';
 
-// [修改開始] 引入導覽相關元件
+// [修改] 引入導覽相關元件
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { TUTORIAL_KEYS, getTutorialState } from '@/lib/tutorial-storage';
 import { getTutorialSteps } from '@/constants/tutorial-steps';
-// [修改結束]
 
 interface Message {
     id: string;
@@ -38,7 +37,10 @@ export default function RecipesScreen() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ target: 2000, intake: 0, burned: 0, remaining: 2000 });
   
+  // [修改] ScrollView Ref 與位置紀錄
   const scrollViewRef = useRef<ScrollView>(null);
+  const targetPositions = useRef<Record<string, number>>({});
+  
   const lang = useLanguage();
 
   const backgroundColor = useThemeColor({}, "background");
@@ -46,9 +48,8 @@ export default function RecipesScreen() {
   const inputBg = useThemeColor({}, "cardBackground");
   const textColor = useThemeColor({}, "text");
 
-  // [修改開始] 取得導覽 Context 與使用者名稱
-  const { startScenario, userName } = useTutorial();
-  // [修改結束]
+  // [修改] 取得導覽 Context
+  const { startScenario, userName, onScrollRequest } = useTutorial();
 
   // 自訂 Markdown 樣式
   const markdownStyles = {
@@ -64,29 +65,39 @@ export default function RecipesScreen() {
       list_item: { marginBottom: 4 }
   };
 
-  // [修改開始] 整合 context 載入與導覽觸發邏輯
+  // [修改] 整合 context 載入與導覽觸發邏輯
   useFocusEffect(
       useCallback(() => {
           // 1. 載入當日數據
           fetchContextData();
 
-          // 2. 檢查是否需要觸發導覽
+          // 2. 註冊捲動監聽
+          onScrollRequest((targetKey) => {
+              // 由於此頁面是透過 ScrollView 呈現，除了 Input 區域外
+              // 簡單處理：如果是 hotkeys 或 history，捲動到頂部
+              // Input 區域由 KeyboardAvoidingView 處理，通常在底部
+              const y = targetPositions.current[targetKey];
+              if (y !== undefined && scrollViewRef.current) {
+                  scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
+              }
+          });
+
+          // 3. 檢查導覽
           async function checkTutorial() {
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_RECIPES);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
             
-            // 如果是首次安裝流程中，且還沒看過此頁導覽
             if (isFirst && !seen) {
-                setTimeout(() => {
-                    const allSteps = getTutorialSteps(lang, userName);
-                    startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE);
-                }, 500);
+                // 此處通常由 Menu 觸發，若需自動觸發可保留
+                // setTimeout(() => {
+                //     const allSteps = getTutorialSteps(lang, userName);
+                //     startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE);
+                // }, 500);
             }
           }
           checkTutorial();
-      }, [lang, userName]) // 加入依賴以確保語言切換時能更新
+      }, [lang, userName])
   );
-  // [修改結束]
 
   const fetchContextData = async () => {
       try {
@@ -157,13 +168,10 @@ export default function RecipesScreen() {
       } finally { setLoading(false); }
   };
 
-  // [FIX] 穩健的 PDF 匯出功能
   const handleExportPDF = async () => {
       if (messages.length === 0) return Alert.alert(t('tip', lang), "No conversation to export.");
       try {
-          // 1. 在 JS 端預先將 Markdown 轉換為 HTML 字串
           const chatHtml = messages.map(m => {
-              // 使用 marked 解析 Markdown
               const parsedContent = marked(m.text); 
               const roleLabel = m.role === 'user' ? 'You' : 'AI Coach';
               const roleClass = m.role === 'user' ? 'user' : 'model';
@@ -175,7 +183,6 @@ export default function RecipesScreen() {
               `;
           }).join('');
 
-          // 2. 構建完整的 HTML 文件
           const html = `
             <!DOCTYPE html>
             <html>
@@ -185,15 +192,11 @@ export default function RecipesScreen() {
                 <style>
                   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #333; }
                   h1 { border-bottom: 3px solid #007AFF; padding-bottom: 15px; color: #007AFF; margin-bottom: 30px; }
-                  
-                  /* Message Bubbles */
                   .message { margin-bottom: 25px; border-radius: 12px; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
                   .user { background-color: #E3F2FD; border-left: 5px solid #2196F3; margin-left: 40px; }
                   .model { background-color: #F8F9FA; border-left: 5px solid #34C759; margin-right: 40px; }
                   .role { font-weight: bold; margin-bottom: 10px; font-size: 0.85em; color: #666; text-transform: uppercase; letter-spacing: 1px; }
                   .content { line-height: 1.6; }
-
-                  /* Markdown Styles inside Content */
                   table { width: 100%; border-collapse: collapse; margin: 15px 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
                   th, td { border: 1px solid #e0e0e0; padding: 12px; text-align: left; }
                   th { background-color: #007AFF; color: white; font-weight: 600; }
@@ -230,35 +233,54 @@ export default function RecipesScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor }]}>
-      <View style={styles.header}>
-          <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
-          <View style={{flexDirection:'row', gap: 16}}>
-              <TouchableOpacity onPress={handleExportPDF}><Ionicons name="document-text-outline" size={24} color={textColor}/></TouchableOpacity>
-              <TouchableOpacity onPress={() => setMessages([])}><Ionicons name="trash-outline" size={24} color={textColor}/></TouchableOpacity>
+      
+      {/* 1. Title & Exports */}
+      <TutorialTarget 
+        targetKey="Recipe_title" 
+        adjustment={{padding: 5}}
+        onMeasure={(y) => targetPositions.current['Recipe_title'] = y}
+      >
+          <View style={styles.header}>
+              <ThemedText type="title">{t('ai_coach', lang)}</ThemedText>
+              <View style={{flexDirection:'row', gap: 16}}>
+                  <TouchableOpacity onPress={handleExportPDF}><Ionicons name="document-text-outline" size={24} color={textColor}/></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setMessages([])}><Ionicons name="trash-outline" size={24} color={textColor}/></TouchableOpacity>
+              </View>
           </View>
-      </View>
+      </TutorialTarget>
 
-      <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
-          <View style={styles.statusItem}>
-              <ThemedText style={{fontSize:10, color:'#888'}}>{t('daily_calorie_target', lang)}</ThemedText>
-              <ThemedText style={{fontWeight:'bold'}}>{status.target}</ThemedText>
+      {/* 2. Energy Stats */}
+      <TutorialTarget 
+        targetKey="Recipe_energy" 
+        adjustment={{padding: 5}}
+        onMeasure={(y) => targetPositions.current['Recipe_energy'] = y}
+      >
+          <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
+              <View style={styles.statusItem}>
+                  <ThemedText style={{fontSize:10, color:'#888'}}>{t('daily_calorie_target', lang)}</ThemedText>
+                  <ThemedText style={{fontWeight:'bold'}}>{status.target}</ThemedText>
+              </View>
+              <View style={styles.statusItem}>
+                  <ThemedText style={{fontSize:10, color:'#888'}}>{t('intake', lang)}</ThemedText>
+                  <ThemedText style={{fontWeight:'bold', color:'#34C759'}}>{Math.round(status.intake)}</ThemedText>
+              </View>
+              <View style={styles.statusItem}>
+                  <ThemedText style={{fontSize:10, color:'#888'}}>{t('burned', lang)}</ThemedText>
+                  <ThemedText style={{fontWeight:'bold', color:'#FF9500'}}>{Math.round(status.burned)}</ThemedText>
+              </View>
+              <View style={[styles.statusItem, {borderLeftWidth:1, borderColor:'#ccc', paddingLeft:10}]}>
+                  <ThemedText style={{fontSize:10, color:tintColor}}>{t('remaining', lang)}</ThemedText>
+                  <ThemedText type="subtitle" style={{color:tintColor}}>{status.remaining}</ThemedText>
+              </View>
           </View>
-          <View style={styles.statusItem}>
-              <ThemedText style={{fontSize:10, color:'#888'}}>{t('intake', lang)}</ThemedText>
-              <ThemedText style={{fontWeight:'bold', color:'#34C759'}}>{Math.round(status.intake)}</ThemedText>
-          </View>
-          <View style={styles.statusItem}>
-              <ThemedText style={{fontSize:10, color:'#888'}}>{t('burned', lang)}</ThemedText>
-              <ThemedText style={{fontWeight:'bold', color:'#FF9500'}}>{Math.round(status.burned)}</ThemedText>
-          </View>
-          <View style={[styles.statusItem, {borderLeftWidth:1, borderColor:'#ccc', paddingLeft:10}]}>
-              <ThemedText style={{fontSize:10, color:tintColor}}>{t('remaining', lang)}</ThemedText>
-              <ThemedText type="subtitle" style={{color:tintColor}}>{status.remaining}</ThemedText>
-          </View>
-      </View>
+      </TutorialTarget>
 
-      {/* [修改開始] 包覆 ScrollView：導覽目標 recipes_history */}
-      <TutorialTarget targetKey="recipes_history" style={{flex: 1}}>
+      {/* 3. Hotkeys & Chat History */}
+      <TutorialTarget 
+        targetKey="Recipe_hotkeys" 
+        style={{flex: 1}}
+        onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y}
+      >
           <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
               {messages.length === 0 ? (
                   <View style={{marginTop: 10}}>
@@ -288,7 +310,6 @@ export default function RecipesScreen() {
                           {msg.role === 'user' ? (
                               <ThemedText style={{color: 'white'}}>{msg.text}</ThemedText>
                           ) : (
-                              // [FIX] 使用 Markdown 元件渲染 AI 回覆
                               <Markdown style={markdownStyles as any}>
                                   {msg.text}
                               </Markdown>
@@ -299,11 +320,13 @@ export default function RecipesScreen() {
               {loading && <ActivityIndicator style={{marginTop: 10}} size="small" color={tintColor}/>}
           </ScrollView>
       </TutorialTarget>
-      {/* [修改結束] */}
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}>
-          {/* [修改開始] 包覆輸入框：導覽目標 recipes_input */}
-          <TutorialTarget targetKey="recipes_input">
+          {/* 4. Chat Input */}
+          <TutorialTarget 
+            targetKey="Recipe_chat"
+            onMeasure={(y) => targetPositions.current['Recipe_chat'] = y}
+          >
               <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
                   <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
                   <TouchableOpacity onPress={() => handleSend(inputText)} disabled={!inputText.trim() || loading} style={{marginLeft: 8}}>
@@ -311,7 +334,6 @@ export default function RecipesScreen() {
                   </TouchableOpacity>
               </View>
           </TutorialTarget>
-          {/* [修改結束] */}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

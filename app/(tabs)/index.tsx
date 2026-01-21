@@ -240,6 +240,7 @@ export default function HomeScreen() {
           if (totalSleepHours > 0) {
               const fixedSleep = parseFloat(totalSleepHours.toFixed(1));
               setHealthSleep(fixedSleep);
+              setManualSleep(decimalToHHMM(fixedSleep)); // Sync manual input display
               const existingMetrics = await db.select().from(dailyMetrics).where(eq(dailyMetrics.date, dateStr));
               if (existingMetrics.length > 0) {
                   await db.update(dailyMetrics).set({ sleepHours: fixedSleep }).where(eq(dailyMetrics.id, existingMetrics[0].id));
@@ -425,7 +426,7 @@ export default function HomeScreen() {
 
       try {
           if(existing.length > 0) {
-            await db.update(dailyMetrics).set({ waterMl: newAmount }).where(eq(dailyMetrics.id, existing[0].id));
+              await db.update(dailyMetrics).set({ waterMl: newAmount }).where(eq(dailyMetrics.id, existing[0].id));
           }
       } catch(e) { console.error("Water update failed", e); }
   };
@@ -723,7 +724,7 @@ export default function HomeScreen() {
                     donut 
                     radius={32} 
                     innerRadius={24} 
-                    innerCircleColor={theme.background} // [關鍵修正] 設定為背景色，解決深色模式變白圓的問題
+                    innerCircleColor={theme.cardBackground} // [關鍵修正] 設定為背景色，解決深色模式變白圓的問題
                     centerLabelComponent={() => (
                         <ThemedText style={{fontSize:10, fontWeight:'bold', color: theme.text}}> 
                             {Math.round(realPct)}%
@@ -792,8 +793,7 @@ export default function HomeScreen() {
             {renderEnergySection()}
         </TutorialTarget>
 
-        {renderQuickAdd()}
-        
+        {/* [排版調整] 5. Actions (原在下方，現移至此) */}
         <View style={styles.recordSection}>
             <TutorialTarget
              targetKey="home_actions" 
@@ -814,37 +814,32 @@ export default function HomeScreen() {
                </View>
             </TutorialTarget>
 
-            <View style={styles.logsContainer}>
-                {MEAL_ORDER.map((mealType) => {
-                    const logs = dailyLogs[mealType] || [];
-                    return (
-                        <View key={mealType} style={styles.mealGroup}>
-                            <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum, item) => sum + item.totalCalories, 0))} kcal</ThemedText></View>
-                            {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : logs.map(log => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
-                        </View>
-                    );
-                })}
-            </View>
-            {frequentActivities.length > 0 && (<View style={{marginTop: 20, marginBottom: 8}}><ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8}}>{frequentActivities.map((name, idx) => {
-                            const { icon, library } = getActivityIconInfo(name);
+            {/* [排版調整] 6. Logs & Recent Foods (原在上方，現移至此，統一為 home_logs) */}
+            <TutorialTarget targetKey="home_logs" onMeasure={(y) => targetPositions.current['home_logs'] = y}>
+                <View>
+                    {renderQuickAdd()} 
+                    
+                    <View style={styles.logsContainer}>
+                        {MEAL_ORDER.map((mealType) => {
+                            // ... render logs
+                            const logs = dailyLogs[mealType] || [];
                             return (
-                                <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
-                                    <ActivityIcon 
-                                        library={library} 
-                                        name={icon} 
-                                        size={16} 
-                                        color={theme.text} 
-                                        style={{marginRight: 4}} 
-                                    />
-                                    <ThemedText>{name}</ThemedText>
-                                </TouchableOpacity>
+                                <View key={mealType} style={styles.mealGroup}>
+                                    <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t(mealType, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{Math.round(logs.reduce((sum:any, item:any) => sum + item.totalCalories, 0))} kcal</ThemedText></View>
+                                    {logs.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : logs.map((log:any) => <View key={log.id} style={styles.separator}>{renderSwipeableLog(log)}</View>)}
+                                </View>
                             );
-                        })}</ScrollView></View>)}
-            <View style={[styles.mealGroup, {marginTop: 20}]}>
-                <View style={styles.mealHeader}><ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText><ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText></View>
-                {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
-            </View>
+                        })}
+                    </View>
+                    {/* Activity Logs */}
+                    {/* ... code for activities ... */}
+                    <View style={[styles.mealGroup, {marginTop: 20}]}>
+                        {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
+                    </View>
+                </View>
+            </TutorialTarget>
         </View>
+        
         {CustomCalendarModal()}
         {renderMacroDetailModal()}
 
