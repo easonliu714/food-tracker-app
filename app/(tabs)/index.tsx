@@ -745,9 +745,9 @@ export default function HomeScreen() {
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
          adjustment={{
-            padding: 10,
-            offsetY: 100, 
-            heightAdd: 0,
+            padding: 20,
+            offsetY: 120, 
+            heightAdd: -30,
             widthAdd: 0,
          }}
          >
@@ -758,9 +758,9 @@ export default function HomeScreen() {
          targetKey="home_water" 
          onMeasure={(y) => targetPositions.current['home_water'] = y}
          adjustment={{
-            padding: 10,
-            offsetY: 100,
-            heightAdd: 0,
+            padding: 20,
+            offsetY: -130,
+            heightAdd: -20,
             widthAdd: 0,
          }}
          >
@@ -772,7 +772,7 @@ export default function HomeScreen() {
          onMeasure={(y) => targetPositions.current['home_energy'] = y}
          adjustment={{
             padding: 10,
-            offsetY: 100,
+            offsetY: -300,
             heightAdd: -10,
             widthAdd: 0,
          }}
@@ -786,8 +786,8 @@ export default function HomeScreen() {
              style={[styles.recordSection, { marginBottom: 0 }]} 
              adjustment={{ 
                 padding: 10, 
-                offsetY: 100,
-                heightAdd: -30
+                offsetY: -600,
+                heightAdd: -20
              }}
              >
                <View style={styles.quickActionRow}>
@@ -802,7 +802,7 @@ export default function HomeScreen() {
             targetKey="home_logs" 
             onMeasure={(y) => targetPositions.current['home_logs'] = y}
             style={{ paddingHorizontal: 16 }} 
-            adjustment={{ padding: 10, offsetY: 50 }}
+            adjustment={{ padding: 10, offsetY: -750, heightAdd: -300 }}
         >
             <View>
                 {renderQuickAdd()} 
