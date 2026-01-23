@@ -835,7 +835,7 @@ export default function ProfileScreen() {
                  </View>
 
                 {/* 5. Goals */}
-                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480, offsetX: -20, widthAdd: 10 }}>
+                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480, offsetX: -10, widthAdd: 30 }}>
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
                         <View style={[styles.row, {marginBottom: 12}]}>

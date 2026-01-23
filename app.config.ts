@@ -19,7 +19,7 @@ const config: ExpoConfig = {
   slug: env.appSlug,
   // [修改開始] 新增 owner 欄位 (根據您的 EAS CLI 提示)
   owner: "easonliu714s-personal-trainer",
-  version: "1.0.18", // 建議再次進版，例如 1.0.18
+  version: "1.0.19",
   orientation: "portrait",
   scheme: "nourish_me", 
   // [新增] EAS Updates 設定 (解決 Build 錯誤)

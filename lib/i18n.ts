@@ -1877,6 +1877,11 @@ export const t = (key: string, lang: string, params?: any) => {
 // 版本履歷 (也可以放這裡)
 const LOGS_TW = [
   {
+    version: "V1.0.19",
+    date: "2026-01-23",
+    content: "[新增] 全域導覽員系統：自動引導新手完成首頁、分析、AI 教練與設定頁面功能教學。\n[新增] 快速登入流程：導覽過程中即可完成名稱設定與自動登入，解決登入畫面遮擋問題。\n[優化] 導覽體驗：自動捲動至目標區塊並精準定位，修復切換頁面後捲動失效的問題。\n[修正] Health Connect 授權失敗錯誤 (修復 AndroidManifest 設定)。\n[修正] 首頁運動與常用功能區塊顯示邏輯。"
+  },
+  {
     version: "V1.0.18",
     date: "2026-01-21",
     content: "[新增] 完善新手導覽系統：設定頁面可手動觸發四大功能導覽 (首頁、分析、AI 教練、設定)。\n[優化] 導覽體驗：支援自動捲動至說明區塊，解決部分按鈕被遮擋問題。\n[修正] 系統語言自動偵測邏輯，確保初次安裝時顯示正確語言。"
@@ -1927,6 +1932,11 @@ const LOGS_TW = [
 ];
 
 const LOGS_CN = [
+  {
+    version: "V1.0.19",
+    date: "2026-01-23",
+    content: "[新增] 全局引导员系统：自动引导新手完成首页、分析、AI 教练与设置页面功能教学。\n[新增] 快速登录流程：引导过程中即可完成名称设置与自动登录，解决登录画面遮挡问题。\n[优化] 引导体验：自动滚动至目标区块并精准定位，修复切换页面后滚动失效的问题。\n[修正] Health Connect 授权失败错误 (修复 AndroidManifest 设置)。\n[修正] 首页运动与常用功能区块显示逻辑。"
+  },
   {
     version: "V1.0.18",
     date: "2026-01-21",
@@ -1979,6 +1989,11 @@ const LOGS_CN = [
 
 const LOGS_EN = [
   {
+    version: "V1.0.19",
+    date: "2026-01-23",
+    content: "[New] Global Tutorial System: Automatic walkthrough for Home, Analysis, AI Coach, and Settings.\n[New] Seamless Login: Set username and auto-login during the tutorial, fixing login screen overlay issues.\n[Imp] Tutorial Experience: Auto-scroll to target elements with precise positioning; fixed scroll failure after page switching.\n[Fix] Health Connect authorization failure (AndroidManifest config fix).\n[Fix] Display logic for Exercise and Frequent Activities sections on Home."
+  },
+  {
     version: "V1.0.18",
     date: "2026-01-21",
     content: "[New] Enhanced onboarding system: Manual trigger for four major feature guides (Home, Analysis, AI Coach, Settings).\n[Imp] Improved onboarding experience: Auto-scroll to explanation blocks, fixed button occlusion issues.\n[Fix] Refined system language detection logic to ensure correct initial language display."
@@ -2030,6 +2045,11 @@ const LOGS_EN = [
 
 const LOGS_JP = [
   {
+    version: "V1.0.19",
+    date: "2026-01-23",
+    content: "[新機能] グローバルチュートリアルシステム：ホーム、分析、AIコーチ、設定の各機能を自動ガイド。\n[新機能] シームレスログイン：チュートリアル中にユーザー名を設定し自動ログイン、ログイン画面の重なり問題を解決。\n[改善] ガイド体験：ターゲットへの自動スクロールと正確な位置合わせ。ページ切り替え後のスクロール不具合を修正。\n[修正] Health Connect認証エラー（AndroidManifest設定の修正）。\n[修正] ホーム画面の運動および頻繁なアクティビティセクションの表示ロジック。"
+  },
+  {
     version: "V1.0.18",
     date: "2026-01-21",
     content: "[新機能] 新しいオンボーディングシステムの改善：主要な4つの機能ガイド（ホーム、分析、AIコーチ、設定）を手動でトリガー可能に。\n[改善] オンボーディング体験の向上：説明ブロックへの自動スクロール、ボタンの遮蔽問題を修正。\n[修正] システム言語検出ロジックの改善により、初回インストール時に正しい言語が表示されるように。"
@@ -2080,6 +2100,11 @@ const LOGS_JP = [
 ];
 
 const LOGS_KO = [
+  {
+    version: "V1.0.19",
+    date: "2026-01-23",
+    content: "[신규] 글로벌 튜토리얼 시스템: 홈, 분석, AI 코치, 설정 기능에 대한 자동 가이드.\n[신규] 빠른 로그인: 튜토리얼 중 사용자 이름 설정 및 자동 로그인 지원, 로그인 화면 겹침 문제 해결.\n[개선] 가이드 경험: 목표 구역으로 자동 스크롤 및 정밀한 위치 조정, 페이지 전환 후 스크롤 오류 수정.\n[수정] Health Connect 인증 실패 오류 (AndroidManifest 설정 수정).\n[수정] 홈 화면의 운동 및 자주 사용하는 활동 섹션 표시 로직 수정."
+  },
   {
     version: "V1.0.18",
     date: "2026-01-21",
