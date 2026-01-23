@@ -662,7 +662,7 @@ export default function ProfileScreen() {
 
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* 1. AI Key */}
-         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10, offsetY: 70, heightAdd:-30 }}>
+         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10, offsetY: 70, offsetX: 20, heightAdd:-30, widthAdd: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
                 <View style={{marginTop:12}}>
@@ -835,7 +835,7 @@ export default function ProfileScreen() {
                  </View>
 
                 {/* 5. Goals */}
-                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480 }}>
+                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480, offsetX: -20, widthAdd: 10 }}>
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
                         <View style={[styles.row, {marginBottom: 12}]}>

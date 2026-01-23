@@ -48,6 +48,8 @@ export const getTutorialSteps = (lang: string, userName: string): Record<string,
 
     RECIPES_GUIDE: [
       { text: t('tutorial_recipes_intro', lang) },
+      // [新增] 補上 Recipe_energy 的步驟
+      { targetKey: 'Recipe_energy', text: t('tutorial_recipes_energy', lang) || "上方顯示您的每日熱量預算與剩餘額度，這些數據會根據您的飲食紀錄即時更新。" },
       { targetKey: 'Recipe_hotkeys', text: t('tutorial_recipes_hotkeys', lang) },
       { targetKey: 'Recipe_chat', text: t('tutorial_recipes_chat', lang) },
       { targetKey: 'Recipe_title', text: t('tutorial_recipes_export', lang) }

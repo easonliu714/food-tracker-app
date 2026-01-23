@@ -369,6 +369,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_analysis_chart_2: "您可以雙指縮放 (Pinch) 、點擊查看更細部的每日數據，或是左右拖曳查看歷史紀錄。",
 
     tutorial_recipes_intro: "我是您的 AI 營養教練，有任何飲食問題都可以問我。",
+    tutorial_recipes_energy: "上方顯示您的每日熱量預算與剩餘額度，這些數據會根據您的飲食紀錄即時更新。" ,
     tutorial_recipes_hotkeys: "不知道問什麼？試試上方的快速指令，例如「建議晚餐」或「居家運動」。",
     tutorial_recipes_chat: "在下方輸入你的問題，例如『冰箱剩番茄可以做什麼？』或『這餐熱量多少？』，我會盡力為您解答。",
     tutorial_recipes_export: "對話結束後，您可以將建議匯出成 PDF 保存。",
@@ -734,6 +735,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_analysis_chart_2: "您可以双指缩放 (Pinch) 、点击查看更细部的每日数据，或是左右拖曳查看历史纪录。",
 
     tutorial_recipes_intro: "我是您的 AI 营养教练，有任何饮食问题都可以问我。",
+    tutorial_recipes_energy: "上方显示您的每日热量预算与剩余额度，这些数据会根据您的饮食纪录即时更新。" ,
     tutorial_recipes_hotkeys: "不知道问什么？试试上方的快速指令，例如「建议晚餐」或「居家运动」。",
     tutorial_recipes_chat: "在下方输入你的问题，例如『冰箱剩番茄可以做什么？』或『这餐热量多少？』，我会尽力为您解答。",
     tutorial_recipes_export: "对话结束后，您可以将建议汇出成 PDF 保存。",
@@ -1084,6 +1086,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_analysis_chart_2: "You can pinch to zoom, tap to view detailed daily data, or drag left/right to view historical records.",
 
     tutorial_recipes_intro: "I'm your AI nutrition coach. Feel free to ask me any dietary questions.",
+    tutorial_recipes_energy: "The above displays your daily calorie budget and remaining amount. This data is updated in real time based on your eating records.", 
     tutorial_recipes_hotkeys: "Not sure what to ask? Try the quick commands above, like 'Dinner Suggestions' or 'Home Workout'.",
     tutorial_recipes_chat: "Type your questions below, such as 'What can I make with leftover tomatoes?' or 'How many calories is this meal?'. I'll do my best to assist you.",
     tutorial_recipes_export: "After the conversation, you can export the suggestions as a PDF for saving.",
@@ -1445,6 +1448,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_analysis_chart_2: "ピンチ操作でズームイン・アウトでき、クリックして詳細な日次データを見たり、左右にスワイプして履歴を見たりできます。",
 
     tutorial_recipes_intro: "私はあなたのAI栄養コーチです。食事に関するご質問は何でもお気軽にお寄せください。",
+    tutorial_recipes_energy:"上記は、1日のカロリー予算と残り量を示しています。このデータは、食事記録に基づいてリアルタイムで更新されます。",
     tutorial_recipes_hotkeys: "何を尋ねればよいかわからない場合は、「夕食をおすすめして」や「自宅でのエクササイズ」など、上記の簡単な指示を試してください。",
     tutorial_recipes_chat: "「冷蔵庫に残っているトマトをどうしたらいいですか？」や「この食事のカロリーは何カロリーですか？」などの質問を以下に入力してください。できる限りお答えします。",
     tutorial_recipes_export: "会話が終了したら、提案を PDF としてエクスポートして保存できます。",
@@ -1799,6 +1803,7 @@ export const TRANSLATIONS: Record<string, any> = {
     tutorial_analysis_chart_2: "손가락으로 확대/축소하거나, 탭하여 더 자세한 일별 데이터를 보거나, 좌우로 드래그하여 과거 기록을 볼 수 있습니다.", 
 
     tutorial_recipes_intro: "저는 여러분의 AI 영양 코치입니다. 식사에 관한 어떤 질문도 자유롭게 물어보세요。",
+    tutorial_recipes_energy:"위 내용은 일일 칼로리 섭취량과 남은 양을 보여줍니다. 이 데이터는 사용자의 식사 기록을 기반으로 실시간으로 업데이트됩니다.",
     tutorial_recipes_hotkeys: "무엇을 물어볼지 모르겠다면, 위의 간단한 지시어(예: '저녁 추천해줘', '집에서 하는 운동')를 시도해보세요。",
     tutorial_recipes_chat: "'냉장고에 남은 토마토로 뭐할까？', '이 식사의 칼로리는 몇 칼로리야？'와 같은 질문을 아래에 입력하세요. 최대한 답변해드리겠습니다。",
     tutorial_recipes_export: "대화가 끝나면 제안을 PDF로 내보내어 저장할 수 있습니다。",

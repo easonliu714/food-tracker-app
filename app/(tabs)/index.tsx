@@ -735,20 +735,29 @@ export default function HomeScreen() {
 
   const renderSwipeableLog = (log: any) => (<Swipeable renderRightActions={()=>(<View style={{flexDirection: 'row', width: 140}}><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF9500'}]} onPress={() => handleDuplicate(log.id)}><Ionicons name="copy" size={24} color="white"/></TouchableOpacity><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30'}]} onPress={() => deleteLog(log.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity></View>)} renderLeftActions={()=>(<TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>)}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':t('portion', lang)}</ThemedText></View><ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText></View></Swipeable>);
 
-  return (
+return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        {renderHeader()}
+        
+        {/* [FIXED] Wrap renderHeader with TutorialTarget */}
+        <TutorialTarget 
+            targetKey="home_header" 
+            onMeasure={(y) => targetPositions.current['home_header'] = y}
+            adjustment={{ offsetY: 50, offsetX: 10, heightAdd: 0,  widthAdd: -30 }} 
+        >
+            {renderHeader()}
+        </TutorialTarget>
         
         <TutorialTarget
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
          adjustment={{
             padding: 20,
-            offsetY: 120, 
+            offsetY: 120,
+            offsetX: 30, 
             heightAdd: -30,
-            widthAdd: 0,
+            widthAdd: -70,
          }}
          >
             {renderBodyMetricsCard()}
@@ -760,8 +769,9 @@ export default function HomeScreen() {
          adjustment={{
             padding: 20,
             offsetY: -130,
+            offsetX: 30,
             heightAdd: -20,
-            widthAdd: 0,
+            widthAdd: -70,
          }}
          >
             {renderWaterSection()}
@@ -773,8 +783,9 @@ export default function HomeScreen() {
          adjustment={{
             padding: 10,
             offsetY: -300,
+            offsetX: 20,
             heightAdd: -10,
-            widthAdd: 0,
+            widthAdd: -40,
          }}
          >
             {renderEnergySection()}
@@ -787,7 +798,9 @@ export default function HomeScreen() {
              adjustment={{ 
                 padding: 10, 
                 offsetY: -600,
-                heightAdd: -20
+                offsetX: 20,
+                heightAdd: -20,
+                widthAdd: -40
              }}
              >
                <View style={styles.quickActionRow}>
@@ -802,7 +815,7 @@ export default function HomeScreen() {
             targetKey="home_logs" 
             onMeasure={(y) => targetPositions.current['home_logs'] = y}
             style={{ paddingHorizontal: 16 }} 
-            adjustment={{ padding: 10, offsetY: -750, heightAdd: -300 }}
+            adjustment={{ padding: 10, offsetY: -750, offsetX: 30, heightAdd: -300, widthAdd: -50 }}
         >
             <View>
                 {renderQuickAdd()} 
