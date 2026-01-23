@@ -66,44 +66,39 @@ export default function AnalysisScreen() {
   const scrollViewRef = useRef<ScrollView>(null); 
   const targetPositions = useRef<Record<string, number>>({}); 
 
-  // [新增] 當導覽開始時，自動捲動至頂部
-  useEffect(() => {
-      if (activeScenario === 'ANALYSIS_GUIDE') {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+// [修改] 捲動處理函式
+  const handleScrollRequest = useCallback((targetKey: string) => {
+      const y = targetPositions.current[targetKey];
+      if (y !== undefined && scrollViewRef.current) {
+          setTimeout(() => {
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 50), animated: true });
+          }, 50);
       }
-  }, [activeScenario]);
+  }, []);
 
-  // [修改] 使用 useFocusEffect 管理 scroll listener
+  // [修改] 統一使用 useFocusEffect 管理導覽與捲動註冊
   useFocusEffect(
-      useCallback(() => {
-          // 註冊：當導覽請求捲動時執行
-          onScrollRequest((targetKey) => {
-              const y = targetPositions.current[targetKey];
-              if (y !== undefined && scrollViewRef.current) {
-                  scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
-              }
-          });
+    useCallback(() => {
+        // 1. 註冊捲動函式
+        onScrollRequest(handleScrollRequest);
 
-          // 清理：離開頁面時不做任何事
-          return () => {};
-      }, [])
-  );
-  
-  // [修改] 導覽觸發邏輯：改用集中管理的 Steps
-  useFocusEffect(useCallback(()=>{
-      async function check() {
+        // 2. 強制捲動至頂部
+        if (activeScenario === 'ANALYSIS_GUIDE') {
+             setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
+        }
+
+        // 3. 檢查導覽狀態 (備援邏輯)
+        async function check() {
            const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS);
-           const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH); // [新增] 檢查是否為首次流程
+           const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
            
-           // 如果是首次安裝且未看過分析導覽 (通常由 Menu 觸發，這裡做備援)
            if (isFirst && !seen) {
-               // 這裡如果想要自動觸發，可以呼叫 startScenario
-               // 但通常 Analysis 是透過 Menu -> 點選 -> 跳轉 -> 觸發
-               // 若要保持 Menu 點擊後的連貫性，可以檢查某個 flag 或直接依賴 Menu 的 setTimeout
+               // Logic handled by context or menu
            }
-      }
-      check();
-  },[lang])); 
+        }
+        check();
+    }, [lang, activeScenario, handleScrollRequest])
+  );
 
   const [period, setPeriod] = useState<"week" | "month" | "custom">("week");
   const [loading, setLoading] = useState(true);

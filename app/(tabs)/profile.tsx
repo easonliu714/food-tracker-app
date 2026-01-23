@@ -68,24 +68,16 @@ export default function ProfileScreen() {
   // [新增] 自訂功能選單 Modal 狀態
   const [showGuideMenuModal, setShowGuideMenuModal] = useState(false);
 
-  // [新增] 當導覽開始時，自動捲動至頂部
-  useEffect(() => {
-      if (activeScenario === 'PROFILE_GUIDE') {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+// [修改] 註冊 Scroll Listener
+  // 使用 useCallback 確保參照穩定
+  const handleScrollRequest = useCallback((targetKey: string) => {
+      const y = targetPositions.current[targetKey];
+      if (y !== undefined && scrollViewRef.current) {
+          // 增加延遲確保 Layout 測量完成
+          setTimeout(() => {
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+          }, 50);
       }
-  }, [activeScenario]);
-
-  // [新增] 捲動監聽
-  useEffect(() => {
-      onScrollRequest((targetKey) => {
-          const y = targetPositions.current[targetKey];
-          if (y !== undefined && scrollViewRef.current) {
-               // 增加延遲與緩衝距離，確保滾動到位
-               setTimeout(() => {
-                   scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
-               }, 100);
-          }
-      });
   }, []);
 
   // [修改] 顯示功能選單 (開啟 Modal)
@@ -114,19 +106,27 @@ export default function ProfileScreen() {
       }
   };
   
-  // 自動觸發 Profile 教學
+// 自動觸發 Profile 教學與註冊捲動
   useFocusEffect(
     useCallback(() => {
+        // 1. 當頁面獲得焦點時，註冊這個頁面的捲動函數到 Context
+        onScrollRequest(handleScrollRequest);
+
+        // 2. 檢查是否正在進行 Profile 導覽，如果是，強制捲到頂部
+        if (activeScenario === 'PROFILE_GUIDE') {
+             setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
+        }
+
+        // 3. 檢查導覽狀態 (備援邏輯)
         async function check() {
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-            // 若為首次流程且未看過 (通常由 Context 的 navigate_profile 觸發)
             if (isFirst && !seen) {
-                 // Context logic usually handles this
+                 // Context logic usually handles this via navigate_profile
             }
         }
         check();
-    }, [lang])
+    }, [lang, activeScenario, handleScrollRequest]) 
   );
   
   const [apiKey, setApiKey] = useState("");

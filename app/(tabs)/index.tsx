@@ -107,28 +107,29 @@ export default function HomeScreen() {
   const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial();
   const targetPositions = useRef<Record<string, number>>({});
 
-  // [修改] 導覽開始時，自動捲動至頂部
-  useEffect(() => {
-      if (activeScenario === 'HOME_GUIDE') {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+// [修改] 捲動處理函式：使用 useCallback 鎖定，避免閉包陷阱
+  const handleScrollRequest = useCallback((targetKey: string) => {
+      const y = targetPositions.current[targetKey];
+      if (y !== undefined && scrollViewRef.current) {
+          // 增加延遲與緩衝距離，確保滾動到位
+          setTimeout(() => {
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+          }, 100);
       }
-  }, [activeScenario]);
-
-  // 捲動監聽
-  useEffect(() => {
-      onScrollRequest((targetKey) => {
-          const y = targetPositions.current[targetKey];
-          if (y !== undefined && scrollViewRef.current) {
-              // 增加延遲與緩衝距離，確保滾動到位
-              setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
-              }, 100);
-          }
-      });
   }, []);
 
+  // [修改] 統一使用 useFocusEffect 管理導覽與捲動註冊
   useFocusEffect(
     useCallback(() => {
+        // 1. 頁面獲取焦點時，向 Context 註冊自己的捲動函式
+        onScrollRequest(handleScrollRequest);
+        
+        // 2. 如果正在進行本頁導覽，強制捲動到頂部
+        if (activeScenario === 'HOME_GUIDE') {
+             setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
+        }
+
+        // 3. 檢查是否觸發導覽
         async function checkTutorial() {
             if (activeScenario === 'HOME_GUIDE') return;
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
@@ -139,7 +140,7 @@ export default function HomeScreen() {
             }
         }
         checkTutorial();
-    }, [activeScenario, userName, lang])
+    }, [activeScenario, userName, lang, handleScrollRequest]) // 加入 handleScrollRequest 依賴
   );
 
   const [currentDate, setCurrentDate] = useState(new Date());

@@ -60,6 +60,9 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const [inputName, setInputName] = useState("");
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  // [修改] 改用 Map 來儲存不同頁面的捲動函數，Key 可以是 scenario ID 或自訂標籤
+  // 這裡我們簡化處理：直接存一個 callback，但我們會確保頁面 focus 時才註冊
   const scrollCallbackRef = useRef<((key: string) => void) | null>(null);
 
   useEffect(() => {
@@ -77,20 +80,29 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     init();
   }, [lang]);
 
-  // [修改] 捲動邏輯：避免同區塊重複捲動
+  // [修改] 捲動邏輯：加入延遲與重試機制
   useEffect(() => {
       const step = steps[currentStepIndex];
       const prevStep = steps[currentStepIndex - 1];
 
-      if (step?.targetKey && activeScenario && scrollCallbackRef.current) {
-          // 只有當 targetKey 改變時才觸發捲動，避免畫面抖動
+      if (step?.targetKey && activeScenario) {
+          // 只有當 targetKey 改變時才觸發
           if (!prevStep || prevStep.targetKey !== step.targetKey) {
-              scrollCallbackRef.current(step.targetKey);
+              // 給一點時間讓頁面切換或 ScrollView 準備好
+              setTimeout(() => {
+                  if (scrollCallbackRef.current) {
+                      console.log(`[Tutorial] Requesting scroll to: ${step.targetKey}`);
+                      scrollCallbackRef.current(step.targetKey);
+                  } else {
+                      console.warn(`[Tutorial] No scroll callback registered for ${step.targetKey}`);
+                  }
+              }, 100);
           }
       }
   }, [currentStepIndex, activeScenario, steps]);
 
   const onScrollRequest = (cb: (key: string) => void) => {
+      console.log("[Tutorial] Scroll callback registered");
       scrollCallbackRef.current = cb;
   };
 

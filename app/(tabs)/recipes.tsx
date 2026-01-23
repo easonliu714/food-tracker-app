@@ -65,42 +65,42 @@ export default function RecipesScreen() {
       list_item: { marginBottom: 4 }
   };
 
-  // [新增] 當導覽開始時，自動捲動至頂部
-  useEffect(() => {
-      if (activeScenario === 'RECIPES_GUIDE') {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+// [修改] 捲動處理函式
+  const handleScrollRequest = useCallback((targetKey: string) => {
+      // Input 區域由 KeyboardAvoidingView 處理，其他區域捲動到相對位置
+      const y = targetPositions.current[targetKey];
+      if (y !== undefined && scrollViewRef.current) {
+          setTimeout(() => {
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 50), animated: true });
+          }, 50);
       }
-  }, [activeScenario]);
+  }, []);
 
-  // [修改] 整合 context 載入與導覽觸發邏輯
+  // [修改] 統一使用 useFocusEffect 管理
   useFocusEffect(
       useCallback(() => {
           // 1. 載入當日數據
           fetchContextData();
 
           // 2. 註冊捲動監聽
-          onScrollRequest((targetKey) => {
-              const y = targetPositions.current[targetKey];
-              if (y !== undefined && scrollViewRef.current) {
-                  scrollViewRef.current.scrollTo({ y: Math.max(0, y - 50), animated: true });
-              }
-          });
+          onScrollRequest(handleScrollRequest);
 
-          // 3. 檢查導覽
+          // 3. 導覽開始時置頂
+          if (activeScenario === 'RECIPES_GUIDE') {
+               setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
+          }
+
+          // 4. 檢查導覽 (備援)
           async function checkTutorial() {
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_RECIPES);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
             
             if (isFirst && !seen) {
-                // 此處通常由 Menu 觸發，若需自動觸發可保留
-                // setTimeout(() => {
-                //     const allSteps = getTutorialSteps(lang, userName);
-                //     startScenario('RECIPES_GUIDE', allSteps.RECIPES_GUIDE);
-                // }, 500);
+                // ...
             }
           }
           checkTutorial();
-      }, [lang, userName])
+      }, [lang, userName, activeScenario, handleScrollRequest])
   );
 
   const fetchContextData = async () => {
