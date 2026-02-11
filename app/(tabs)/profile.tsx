@@ -662,7 +662,7 @@ export default function ProfileScreen() {
 
       <ScrollView ref={scrollViewRef} style={{paddingHorizontal: 16}}>
          {/* 1. AI Key */}
-         <TutorialTarget targetKey="profile_ai" onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10, offsetY: 70, offsetX: 20, heightAdd:-30, widthAdd: -30 }}>
+         <TutorialTarget targetKey="profile_ai" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_ai'] = y} adjustment={{ padding: 10, offsetY: 70, offsetX: 20, heightAdd:-30, widthAdd: -30 }}>
              <View style={[styles.card, {backgroundColor: cardBackground}]}>
                 <ThemedText type="subtitle">{t('ai_settings', lang)}</ThemedText>
                 <View style={{marginTop:12}}>
@@ -682,7 +682,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 2. Notification */}
-         <TutorialTarget targetKey="profile_notify" onMeasure={(y) => targetPositions.current['profile_notify'] = y} adjustment={{ offsetY: -220 }}>
+         <TutorialTarget targetKey="profile_notify" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_notify'] = y} adjustment={{ offsetY: -220 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                  <ThemedText type="subtitle" style={{marginBottom:12}}>🔔 {t('notifications', lang)}</ThemedText>
                  <View style={styles.reminderRow}>
@@ -757,7 +757,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 3. Backup */}
-         <TutorialTarget targetKey="profile_backup" onMeasure={(y) => targetPositions.current['profile_backup'] = y} adjustment={{ offsetY: -670 }}>
+         <TutorialTarget targetKey="profile_backup" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_backup'] = y} adjustment={{ offsetY: -670 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                  <ThemedText type="subtitle" style={{marginBottom:8}}>{t('data_backup', lang)}</ThemedText>
                  <ThemedText style={{fontSize:12, color:textSecondary, marginBottom:8}}>{t('backup_desc', lang)}</ThemedText>
@@ -786,7 +786,7 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 4. Basic Info */}
-         <TutorialTarget targetKey="profile_basic" onMeasure={(y) => targetPositions.current['profile_basic'] = y} adjustment={{ offsetY: -1000, heightAdd: -900 }}>
+         <TutorialTarget targetKey="profile_basic" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_basic'] = y} adjustment={{ offsetY: -1000, heightAdd: -900 }}>
              <View style={[styles.card, {backgroundColor: cardBackground, marginTop: 16}]}>
                 <ThemedText type="subtitle" style={{marginBottom:12}}>{t('basic_info', lang)}</ThemedText>
                 <View style={{flexDirection:'row', gap:10, marginBottom: 12}}>
@@ -835,7 +835,7 @@ export default function ProfileScreen() {
                  </View>
 
                 {/* 5. Goals */}
-                <TutorialTarget targetKey="profile_goals" onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480, offsetX: -10, widthAdd: 30 }}>
+                <TutorialTarget targetKey="profile_goals" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_goals'] = (targetPositions.current['profile_basic'] || 0) + y} adjustment={{ offsetY: -1350, heightAdd: -480, offsetX: -10, widthAdd: 30 }}>
                     <View style={{marginTop: 12, borderTopWidth: 1, borderColor: '#eee', paddingTop: 12}}>
                         <ThemedText style={{fontSize:14, fontWeight:'bold', marginBottom:8}}>{t('target_goals', lang)}</ThemedText>
                         <View style={[styles.row, {marginBottom: 12}]}>
@@ -910,14 +910,14 @@ export default function ProfileScreen() {
          </TutorialTarget>
 
          {/* 6. Save Button */}
-         <TutorialTarget targetKey="profile_save" onMeasure={(y) => targetPositions.current['profile_save'] = y} adjustment={{ offsetY: -650, heightAdd: 100 }}>
+         <TutorialTarget targetKey="profile_save" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_save'] = y} adjustment={{ offsetY: -650, heightAdd: 100 }}>
              <Pressable onPress={handleSave} style={[styles.btn, {backgroundColor: tintColor, marginTop: 20}]}>
                 <ThemedText style={{color:'white', fontWeight:'bold', fontSize:16}}>{t('save_settings', lang)}</ThemedText>
              </Pressable>
          </TutorialTarget>
          
          {/* 7. Guide & History */}
-         <TutorialTarget targetKey="profile_guide" onMeasure={(y) => targetPositions.current['profile_guide'] = y} adjustment={{ offsetY: -650, heightAdd: 100 }}>
+         <TutorialTarget targetKey="profile_guide" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['profile_guide'] = y} adjustment={{ offsetY: -650, heightAdd: 100 }}>
              <View style={{marginTop: 10, marginBottom: 40}}>
                  <Pressable onPress={showGuideMenu} style={{padding: 16, alignItems:'center', marginTop: 10}}>
                      <ThemedText style={{color: tintColor, fontSize: 14}}>❓ {t('feature_guide', lang) || "Feature Guide"}</ThemedText>

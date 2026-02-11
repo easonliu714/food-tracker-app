@@ -241,7 +241,7 @@ export default function RecipesScreen() {
       {/* 1. Title & Exports */}
       <TutorialTarget 
         targetKey="Recipe_title" 
-        adjustment={{padding: 5, heightAdd: -20,  offsetY: 50, offsetX: 220, widthAdd: -240}}
+        style={{ borderBottomWidth: 1, borderBottomColor: '#eee' }}
         onMeasure={(y) => targetPositions.current['Recipe_title'] = y}
       >
           <View style={styles.header}>
@@ -256,7 +256,7 @@ export default function RecipesScreen() {
       {/* 2. Energy Stats */}
       <TutorialTarget 
         targetKey="Recipe_energy" 
-        adjustment={{padding: 5, offsetY: 70 , offsetX: 20, widthAdd: -40}}
+        style={{ padding: 10 }}
         onMeasure={(y) => targetPositions.current['Recipe_energy'] = y}
       >
           <View style={[styles.statusCard, {backgroundColor: tintColor + '15'}]}>
@@ -282,9 +282,8 @@ export default function RecipesScreen() {
       {/* 3. Hotkeys & Chat History */}
       <TutorialTarget 
         targetKey="Recipe_hotkeys" 
-        style={{flex: 1}}
+        style={{flex: 1, padding: 10}}
         onMeasure={(y) => targetPositions.current['Recipe_hotkeys'] = y}
-        adjustment={{ padding: 5, heightAdd: -250, offsetY: 50, offsetX: 20, widthAdd: -40 }}
       >
           <ScrollView ref={scrollViewRef} contentContainerStyle={styles.chatContent} style={{flex:1}}>
               {messages.length === 0 ? (
@@ -330,8 +329,8 @@ export default function RecipesScreen() {
           {/* 4. Chat Input */}
           <TutorialTarget 
             targetKey="Recipe_chat"
+            style={{ borderTopWidth: 1, borderTopColor: '#eee' }}
             onMeasure={(y) => targetPositions.current['Recipe_chat'] = y}
-            adjustment={{ padding: 5, offsetY: 30, offsetX: 20, widthAdd: -40 }}
           >
               <View style={[styles.inputContainer, { backgroundColor: inputBg }]}>
                   <TextInput style={[styles.input, { color: textColor }]} value={inputText} onChangeText={setInputText} placeholder={t('ask_ai_placeholder', lang)} placeholderTextColor="#999"/>
