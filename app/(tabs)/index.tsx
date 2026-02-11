@@ -773,7 +773,6 @@ return (
         <TutorialTarget 
             targetKey="home_header" 
             onMeasure={(y) => targetPositions.current['home_header'] = y}
-            adjustment={{ padding: 5 }} 
         >
             {renderHeader()}
         </TutorialTarget>
@@ -782,7 +781,6 @@ return (
         <TutorialTarget
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
-         adjustment={{ padding: 5 }} // 只保留少量 padding
          >
             {renderBodyMetricsCard()}
         </TutorialTarget>
@@ -791,7 +789,6 @@ return (
         <TutorialTarget
          targetKey="home_water" 
          onMeasure={(y) => targetPositions.current['home_water'] = y}
-         adjustment={{ padding: 5 }}
          >
             {renderWaterSection()}
         </TutorialTarget>
@@ -800,7 +797,6 @@ return (
         <TutorialTarget
          targetKey="home_energy" 
          onMeasure={(y) => targetPositions.current['home_energy'] = y}
-         adjustment={{ padding: 5 }}
          >
             {renderEnergySection()}
         </TutorialTarget>
@@ -811,7 +807,6 @@ return (
              targetKey="home_actions" 
              onMeasure={(y) => targetPositions.current['home_actions'] = y}
              style={[styles.recordSection, { marginBottom: 0 }]} 
-             adjustment={{ padding: 5 }}
              >
                <View style={styles.quickActionRow}>
                     <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
@@ -826,7 +821,6 @@ return (
             targetKey="home_logs" 
             onMeasure={(y) => targetPositions.current['home_logs'] = y}
             style={{ paddingHorizontal: 16 }} 
-            adjustment={{ padding: 5 }}
         >
             <View>
                 {renderQuickAdd()} 

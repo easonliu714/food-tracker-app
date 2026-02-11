@@ -1,5 +1,8 @@
+// app.config.ts
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
+// [新增] 引入 Config Plugins 工具
+import { withAndroidManifest, ConfigPlugin } from "@expo/config-plugins";
 
 const bundleId = "space.manus.nutrition_tracker.t20251217000540";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
@@ -14,25 +17,42 @@ const env = {
   androidPackage: bundleId,
 };
 
+// [新增] 自定義 Plugin：注入 Health Connect 所需的 queries 標籤
+const withHealthConnectQueries: ConfigPlugin = (config) => {
+  return withAndroidManifest(config, async (config) => {
+    const androidManifest = config.modResults;
+    if (!androidManifest.manifest.queries) {
+      androidManifest.manifest.queries = [];
+    }
+    // 檢查是否已存在 (避免重複添加)
+    const hasHealthQuery = androidManifest.manifest.queries.some(
+      (q: any) => q.package && q.package[0]?.$?.["android:name"] === "com.google.android.apps.healthdata"
+    );
+
+    if (!hasHealthQuery) {
+      androidManifest.manifest.queries.push({
+        package: [{ $: { "android:name": "com.google.android.apps.healthdata" } }],
+      });
+    }
+    return config;
+  });
+};
+
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  // [修改開始] 新增 owner 欄位 (根據您的 EAS CLI 提示)
   owner: "easonliu714s-personal-trainer",
-  version: "1.0.19",
+  version: "1.0.20",
   orientation: "portrait",
   scheme: "nourish_me", 
-  // [新增] EAS Updates 設定 (解決 Build 錯誤)
   updates: {
     url: "https://u.expo.dev/00f07adb-465c-4dfc-baef-d332d062f34b"
   },
   runtimeVersion: {
     policy: "appVersion"
   },
-
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
-  
   locales: {
     "zh-TW": "./locales/zh-TW.json",
     "zh-CN": "./locales/zh-CN.json",
@@ -40,7 +60,6 @@ const config: ExpoConfig = {
     "ja": "./locales/ja.json",
     "ko": "./locales/ko.json"
   },
-
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
@@ -50,55 +69,49 @@ const config: ExpoConfig = {
       NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos to import food images for analysis.",
     },
   },
-  
   android: {
     package: env.androidPackage,
     adaptiveIcon: {
       foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#ffffff",
     },
-    // 這裡保留權限宣告作為雙重保險
     permissions: [
       "CAMERA",
       "READ_EXTERNAL_STORAGE",
       "WRITE_EXTERNAL_STORAGE",
-      // [修改開始] 新增 ACTIVITY_RECOGNITION 權限
       "android.permission.ACTIVITY_RECOGNITION", 
-      // 增加 Health Connect 權限宣告
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
-      "android.permission.health.WRITE_STEPS"
+      "android.permission.health.WRITE_STEPS",
     ],
     intentFilters: [
       {
         action: "VIEW",
         autoVerify: true,
-        data: [
-          {
-            scheme: env.scheme,
-            host: "*",
-          },
-        ],
+        data: [ { scheme: env.scheme, host: "*" } ],
         category: ["BROWSABLE", "DEFAULT"],
       },
+      // [新增] 確保 Health Connect 權限請求畫面能正確回調
+      {
+        action: "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE",
+        data: [ { scheme: env.scheme, host: "*" } ], // 注意：這裡通常不需要 data，但為了與插件相容保留
+        category: ["DEFAULT"],
+      }
     ],
   },
-  
   web: {
     output: "static",
     favicon: "./assets/images/favicon.png",
   },
-  
   plugins: [
-    // [重要] 加回官方插件，讓它負責產生基礎設定
-    // [修正] 改用完整的 Class Name，確保插件能找到正確的 Activity
+    // 應用我們剛剛寫的 queries 修補
+    withHealthConnectQueries,
+    
     ["react-native-health-connect", { 
         "rationaleActivityClassName": `${bundleId}.MainActivity`
     }],
-    // [重要] 我們的修正腳本放在後面，用來修復官方插件產生的錯誤 Action
-    "./plugins/withHealthConnectFix",
-    
+    "./plugins/withHealthConnectFix", // 你的修正檔可以保留，作為雙重保險
     "./plugins/withDisableLinting",
     [
       "expo-build-properties",
@@ -110,19 +123,13 @@ const config: ExpoConfig = {
         },
       },
     ],
-    
     "expo-router",
     "expo-localization",
     "expo-sqlite",
-
     [
       "expo-notifications",
-      {
-        "icon": "./assets/images/icon.png",
-        "color": "#ffffff"
-      }
+      { "icon": "./assets/images/icon.png", "color": "#ffffff" }
     ],
-    
     [
       "expo-camera",
       {
@@ -151,12 +158,8 @@ const config: ExpoConfig = {
     typedRoutes: true,
   },
   extra: {
-    router: {
-      origin: false,
-    },
-    eas: {
-      projectId: "00f07adb-465c-4dfc-baef-d332d062f34b",
-    },
+    router: { origin: false },
+    eas: { projectId: "00f07adb-465c-4dfc-baef-d332d062f34b" },
   },
 };
 

@@ -1,13 +1,13 @@
+// context/TutorialContext.tsx
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { View, Modal, StyleSheet, Text, Dimensions, TextInput, Image, Animated, Platform, KeyboardAvoidingView, TouchableOpacity } from 'react-native';
+import { View, Modal, StyleSheet, Text, Dimensions, TextInput, Image, Animated, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, usePathname } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { getTutorialState, setTutorialState, getUserName, setUserName, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLanguage, t } from '@/lib/i18n';
 import { getTutorialSteps, TutorialStep } from '@/constants/tutorial-steps';
-// [新增] 引入 DB 相關，以便在輸入名字時直接寫入資料庫，達成「登入」效果
 import { db } from '@/lib/db'; 
 import { userProfiles } from '@/drizzle/schema';
 import { eq } from 'drizzle-orm';
@@ -15,17 +15,14 @@ import { eq } from 'drizzle-orm';
 const GuideAvatarImage = require('@/assets/images/guide_avatar.png'); 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
+// [修改] 簡化定義，不再需要 padding/offset，因為我們直接框住元件
 export interface TargetAdjustment {
-  padding?: number;
-  offsetX?: number;
-  offsetY?: number;
-  widthAdd?: number;
-  heightAdd?: number;
+  // 僅保留可能的捲動微調，但大部分可以移除
+  scrollOffsetY?: number;
 }
 
 type TargetLayout = { 
   x: number; y: number; w: number; h: number; 
-  adjustment?: TargetAdjustment;
 };
 
 interface TutorialContextType {
@@ -37,6 +34,7 @@ interface TutorialContextType {
   activeScenario: string | null;
   currentStepIndex: number;
   onScrollRequest: (callback: (targetKey: string) => void) => void;
+  activeTargetKey: string | null; // [新增] 讓 Target 元件知道自己是否被選中
 }
 
 const TutorialContext = createContext<TutorialContextType | null>(null);
@@ -59,22 +57,8 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const [targets, setTargets] = useState<Record<string, TargetLayout>>({});
   const [inputName, setInputName] = useState("");
   
-  // [修正 3] 鍵盤監聽與偏移
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollCallbackRef = useRef<((key: string) => void) | null>(null);
-
-  // [修正 3] 監聽鍵盤高度，動態調整 Bubble 位置
-  useEffect(() => {
-    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
-        setKeyboardOffset(e.endCoordinates.height * 0.4); // 往上推鍵盤高度的 40%
-    });
-    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
-        setKeyboardOffset(0);
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
 
   useEffect(() => {
     async function init() {
@@ -83,19 +67,30 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       
       const notFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
       if (!notFirst) {
-        // [修正 3] 確保這裡啟動時，不要再跳轉其他 login 頁面，而是直接覆蓋
+        // 初次啟動，直接開始歡迎流程
         const allSteps = getTutorialSteps(lang, name || 'User');
-        // 使用 setTimeout 確保畫面渲染完成後才啟動
-        setTimeout(() => {
-             startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
-        }, 500);
+        startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
       }
     }
     init();
   }, [lang]);
 
+  useEffect(() => {
+      const step = steps[currentStepIndex];
+      const prevStep = steps[currentStepIndex - 1];
+
+      if (step?.targetKey && activeScenario) {
+          if (!prevStep || prevStep.targetKey !== step.targetKey) {
+              setTimeout(() => {
+                  if (scrollCallbackRef.current) {
+                      scrollCallbackRef.current(step.targetKey);
+                  }
+              }, 100);
+          }
+      }
+  }, [currentStepIndex, activeScenario, steps]);
+
   const onScrollRequest = (cb: (key: string) => void) => {
-      console.log("[Tutorial] Scroll callback registered");
       scrollCallbackRef.current = cb;
   };
 
@@ -103,7 +98,6 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     if (layout.w === 0 || layout.h === 0) return;
     setTargets(prev => {
       const old = prev[key];
-      // 簡單防抖動
       if (old && Math.abs(old.x - layout.x) < 5 && Math.abs(old.y - layout.y) < 5) return prev;
       return { ...prev, [key]: layout };
     });
@@ -119,6 +113,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const stopTutorial = async () => {
+    Keyboard.dismiss(); // 關閉導覽時收起鍵盤
     Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(async () => {
       setActiveScenario(null);
       setSteps([]);
@@ -134,35 +129,29 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       setCurrentStepIndex(prev => prev - 1);
     }
   };
-  // [重點修改] 處理下一步與名稱輸入邏輯
+
   const handleNext = async () => {
     const step = steps[currentStepIndex];
     const allSteps = getTutorialSteps(lang, userName);
 
     if (step.action === 'input_name') {
-      // 1. 決定最終名稱：有輸入用輸入值，沒輸入用預設值
       const defaultName = lang === 'zh-TW' ? "親愛的用戶" : "Dear User";
       const finalName = inputName.trim() || defaultName;
-      // 2. 更新 Context 狀態
       setUserNameState(finalName);
-      // 3. 持久化存儲 (Local Storage)
       await setUserName(finalName);
-      // 4. [新增] 同步寫入資料庫 (模擬登入/註冊行為)
+      
       try {
           const existingUsers = await db.select().from(userProfiles).limit(1);
           if (existingUsers.length > 0) {
               await db.update(userProfiles).set({ name: finalName }).where(eq(userProfiles.id, existingUsers[0].id));
           } else {
-              // 建立新用戶，這裡填入基本預設值
               await db.insert(userProfiles).values({
                   name: finalName, gender: 'male', heightCm: 170, currentWeightKg: 60, dailyCalorieTarget: 2000, createdAt: new Date(), updatedAt: new Date()
               });
           }
       } catch (e) { console.error(e); }
 
-      // [畫面切換] 強制替換路由，移除底層登入頁
       router.replace('/(tabs)'); 
-
     } else if (step.action === 'navigate_profile') {
       router.push('/(tabs)/profile');
       setTimeout(() => startScenario('ONBOARDING_PROFILE', allSteps.ONBOARDING_PROFILE), 600);
@@ -182,61 +171,38 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   };
 
   const currentStep = steps[currentStepIndex];
-  const rawLayout = currentStep?.targetKey ? targets[currentStep.targetKey] : null;
+  const activeTargetKey = currentStep?.targetKey || null;
+  const rawLayout = activeTargetKey ? targets[activeTargetKey] : null;
   
-  let finalLayout = null;
-  // [智慧定位] 預設對話框在下方
+  // [智慧定位] 預設對話框位置
   let bubblePosition: 'top' | 'bottom' = 'bottom';
-
-  // [修正 2] 移除所有對於 adjustment 的硬編碼依賴，改用安全 padding
-  if (rawLayout) {
-      // 這裡只取微小的 padding，不再加減巨大的 offset
-      const padding = 10; 
-      
-      finalLayout = {
-          x: rawLayout.x - padding,
-          y: rawLayout.y - padding,
-          w: rawLayout.w + (padding * 2),
-          h: rawLayout.h + (padding * 2)
-      };
-
-      // 判斷對話框位置
-      const targetCenterY = finalLayout.y + (finalLayout.h / 2);
+  
+  // [修正 1] 如果是輸入名字步驟，強制顯示在上方，避免被鍵盤遮擋
+  if (currentStep?.action === 'input_name') {
+      bubblePosition = 'top';
+  } else if (rawLayout) {
+      // 根據目標位置決定氣泡位置
+      const targetCenterY = rawLayout.y + (rawLayout.h / 2);
       if (targetCenterY > SCREEN_HEIGHT * 0.55) {
           bubblePosition = 'top';
       }
   }
 
-  // [修正 3] 加入 keyboardOffset 讓對話框往上縮
   const bubbleContainerStyle = bubblePosition === 'bottom' 
-      ? { bottom: 50 + keyboardOffset, top: undefined } 
-      : { top: 100, bottom: undefined };
-
+      ? { bottom: 50, top: undefined } 
+      : { top: 60, bottom: undefined }; // Top 60 避開 Safe Area
 
   return (
-    <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario, currentStepIndex, onScrollRequest }}>
+    <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario, currentStepIndex, onScrollRequest, activeTargetKey }}>
       {children}
       <Modal transparent visible={!!activeScenario} animationType="none" onRequestClose={stopTutorial}>
-        {/* 使用 pointerEvents="box-none" 讓點擊事件可以穿透到底層 (如果需要) */}
-        <View style={styles.overlay} pointerEvents="box-none">
-          {/* Highlight Box Layer */}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} pointerEvents="auto">
-             {finalLayout && (
-                 <View style={{
-                     position: 'absolute',
-                     left: finalLayout.x,
-                     top: finalLayout.y,
-                     width: finalLayout.w,
-                     height: finalLayout.h,
-                     backgroundColor: 'rgba(255,255,255,0.05)',
-                     borderRadius: 8,
-                     borderWidth: 2,
-                     borderColor: '#FFD700',
-                     borderStyle: 'dashed'
-                 }} />
-             )}
-          </View>
-
+        <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+            style={styles.overlay}
+            pointerEvents="box-none" // 讓點擊可以穿透到下層 (如果有需要)
+        >
+          {/* [修正 4] 移除絕對定位的 Highlight Box，因為我們已經在 TutorialTarget 本體做邊框了 */}
+          
           <Animated.View style={[styles.coachContainer, bubbleContainerStyle, { opacity: fadeAnim }]}>
              <View style={styles.avatarContainer}>
                 <Image source={GuideAvatarImage} style={styles.avatarImage} resizeMode="contain" />
@@ -252,7 +218,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
                         placeholderTextColor="#999"
                         value={inputName}
                         onChangeText={setInputName}
-                        autoFocus
+                        autoFocus // 自動聚焦
                     />
                 )}
 
@@ -277,24 +243,23 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
                 </View>
              </View>
           </Animated.View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </TutorialContext.Provider>
   );
 };
 
 const styles = StyleSheet.create({
-  //overlay: { flex: 1, justifyContent: 'flex-end' }, // 修改：讓 KeyboardAvoidingView 生效
-  overlay: { flex: 1 }, 
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }, // 給整個背景一點點遮罩感
   coachContainer: { 
       position: 'absolute', 
       left: 20, 
       right: 20, 
       flexDirection: 'row', 
       alignItems: 'flex-end',
-      zIndex: 9999 // [關鍵] 確保在最上層
+      zIndex: 9999 
   },
-  avatarContainer: { marginRight: 10, backgroundColor: 'transparent' },
+  avatarContainer: { marginRight: 10 },
   avatarImage: { width: 90, height: 90 },
   bubble: { flex: 1, padding: 16, borderRadius: 16, borderBottomLeftRadius: 4, elevation: 5, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, minHeight: 100, justifyContent: 'center' },
   bubbleText: { fontSize: 16, lineHeight: 24, marginBottom: 12 },

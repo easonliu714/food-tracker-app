@@ -36,10 +36,10 @@ export default function RootLayout() {
     async function prepare() {
       try {
         await initDatabase(); 
-        console.log("Database initialized from RootLayout");
       } catch (e) {
         console.warn("Init Error:", e);
       } finally {
+        // [修正 2] 確保不論成功失敗都設為 true
         setDbReady(true); 
       }
     }
@@ -49,24 +49,20 @@ export default function RootLayout() {
   // 2. 隱藏 Splash Screen
   useEffect(() => {
     if (loaded && dbReady) {
+      // [修正 2] 資源就緒後立即隱藏原生 Splash
       SplashScreen.hideAsync();
     }
   }, [loaded, dbReady]);
 
   // 3. 載入期間顯示轉圈圈
   if (!loaded || !dbReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: theme.background }}>
-        <ActivityIndicator size="large" color={theme.tint} />
-      </View>
-    );
+    return null; // 或者保留轉圈圈，但在 dbReady 快速完成時 null 體驗較好
   }
 
   // 4. 渲染 APP 導航結構
   return (
     <SessionProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-        {/* [修改開始] 包裹 TutorialProvider */}
         <TutorialProvider>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

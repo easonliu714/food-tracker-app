@@ -1877,6 +1877,11 @@ export const t = (key: string, lang: string, params?: any) => {
 // 版本履歷 (也可以放這裡)
 const LOGS_TW = [
   {
+    version: "V1.0.20",
+    date: "2026-02-11",
+    content: "本次更新包含多項體驗優化與錯誤修正：\n1. 修正導覽過程中輸入名稱時，對話框被鍵盤遮擋的問題。\n2. 修復 Android Health Connect 健康數據同步授權失敗的問題。\n3. 優化導覽亮框定位技術，完美適配各種螢幕尺寸，解決框線偏移問題。\n4. 優化 App 啟動流程，移除多餘的歡迎畫面，進入主畫面更快速。"
+  },
+  {
     version: "V1.0.19",
     date: "2026-01-23",
     content: "[新增] 全域導覽員系統：自動引導新手完成首頁、分析、AI 教練與設定頁面功能教學。\n[新增] 快速登入流程：導覽過程中即可完成名稱設定與自動登入，解決登入畫面遮擋問題。\n[優化] 導覽體驗：自動捲動至目標區塊並精準定位，修復切換頁面後捲動失效的問題。\n[修正] Health Connect 授權失敗錯誤 (修復 AndroidManifest 設定)。\n[修正] 首頁運動與常用功能區塊顯示邏輯。"
@@ -1932,6 +1937,11 @@ const LOGS_TW = [
 ];
 
 const LOGS_CN = [
+  {
+    version: "V1.0.20",
+    date: "2026-02-11",
+    content: "本次更新包含多项体验优化与错误修正：\n1. 修正导航过程中输入名称时，对话框被键盘遮挡的问题。\n2. 修复 Android Health Connect 健康数据同步授权失败的问题。\n3. 优化导航亮框定位技术，完美适配各种屏幕尺寸，解决框线偏移问题。\n4. 优化 App 启动流程，移除多余的欢迎画面，进入主画面更快速。"
+  },
   {
     version: "V1.0.19",
     date: "2026-01-23",
@@ -1989,6 +1999,11 @@ const LOGS_CN = [
 
 const LOGS_EN = [
   {
+    version: "V1.0.20",
+    date: "2026-02-11",
+    content: "This update includes several experience optimizations and bug fixes:\n1. Fixed the issue where the dialog box was blocked by the keyboard when entering a name during the tutorial.\n2. Fixed the issue of authorization failure when syncing health data with Android Health Connect.\n3. Optimized the positioning technology of the tutorial highlight box to perfectly adapt to various screen sizes and solve the problem of box line offset.\n4. Optimized the app startup process by removing unnecessary welcome screens for faster access to the main screen."
+  },
+  {
     version: "V1.0.19",
     date: "2026-01-23",
     content: "[New] Global Tutorial System: Automatic walkthrough for Home, Analysis, AI Coach, and Settings.\n[New] Seamless Login: Set username and auto-login during the tutorial, fixing login screen overlay issues.\n[Imp] Tutorial Experience: Auto-scroll to target elements with precise positioning; fixed scroll failure after page switching.\n[Fix] Health Connect authorization failure (AndroidManifest config fix).\n[Fix] Display logic for Exercise and Frequent Activities sections on Home."
@@ -2045,6 +2060,11 @@ const LOGS_EN = [
 
 const LOGS_JP = [
   {
+    version: "V1.0.20",
+    date: "2026-02-11",
+    content: "今回のアップデートには、いくつかの体験の最適化とバグ修正が含まれています：\n1. チュートリアル中に名前を入力する際、キーボードによってダイアログボックスが遮られる問題を修正しました。\n2. Android Health Connectとの健康データ同期時の認証失敗問題を修正しました。\n3. チュートリアルのハイライトボックスの位置決め技術を最適化し、さまざまな画面サイズに完璧に適応し、ボックスラインのずれの問題を解決しました。\n4. 不要なウェルカム画面を削除し、メイン画面へのアクセスをより迅速にすることで、アプリの起動プロセスを最適化しました。"
+  },
+  {
     version: "V1.0.19",
     date: "2026-01-23",
     content: "[新機能] グローバルチュートリアルシステム：ホーム、分析、AIコーチ、設定の各機能を自動ガイド。\n[新機能] シームレスログイン：チュートリアル中にユーザー名を設定し自動ログイン、ログイン画面の重なり問題を解決。\n[改善] ガイド体験：ターゲットへの自動スクロールと正確な位置合わせ。ページ切り替え後のスクロール不具合を修正。\n[修正] Health Connect認証エラー（AndroidManifest設定の修正）。\n[修正] ホーム画面の運動および頻繁なアクティビティセクションの表示ロジック。"
@@ -2100,6 +2120,11 @@ const LOGS_JP = [
 ];
 
 const LOGS_KO = [
+  {
+    version: "V1.0.20",
+    date: "2026-02-11",
+    content: "이번 업데이트에는 여러 가지 경험 최적화 및 버그 수정이 포함되어 있습니다:\n1. 튜토리얼 중 이름을 입력할 때 키보드에 의해 대화 상자가 가려지는 문제를 수정했습니다.\n2. Android Health Connect와의 건강 데이터 동기화 시 인증 실패 문제를 수정했습니다.\n3. 튜토리얼 하이라이트 박스의 위치 지정 기술을 최적화하여 다양한 화면 크기에 완벽하게 적응하고 박스 라인 오프셋 문제를 해결했습니다.\n4. 불필요한 환영 화면을 제거하여 앱 시작 프로세스를 최적화하고 메인 화면에 더 빠르게 접근할 수 있도록 했습니다."
+  },
   {
     version: "V1.0.19",
     date: "2026-01-23",
