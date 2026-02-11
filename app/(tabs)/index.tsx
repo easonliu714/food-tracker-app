@@ -54,33 +54,56 @@ const decimalToHHMM = (decimal: number) => {
 const hhmmToDecimal = (hhmm: string) => {
   if (!hhmm) return 0;
   const clean = hhmm.replace(':', '');
-  if (clean.length < 3) return parseFloat(clean) || 0; 
-  
+  // [修正] 增加防呆，如果格式是 0652 也能正確解析
   let h = 0, m = 0;
   if (hhmm.includes(':')) {
       const parts = hhmm.split(':');
       h = parseInt(parts[0]) || 0;
       m = parseInt(parts[1]) || 0;
   } else {
-      if (clean.length === 3) {
-          h = parseInt(clean.substring(0, 1));
-          m = parseInt(clean.substring(1));
-      } else {
+      if (clean.length === 4) {
           h = parseInt(clean.substring(0, 2));
           m = parseInt(clean.substring(2));
+      } else if (clean.length === 3) {
+           h = parseInt(clean.substring(0, 1));
+           m = parseInt(clean.substring(1));
+      } else {
+          h = parseInt(clean) || 0;
       }
   }
   const totalHours = h + (m / 60);
   return Math.round(totalHours * 100) / 100;
 };
 
+
+// [修正 1] 睡眠時間輸入邏輯修正：652 -> 0652 -> 06:52
 const formatTimeInput = (text: string) => {
-    const cleaned = text.replace(/[^0-9]/g, '');
-    const trimmed = cleaned.substring(0, 4);
-    if (trimmed.length >= 3) {
-        return `${trimmed.substring(0, 2)}:${trimmed.substring(2)}`;
+    let cleaned = text.replace(/[^0-9]/g, '');
+    
+    // 限制最大長度為 4
+    if (cleaned.length > 4) cleaned = cleaned.substring(0, 4);
+
+    // 如果輸入 3 位數 (例如 652)，且第一位數字大於 2 (代表不可能是 65:xx)，自動補 0
+    // 或者單純使用者打完 3 碼，我們就暫時不格式化，等到第 4 碼或 onBlur (這裡簡化處理)
+    // 這裡採用: 當長度為 3 且使用者停止輸入時的邏輯比較難在 onChangeText 實作
+    // 改為：只要長度為 3，嘗試解析。若是 "652"，我們假設是 "0652"
+    if (cleaned.length === 3) {
+        // 簡單判斷：如果前兩碼大於 23 (小時)，那很有可能是少打 0
+        const potentialHour = parseInt(cleaned.substring(0, 2));
+        if (potentialHour > 23) {
+             cleaned = '0' + cleaned;
+        }
     }
-    return trimmed;
+
+    if (cleaned.length >= 3) {
+        // 如果是 3 碼 (例如 130 -> 1:30, 065 -> 06:5)，維持原樣
+        // 如果是 4 碼 (0652 -> 06:52)
+        if (cleaned.length === 3) {
+             return `${cleaned.substring(0, 1)}:${cleaned.substring(1)}`;
+        }
+        return `${cleaned.substring(0, 2)}:${cleaned.substring(2)}`;
+    }
+    return cleaned;
 };
 
 // [修正] 將 ActionButton 定義移到上方，避免 ReferenceError
@@ -111,9 +134,9 @@ export default function HomeScreen() {
   const handleScrollRequest = useCallback((targetKey: string) => {
       const y = targetPositions.current[targetKey];
       if (y !== undefined && scrollViewRef.current) {
-          // 增加延遲與緩衝距離，確保滾動到位
           setTimeout(() => {
-              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 100), animated: true });
+              // 稍微往上捲一點，讓目標物不要貼頂
+              scrollViewRef.current?.scrollTo({ y: Math.max(0, y - 50), animated: true });
           }, 100);
       }
   }, []);
@@ -121,26 +144,22 @@ export default function HomeScreen() {
   // [修改] 統一使用 useFocusEffect 管理導覽與捲動註冊
   useFocusEffect(
     useCallback(() => {
-        // 1. 頁面獲取焦點時，向 Context 註冊自己的捲動函式
         onScrollRequest(handleScrollRequest);
-        
-        // 2. 如果正在進行本頁導覽，強制捲動到頂部
         if (activeScenario === 'HOME_GUIDE') {
              setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
         }
-
-        // 3. 檢查是否觸發導覽
         async function checkTutorial() {
             if (activeScenario === 'HOME_GUIDE') return;
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+            // [修正 3] 只有當「非初次啟動」但「沒看過首頁導覽」時才觸發，避免與 Onboarding 衝突
             if (isFirst && !seen && !activeScenario) {
                 const allSteps = getTutorialSteps(lang, userName);
                 startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
             }
         }
         checkTutorial();
-    }, [activeScenario, userName, lang, handleScrollRequest]) // 加入 handleScrollRequest 依賴
+    }, [activeScenario, userName, lang, handleScrollRequest])
   );
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -623,9 +642,14 @@ export default function HomeScreen() {
     </ThemedView>
   );
 
+  // [修正 5] 喝水紀錄 UI 優化：保持一行，動態調整大小
   const renderWaterSection = () => {
       const totalCups = Math.ceil(waterGoal / WATER_CUP_SIZE);
       const currentCups = Math.floor(waterMl / WATER_CUP_SIZE);
+      
+      // 動態計算 icon 大小：若杯數 > 10，縮小尺寸以塞入一行
+      const iconSize = totalCups > 10 ? Math.max(16, Math.floor(260 / totalCups)) : 26;
+      const marginSize = totalCups > 10 ? 1 : 2;
 
       return (
           <ThemedView style={[styles.card, { backgroundColor: theme.cardBackground }]}>
@@ -642,20 +666,21 @@ export default function HomeScreen() {
                       <Ionicons name="remove" size={24} color={theme.text} />
                   </TouchableOpacity>
 
-                  <View style={{flex: 1, flexDirection:'row', flexWrap:'wrap', justifyContent:'center', alignItems:'center', paddingHorizontal: 4}}>
+                  {/* flexWrap: 'nowrap' 強制不換行 */}
+                  <View style={{flex: 1, flexDirection:'row', flexWrap:'nowrap', justifyContent:'center', alignItems:'center', paddingHorizontal: 4}}>
                       {Array.from({length: totalCups}).map((_, idx) => (
                           <View 
                             key={idx} 
-                            style={{opacity: idx < currentCups ? 1 : 0.3, margin: 2}}
+                            style={{opacity: idx < currentCups ? 1 : 0.3, margin: marginSize}}
                           >
-                              <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={26} color="#007AFF" />
+                              <Ionicons name={idx < currentCups ? "water" : "water-outline"} size={iconSize} color="#007AFF" />
                           </View>
                       ))}
                       {currentCups > totalCups && (
                            <View style={{flexDirection:'row', alignItems:'center', margin: 2}}>
                                <Ionicons name="add" size={14} color={theme.text}/>
-                               <Ionicons name="water" size={26} color="#007AFF" />
-                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:7}}>+{currentCups - totalCups}</ThemedText>
+                               <Ionicons name="water" size={iconSize} color="#007AFF" />
+                               <ThemedText style={{fontSize:10, fontWeight:'bold', position:'absolute', color:'white', left:4}}>+{currentCups - totalCups}</ThemedText>
                            </View>
                       )}
                   </View>
@@ -735,73 +760,58 @@ export default function HomeScreen() {
 
   const renderSwipeableLog = (log: any) => (<Swipeable renderRightActions={()=>(<View style={{flexDirection: 'row', width: 140}}><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF9500'}]} onPress={() => handleDuplicate(log.id)}><Ionicons name="copy" size={24} color="white"/></TouchableOpacity><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30'}]} onPress={() => deleteLog(log.id)}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity></View>)} renderLeftActions={()=>(<TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/food-editor", params: { logId: log.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>)}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{log.foodName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{log.servingAmount} {log.servingType==='weight'?'g':t('portion', lang)}</ThemedText></View><ThemedText>{Math.round(log.totalCalories)} kcal</ThemedText></View></Swipeable>);
 
+  // --------------------------------------------------------------------------------
+  // [修正 2] 渲染與 TutorialTarget 整合
+  // 關鍵修正：移除大量寫死的 offsetX/offsetY，讓 TutorialTarget 自動計算
+  // --------------------------------------------------------------------------------
 return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         
-        {/* [FIXED] Wrap renderHeader with TutorialTarget */}
+        {/* Header - 幾乎不需要位移，包住即可 */}
         <TutorialTarget 
             targetKey="home_header" 
             onMeasure={(y) => targetPositions.current['home_header'] = y}
-            adjustment={{ offsetY: 50, offsetX: 10, heightAdd: 0,  widthAdd: -30 }} 
+            adjustment={{ padding: 5 }} 
         >
             {renderHeader()}
         </TutorialTarget>
         
+        {/* Metrics - 移除原本的大位移 */}
         <TutorialTarget
          targetKey="home_metrics"
          onMeasure={(y) => targetPositions.current['home_metrics'] = y}
-         adjustment={{
-            padding: 20,
-            offsetY: 120,
-            offsetX: 30, 
-            heightAdd: -30,
-            widthAdd: -70,
-         }}
+         adjustment={{ padding: 5 }} // 只保留少量 padding
          >
             {renderBodyMetricsCard()}
         </TutorialTarget>
 
+        {/* Water */}
         <TutorialTarget
          targetKey="home_water" 
          onMeasure={(y) => targetPositions.current['home_water'] = y}
-         adjustment={{
-            padding: 20,
-            offsetY: -130,
-            offsetX: 30,
-            heightAdd: -20,
-            widthAdd: -70,
-         }}
+         adjustment={{ padding: 5 }}
          >
             {renderWaterSection()}
         </TutorialTarget>
 
+        {/* Energy */}
         <TutorialTarget
          targetKey="home_energy" 
          onMeasure={(y) => targetPositions.current['home_energy'] = y}
-         adjustment={{
-            padding: 10,
-            offsetY: -300,
-            offsetX: 20,
-            heightAdd: -10,
-            widthAdd: -40,
-         }}
+         adjustment={{ padding: 5 }}
          >
             {renderEnergySection()}
         </TutorialTarget>
 
+        {/* Actions - 這裡原本有 -600 的偏移，這是因為之前 TutorialTarget 包錯位置或計算錯誤
+           現在直接包住 Action Button 的容器 */}
         <TutorialTarget
              targetKey="home_actions" 
              onMeasure={(y) => targetPositions.current['home_actions'] = y}
              style={[styles.recordSection, { marginBottom: 0 }]} 
-             adjustment={{ 
-                padding: 10, 
-                offsetY: -600,
-                offsetX: 20,
-                heightAdd: -20,
-                widthAdd: -40
-             }}
+             adjustment={{ padding: 5 }}
              >
                <View style={styles.quickActionRow}>
                     <ActionButton icon="camera" label={t('camera', lang)} onPress={() => router.push("/camera")} color="#34C759" />
@@ -811,16 +821,17 @@ return (
                </View>
         </TutorialTarget>
 
+        {/* Logs */}
         <TutorialTarget 
             targetKey="home_logs" 
             onMeasure={(y) => targetPositions.current['home_logs'] = y}
             style={{ paddingHorizontal: 16 }} 
-            adjustment={{ padding: 10, offsetY: -750, offsetX: 30, heightAdd: -300, widthAdd: -50 }}
+            adjustment={{ padding: 5 }}
         >
             <View>
                 {renderQuickAdd()} 
-                
                 <View style={styles.logsContainer}>
+                    {/* ... Logs Content ... */}
                     {MEAL_ORDER.map((mealType) => {
                         const logs = dailyLogs[mealType] || [];
                         return (
@@ -831,8 +842,8 @@ return (
                         );
                     })}
                 </View>
-                
-                <View style={{marginTop: 20, marginBottom: 8}}>
+                {/* ... Rest of logs ... */}
+                 <View style={{marginTop: 20, marginBottom: 8}}>
                     <ThemedText type="defaultSemiBold" style={{marginBottom:10}}>{t('quick_add_activity', lang) || "Quick Add Activity"}</ThemedText>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8, minHeight: 40}}>
                         {frequentActivities.length > 0 ? frequentActivities.map((name, idx) => {
@@ -866,14 +877,29 @@ return (
             <View style={styles.modalOverlay}>
                 <View style={[styles.modalContent, {backgroundColor: theme.cardBackground}]}>
                     <ThemedText type="subtitle" style={{marginBottom:16}}>{t('input_sleep', lang)}</ThemedText>
+                    {/* [修正 1] 睡眠輸入框邏輯修正：允許輸入 4 碼，並自動補 0 */}
                     <TextInput 
                         style={[styles.metricInput, {width: '100%', backgroundColor: theme.inputBackground, borderRadius:8, padding:10, marginBottom:16, color: theme.text}]}
-                        placeholder={t('sleep_hours', lang) || "HHMM"} // e.g. 0730
+                        placeholder={t('sleep_hours', lang) || "HHMM (e.g. 0730)"} 
                         placeholderTextColor="#999"
                         keyboardType="number-pad"
-                        maxLength={5} // 07:30
+                        maxLength={5} // 07:30 = 5 chars
                         value={manualSleep}
-                        onChangeText={(text) => setManualSleep(formatTimeInput(text))}
+                        onChangeText={(text) => {
+                             // 如果使用者刪除內容，不做格式化
+                             if (text.length < manualSleep.length) {
+                                 setManualSleep(text);
+                                 return;
+                             }
+                             
+                             const formatted = formatTimeInput(text);
+                             // 特殊處理：當輸入滿 3 碼且是合理時間 (如 652 -> 06:52)，強制補零
+                             if (text.replace(':','').length === 3 && formatted.length === 5) {
+                                 setManualSleep(formatted);
+                             } else {
+                                 setManualSleep(formatted);
+                             }
+                        }}
                     />
                     <View style={{flexDirection:'row', justifyContent:'flex-end', gap: 16}}>
                         <TouchableOpacity onPress={()=>setShowSleepModal(false)}><ThemedText>{t('cancel', lang)}</ThemedText></TouchableOpacity>

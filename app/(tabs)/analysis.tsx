@@ -202,6 +202,7 @@ export default function AnalysisScreen() {
       return result;
   };
 
+  // [修正 4] 圖表渲染邏輯修正
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -212,9 +213,11 @@ export default function AnalysisScreen() {
 
       const daysDiff = differenceInDays(new Date(endStr), new Date(startStr)) + 1;
 
-      const calculatedWidth = Math.floor((VISIBLE_CHART_WIDTH - 20) / (1.6 * daysDiff - 0.6));
-      const finalBarWidth = Math.max(4, Math.min(30, calculatedWidth));
-      const finalSpacing = Math.max(2, Math.floor(finalBarWidth * 0.6));
+      // [修正 4] 計算寬度時，預留更多 endSpacing 空間
+      // 減少 calculatedWidth 的係數，讓 bar 稍微窄一點，避免擠出去
+      const calculatedWidth = Math.floor((VISIBLE_CHART_WIDTH - 40) / (daysDiff * 1.5)); 
+      const finalBarWidth = Math.max(4, Math.min(24, calculatedWidth)); // 縮小 max bar width
+      const finalSpacing = Math.max(2, Math.floor(finalBarWidth * 0.5));
       
       setBarWidth(finalBarWidth);
       setSpacing(finalSpacing);
@@ -343,14 +346,16 @@ export default function AnalysisScreen() {
           if (d.weight > 0) { sumWeight += d.weight; countWeight++; }
           if (d.bodyFat > 0) { sumBodyFat += d.bodyFat; countBodyFat++; }
 
+          // [修正] 生成 Chart Data 時，確保 stack 結構單純，減少 offset 造成的長條圖偏移
           newChartData.push({
               value: d.intake, 
               stacks: [
                   { value: d.intake, color: '#34C759', marginBottom: 1 },
-                  { value: -d.burned, color: '#FF9500' }
+                  { value: -d.burned, color: '#FF9500' } // 負值往下長
               ],
               label: format(d.date, "MM/dd"),
-              labelTextStyle: { color: '#888', fontSize: 10 },
+              labelTextStyle: { color: '#888', fontSize: 10, width: 30, textAlign: 'center' }, // 限制 label 寬度
+
               customData: {
                   dateStr: format(d.date, "yyyy-MM-dd"),
                   intake: d.intake, burned: d.burned, net: d.intake - d.burned,
@@ -633,7 +638,7 @@ export default function AnalysisScreen() {
         </TutorialTarget>
 
         {/* 5. 趨勢圖表區塊 (analysis_chart) */}
-        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y} adjustment={{offsetY: -160}}>
+        <TutorialTarget targetKey="analysis_chart" onMeasure={(y) => targetPositions.current['analysis_chart'] = y} adjustment={{padding: 5}}>
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                     <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
@@ -652,7 +657,8 @@ export default function AnalysisScreen() {
                                 stackData={chartData}
                                 barWidth={barWidth}
                                 spacing={spacing}
-                                initialSpacing={10}
+                                initialSpacing={15} // [修正 4] 增加初始間距
+                                endSpacing={30}     // [修正 4] 增加結尾間距，防止最後一筆資料被截斷
                                 noOfSections={5}
                                 
                                 yAxisThickness={0}
@@ -682,6 +688,8 @@ export default function AnalysisScreen() {
                                     textFontSize: 10, 
                                     textShiftY: -12, 
                                     textColor: weightColor, 
+                                    startIndex: 0, // [修正 4] 確保折線圖從第 0 筆開始對齊
+                                    endIndex: chartData.length - 1
                                 }}
                                 
                                 lineData2={lineDataFat}
@@ -694,6 +702,8 @@ export default function AnalysisScreen() {
                                     textFontSize: 10, 
                                     textShiftY: -12, 
                                     textColor: secondaryColor, 
+                                    startIndex: 0,
+                                    endIndex: chartData.length - 1
                                 }}
                                 
                                 xAxisThickness={1}
@@ -701,8 +711,8 @@ export default function AnalysisScreen() {
                                 rulesColor={theme.border} 
                                 rulesType="solid"
                                 height={280}
-                                width={VISIBLE_CHART_WIDTH}
-                                scrollable={chartScrollable}
+                                width={VISIBLE_CHART_WIDTH - 10} // [修正 4] 稍微縮減寬度以配合 container padding
+                                scrollable={true} // [修正 4] 既然有截斷問題，建議預設開啟 scrollable 或由 zoomScale 決定
                                 renderTooltip={renderTooltip}
                             />
                             <View style={{marginTop: 10, alignItems: 'center'}}>

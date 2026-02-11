@@ -19,52 +19,36 @@ export async function initHealthConnect(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
 
   try {
-    // 1. 檢查 SDK 狀態
     const status = await getSdkStatus();
+    console.log("Health Connect SDK Status:", status);
     
-    // [修改開始] Android 14+ (API 34) 內建 Health Connect，狀態可能是 SDK_AVAILABLE
-    // 舊版則需要安裝 app
-    if (status !== SdkAvailabilityStatus.SDK_AVAILABLE) {
-       // 嘗試引導使用者，但如果是 Android 16 (Preview)，有時候狀態碼會有變異，先不阻擋
-       console.warn("Health Connect SDK Status:", status);
-    }
-
-    // 2. 初始化
-    // 在 Android 14+ 上，這步通常會自動成功或被忽略，但在舊版是必須的
+    // 即使 Status 不是 SDK_AVAILABLE，也嘗試初始化，因為部分裝置回傳值可能有異
     try {
         await initialize();
     } catch (e) {
-        // 忽略初始化錯誤，繼續嘗試請求權限
-        console.log("Health Connect initialize info:", e); 
+        console.log("Init warning (might be already initialized):", e);
     }
 
-    // 3. 請求權限
-    try {
-        // 先檢查是否已經有權限了
-        const grantedPermissions = await getGrantedPermissions();
-        // 簡單比對：如果有拿到任何權限，通常代表已授權過（簡化邏輯）
-        const hasAllPermissions = PERMISSIONS.every(p => 
-            grantedPermissions.some(g => g.recordType === p.recordType && g.accessType === p.accessType)
-        );
+    const grantedPermissions = await getGrantedPermissions();
+    // [修正 6] 更嚴謹的權限檢查邏輯
+    const missingPermissions = PERMISSIONS.filter(p => 
+        !grantedPermissions.some(g => g.recordType === p.recordType && g.accessType === p.accessType)
+    );
 
-        if (hasAllPermissions) {
-            return true;
-        }
-
-        // 若無，則彈出視窗請求
-        const granted = await requestPermission(PERMISSIONS);
-        
-        // Android 14+ 如果使用者在系統設定中把權限設為「永遠拒絕」，requestPermission 會直接回傳空陣列而不跳窗
-        // 這時需要引導使用者去設定
-        if (granted.length === 0) {
-             // 再次確認，怕是 requestPermission 行為差異
-             const check = await getGrantedPermissions();
-             return check.length > 0;
-        }
+    if (missingPermissions.length === 0) {
         return true;
-    } catch (permError: any) {
-        console.error("Health Connect Permission Error:", permError);
-        // 如果錯誤訊息包含 "background intent"，通常是 AndroidManifest 設定問題
+    }
+
+    try {
+        const granted = await requestPermission(PERMISSIONS);
+        // 如果使用者取消或失敗，granted 會是空陣列
+        return granted.length > 0;
+    } catch (reqErr: any) {
+        // [修正 6] 捕捉特定錯誤
+        console.error("Health Connect Request Error:", reqErr);
+        if (reqErr.message.includes("fail to map")) {
+             Alert.alert("Configuration Error", "Health Connect not configured properly in AndroidManifest. XML config missing.");
+        }
         return false;
     }
 

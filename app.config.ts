@@ -68,7 +68,7 @@ const config: ExpoConfig = {
       "android.permission.health.READ_STEPS",
       "android.permission.health.READ_SLEEP",
       "android.permission.health.READ_EXERCISE",
-      "android.permission.health.WRITE_STEPS",
+      "android.permission.health.WRITE_STEPS"
     ],
     intentFilters: [
       {

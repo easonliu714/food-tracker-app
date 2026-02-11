@@ -59,11 +59,22 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const [targets, setTargets] = useState<Record<string, TargetLayout>>({});
   const [inputName, setInputName] = useState("");
   
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // [修正 3] 鍵盤監聽與偏移
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   
-  // [修改] 改用 Map 來儲存不同頁面的捲動函數，Key 可以是 scenario ID 或自訂標籤
-  // 這裡我們簡化處理：直接存一個 callback，但我們會確保頁面 focus 時才註冊
+  const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollCallbackRef = useRef<((key: string) => void) | null>(null);
+
+  // [修正 3] 監聽鍵盤高度，動態調整 Bubble 位置
+  useEffect(() => {
+    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+        setKeyboardOffset(e.endCoordinates.height * 0.4); // 往上推鍵盤高度的 40%
+    });
+    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+        setKeyboardOffset(0);
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -72,34 +83,16 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
       
       const notFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
       if (!notFirst) {
-        // [優先權] 強制啟動歡迎流程，覆蓋底層畫面
+        // [修正 3] 確保這裡啟動時，不要再跳轉其他 login 頁面，而是直接覆蓋
         const allSteps = getTutorialSteps(lang, name || 'User');
-        startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
+        // 使用 setTimeout 確保畫面渲染完成後才啟動
+        setTimeout(() => {
+             startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
+        }, 500);
       }
     }
     init();
   }, [lang]);
-
-  // [修改] 捲動邏輯：加入延遲與重試機制
-  useEffect(() => {
-      const step = steps[currentStepIndex];
-      const prevStep = steps[currentStepIndex - 1];
-
-      if (step?.targetKey && activeScenario) {
-          // 只有當 targetKey 改變時才觸發
-          if (!prevStep || prevStep.targetKey !== step.targetKey) {
-              // 給一點時間讓頁面切換或 ScrollView 準備好
-              setTimeout(() => {
-                  if (scrollCallbackRef.current) {
-                      console.log(`[Tutorial] Requesting scroll to: ${step.targetKey}`);
-                      scrollCallbackRef.current(step.targetKey);
-                  } else {
-                      console.warn(`[Tutorial] No scroll callback registered for ${step.targetKey}`);
-                  }
-              }, 100);
-          }
-      }
-  }, [currentStepIndex, activeScenario, steps]);
 
   const onScrollRequest = (cb: (key: string) => void) => {
       console.log("[Tutorial] Scroll callback registered");
@@ -195,41 +188,39 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   // [智慧定位] 預設對話框在下方
   let bubblePosition: 'top' | 'bottom' = 'bottom';
 
+  // [修正 2] 移除所有對於 adjustment 的硬編碼依賴，改用安全 padding
   if (rawLayout) {
-      const adj = rawLayout.adjustment || {};
-      const padding = adj.padding || 0;
-      const offX = adj.offsetX || 0;
-      const offY = adj.offsetY || 0;
-      const wAdd = adj.widthAdd || 0;
-      const hAdd = adj.heightAdd || 0;
-      const basePadding = 5;
+      // 這裡只取微小的 padding，不再加減巨大的 offset
+      const padding = 10; 
       
       finalLayout = {
-          x: rawLayout.x - basePadding - padding + offX,
-          y: rawLayout.y - basePadding - padding + offY,
-          w: rawLayout.w + (basePadding * 2) + (padding * 2) + wAdd,
-          h: rawLayout.h + (basePadding * 2) + (padding * 2) + hAdd
+          x: rawLayout.x - padding,
+          y: rawLayout.y - padding,
+          w: rawLayout.w + (padding * 2),
+          h: rawLayout.h + (padding * 2)
       };
 
-      // [智慧定位] 若目標中心在螢幕下半部，對話框移至上方
+      // 判斷對話框位置
       const targetCenterY = finalLayout.y + (finalLayout.h / 2);
       if (targetCenterY > SCREEN_HEIGHT * 0.55) {
           bubblePosition = 'top';
       }
   }
 
+  // [修正 3] 加入 keyboardOffset 讓對話框往上縮
   const bubbleContainerStyle = bubblePosition === 'bottom' 
-      ? { bottom: 50, top: undefined } 
-      : { top: 100, bottom: undefined }; // 上方預留 Header 空間
+      ? { bottom: 50 + keyboardOffset, top: undefined } 
+      : { top: 100, bottom: undefined };
+
 
   return (
     <TutorialContext.Provider value={{ registerTarget, startScenario, stopTutorial, userName, setUserNameState, activeScenario, currentStepIndex, onScrollRequest }}>
       {children}
       <Modal transparent visible={!!activeScenario} animationType="none" onRequestClose={stopTutorial}>
-        {/* 使用 KeyboardAvoidingView 避免輸入法遮擋導覽員對話框 */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
+        {/* 使用 pointerEvents="box-none" 讓點擊事件可以穿透到底層 (如果需要) */}
+        <View style={styles.overlay} pointerEvents="box-none">
           {/* Highlight Box Layer */}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} pointerEvents="auto">
              {finalLayout && (
                  <View style={{
                      position: 'absolute',
@@ -286,7 +277,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
                 </View>
              </View>
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </TutorialContext.Provider>
   );
