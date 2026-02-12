@@ -66,7 +66,9 @@ export default function RootLayout() {
         <TutorialProvider>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
+            {/* [關鍵修正] 移除 login 頁面 */}
+            {/* <Stack.Screen name="login" options={{ headerShown: false }} /> */}
+            
             <Stack.Screen name="camera" options={{ headerShown: false }} />
             <Stack.Screen name="barcode-scanner" options={{ headerShown: false }} />
             <Stack.Screen name="food-editor" options={{ headerShown: false }} />

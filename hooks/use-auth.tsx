@@ -26,7 +26,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const router = useRouter();
   const segments = useSegments();
 
-  // 檢查資料庫是否有用戶資料
+  // 檢查資料庫是否有用戶資料 (保留此邏輯以供狀態判斷)
   useEffect(() => {
     async function checkUser() {
       try {
@@ -45,8 +45,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
     checkUser();
   }, []);
 
-  // 路由保護：如果未登入且不在 login 頁面，則踢回 login
-  useEffect(() => {
+  // [關鍵修正] 徹底移除「路由保護」邏輯
+  // 我們不再因為沒有用戶資料就強制踢回 login 頁面
+  /* useEffect(() => {
     if (isLoading) return;
 
     const inAuthGroup = segments[0] === "(tabs)";
@@ -57,6 +58,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       router.replace("/(tabs)");
     }
   }, [isAuthenticated, segments, isLoading]);
+  */
 
   const login = async (name: string) => {
     try {
@@ -81,7 +83,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
       }
       
       setIsAuthenticated(true);
-      router.replace("/(tabs)");
+      // login 功能現在主要由導覽員在背景執行，這裡保留以備不時之需，但不強制導航
+      // router.replace("/(tabs)"); 
     } catch (e) {
       console.error("Login failed", e);
       throw e;
@@ -92,7 +95,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
     // 單機版通常不刪除資料，只是一種狀態切換，或者清除 userProfiles (視需求而定)
     // 這裡示範：不刪資料，只導回登入頁 (模擬登出)
     setIsAuthenticated(false);
-    router.replace("/login");
+    // 登出也不再跳轉到 login，因為 login 頁面已被棄用
+    // 您可以決定是否要導向其他地方，或者直接重置導覽狀態
   };
 
   return (

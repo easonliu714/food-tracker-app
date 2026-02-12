@@ -249,7 +249,7 @@ export default function HomeScreen() {
               // [修正 2] 增加 Android 防呆，因為 Expo Android Pedometer 不支援 getStepCountAsync
               if (Platform.OS === 'android') {
                   // Android 備案：在此處可以選擇不做任何事，或者僅 alert 提示
-                  // Alert.alert(t('tip', lang), "Step history syncing requires Health Connect on Android.");
+                  Alert.alert(t('tip', lang), "Step history syncing requires Health Connect on Android.");
                   console.log("Skipping Pedometer history sync on Android (Not supported)");
               } else {
                   // iOS 或其他支援平台
