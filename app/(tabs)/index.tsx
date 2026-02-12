@@ -24,6 +24,9 @@ import { eq, desc, and, sql } from "drizzle-orm";
 import { Swipeable, GestureHandlerRootView } from "react-native-gesture-handler";
 import DateTimePicker from "@react-native-community/datetimepicker"; 
 
+// [新增] 引入 Pedometer
+import { Pedometer } from 'expo-sensors';
+
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
@@ -152,7 +155,8 @@ export default function HomeScreen() {
             if (activeScenario === 'HOME_GUIDE') return;
             const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME);
             const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-            // [修正 3] 只有當「非初次啟動」但「沒看過首頁導覽」時才觸發，避免與 Onboarding 衝突
+            // 只有當確定不是初次啟動(流程已跑完)，但還沒看過 Home Guide 時才觸發
+            // (注意：因為我們在 TutorialContext 把輸入名字後就設為非 First 了，所以這裡應該會接著跑)
             if (isFirst && !seen && !activeScenario) {
                 const allSteps = getTutorialSteps(lang, userName);
                 startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
@@ -217,26 +221,65 @@ export default function HomeScreen() {
       } catch(e) { console.error(e); }
   };
 
+  // [修改] 強化的數據同步邏輯：Health Connect -> 失敗 -> Pedometer
   const syncHealthData = async (dateStr: string) => {
       if (isSyncing) return;
       setIsSyncing(true);
+      
+      let totalSteps = 0;
+      let totalSleepHours = 0;
+      let usedSource = "DB"; // 來源標記
+
       try {
+          // 1. 嘗試 Health Connect
           const authorized = await initHealthConnect();
-          if (!authorized) {
-              Alert.alert(t('tip', lang), "Health Connect Authorization Failed");
-              setIsSyncing(false);
-              return;
+          if (authorized) {
+              const start = startOfDay(new Date(dateStr));
+              const end = endOfDay(new Date(dateStr));
+              const { steps, sleep } = await getHealthData(start, end);
+              
+              totalSteps = steps.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
+              sleep.forEach((s: any) => {
+                  const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
+                  totalSleepHours += durationMs / (1000 * 60 * 60);
+              });
+              usedSource = "Health Connect";
+          } else {
+              // 2. Health Connect 失敗，改用 Expo Sensors Pedometer (僅步數)
+              // Pedometer 使用 "android.permission.ACTIVITY_RECOGNITION"
+              const isAvailable = await Pedometer.isAvailableAsync();
+              if (isAvailable) {
+                  const perm = await Pedometer.getPermissionsAsync();
+                  let granted = perm.granted;
+                  if (!granted && perm.canAskAgain) {
+                      const newPerm = await Pedometer.requestPermissionsAsync();
+                      granted = newPerm.granted;
+                  }
+
+                  if (granted) {
+                      const start = startOfDay(new Date(dateStr));
+                      const end = endOfDay(new Date(dateStr));
+                      // 取得這段時間的步數
+                      const result = await Pedometer.getStepCountAsync(start, end);
+                      if (result) {
+                          totalSteps = result.steps;
+                          usedSource = "Pedometer (Motion)";
+                      }
+                  } else {
+                      Alert.alert(t('tip', lang), t('permission_denied', lang) || "Physical Activity Permission Denied");
+                  }
+              }
           }
-          const start = startOfDay(new Date(dateStr));
-          const end = endOfDay(new Date(dateStr));
-          const { steps, sleep } = await getHealthData(start, end);
-          
-          const totalSteps = steps.reduce((sum: number, r: any) => sum + (r.count || 0), 0);
+
+          // 3. 寫入資料庫邏輯 (通用)
           if (totalSteps > 0) {
               setHealthSteps(totalSteps);
               const existingSteps = await db.select().from(activityLogs).where(and(eq(activityLogs.date, dateStr), eq(activityLogs.activityName, "Daily Steps")));
+              
+              const calBurned = totalSteps * 0.04; // 簡單估算
+              
               if (existingSteps.length > 0) {
-                  await db.update(activityLogs).set({ steps: totalSteps, caloriesBurned: totalSteps * 0.04 }).where(eq(activityLogs.id, existingSteps[0].id));
+                  await db.update(activityLogs).set({ steps: totalSteps, caloriesBurned: calBurned }).where(eq(activityLogs.id, existingSteps[0].id));
               } else {
                   await db.insert(activityLogs).values({
                       date: dateStr,
@@ -244,18 +287,12 @@ export default function HomeScreen() {
                       activityName: "Daily Steps",
                       category: "walking",
                       durationMinutes: 0,
-                      caloriesBurned: totalSteps * 0.04,
+                      caloriesBurned: calBurned,
                       steps: totalSteps
                   });
               }
           }
 
-          let totalSleepHours = 0;
-          sleep.forEach((s: any) => {
-              const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
-              totalSleepHours += durationMs / (1000 * 60 * 60);
-          });
-          
           if (totalSleepHours > 0) {
               const fixedSleep = parseFloat(totalSleepHours.toFixed(1));
               setHealthSleep(fixedSleep);
@@ -267,10 +304,16 @@ export default function HomeScreen() {
                   await db.insert(dailyMetrics).values({ date: dateStr, sleepHours: fixedSleep });
               }
           }
-          Alert.alert(t('success', lang), "Sync Completed");
+          
+          if (totalSteps > 0 || totalSleepHours > 0) {
+             Alert.alert(t('success', lang), `${t('sync_success', lang)} (${usedSource})`);
+          } else {
+             Alert.alert(t('tip', lang), "No new data found");
+          }
 
       } catch (e: any) {
-          console.log("Health Connect Sync Error:", e);
+          console.log("Sync Error:", e);
+          Alert.alert("Sync Error", e.message);
       } finally {
           setIsSyncing(false);
           loadData(); 

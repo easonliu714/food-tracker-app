@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { View, Modal, StyleSheet, Text, Dimensions, TextInput, Image, Animated, Platform, KeyboardAvoidingView, TouchableOpacity, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router'; // [修改] 引入 useSegments 判斷當前路徑
 import { getTutorialState, setTutorialState, getUserName, setUserName, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -47,6 +47,7 @@ export const useTutorial = () => {
 
 export const TutorialProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
+  const segments = useSegments(); // [新增] 用來檢查當前路徑
   const theme = Colors[useColorScheme() ?? 'light'];
   const lang = useLanguage();
 
@@ -60,16 +61,37 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollCallbackRef = useRef<((key: string) => void) | null>(null);
 
+  // [修改 1] 初始化邏輯：強制導航與啟動歡迎流程
   useEffect(() => {
     async function init() {
-      const name = await getUserName();
+      // 1. 讀取用戶名稱
+      let name = await getUserName();
+      
+      // 嘗試從資料庫讀取最新的名字 (避免 Cache 不同步)
+      try {
+        const dbUser = await db.select().from(userProfiles).limit(1);
+        if (dbUser.length > 0 && dbUser[0].name) {
+            name = dbUser[0].name;
+            await setUserName(name); // 同步回 LocalStorage
+        }
+      } catch (e) { console.log("DB Read Error", e); }
+
       if (name) setUserNameState(name);
       
+      // 2. 檢查是否初次啟動
       const notFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
+      
       if (!notFirst) {
-        // 初次啟動，直接開始歡迎流程
-        const allSteps = getTutorialSteps(lang, name || 'User');
-        startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
+        // [關鍵修改] 如果是初次使用：
+        // (A) 強制導航到主頁 (Tabs)，繞過 Login/Welcome 畫面
+        // 使用 replace 避免使用者按返回鍵回到空白頁
+        router.replace('/(tabs)'); 
+
+        // (B) 延遲一下，確保畫面轉場完成後，再啟動導覽員
+        setTimeout(() => {
+             const allSteps = getTutorialSteps(lang, name || 'User');
+             startScenario('ONBOARDING_WELCOME', allSteps.ONBOARDING_WELCOME);
+        }, 500);
       }
     }
     init();
@@ -117,6 +139,7 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(async () => {
       setActiveScenario(null);
       setSteps([]);
+      // 標記各階段已完成
       if (activeScenario === 'HOME_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_HOME, true);
       else if (activeScenario === 'PROFILE_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_PROFILE, true);
       else if (activeScenario === 'ANALYSIS_GUIDE') await setTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS, true);
@@ -130,36 +153,52 @@ export const TutorialProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
+  // [修改 2] 處理下一步與資料庫同步
   const handleNext = async () => {
     const step = steps[currentStepIndex];
-    const allSteps = getTutorialSteps(lang, userName);
-
+    
     if (step.action === 'input_name') {
       const defaultName = lang === 'zh-TW' ? "親愛的用戶" : "Dear User";
       const finalName = inputName.trim() || defaultName;
+      
+      // 1. 更新 Context 狀態 (讓 UI 立即反應)
       setUserNameState(finalName);
+      // 2. 存入 Local Storage
       await setUserName(finalName);
       
+      // 3. [關鍵] 寫入資料庫，確保 Profile 頁面讀得到
       try {
           const existingUsers = await db.select().from(userProfiles).limit(1);
           if (existingUsers.length > 0) {
               await db.update(userProfiles).set({ name: finalName }).where(eq(userProfiles.id, existingUsers[0].id));
           } else {
               await db.insert(userProfiles).values({
-                  name: finalName, gender: 'male', heightCm: 170, currentWeightKg: 60, dailyCalorieTarget: 2000, createdAt: new Date(), updatedAt: new Date()
+                  name: finalName, 
+                  gender: 'male', heightCm: 170, currentWeightKg: 60, dailyCalorieTarget: 2000, 
+                  createdAt: new Date(), updatedAt: new Date()
               });
           }
-      } catch (e) { console.error(e); }
+          console.log("User name saved to DB:", finalName);
+      } catch (e) { console.error("DB Save Error:", e); }
 
-      router.replace('/(tabs)'); 
+      // 4. [修改] 不再跳轉 (因為我們已經在 Home 了)，直接進入下一個導覽情境
+      // 結束歡迎流程，標記為非初次啟動
+      await setTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH, true);
+      
+      // 無縫切換到首頁導覽 (HOME_GUIDE)
+      const allSteps = getTutorialSteps(lang, finalName);
+      startScenario('HOME_GUIDE', allSteps.HOME_GUIDE);
+      
+      return; 
+
     } else if (step.action === 'navigate_profile') {
+      // 舊邏輯備份：如果還有其他導航需求
       router.push('/(tabs)/profile');
+      const allSteps = getTutorialSteps(lang, userName);
       setTimeout(() => startScenario('ONBOARDING_PROFILE', allSteps.ONBOARDING_PROFILE), 600);
       return; 
     } else if (step.action === 'end_onboarding') {
-      await setTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH, true);
-      router.replace('/(tabs)');
-      setTimeout(() => startScenario('HOME_GUIDE', allSteps.HOME_GUIDE), 800);
+      stopTutorial();
       return;
     }
 
