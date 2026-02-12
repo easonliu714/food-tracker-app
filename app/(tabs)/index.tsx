@@ -246,27 +246,33 @@ export default function HomeScreen() {
               usedSource = "Health Connect";
           } else {
               // 2. Health Connect 失敗，改用 Expo Sensors Pedometer (僅步數)
-              // Pedometer 使用 "android.permission.ACTIVITY_RECOGNITION"
-              const isAvailable = await Pedometer.isAvailableAsync();
-              if (isAvailable) {
-                  const perm = await Pedometer.getPermissionsAsync();
-                  let granted = perm.granted;
-                  if (!granted && perm.canAskAgain) {
-                      const newPerm = await Pedometer.requestPermissionsAsync();
-                      granted = newPerm.granted;
-                  }
-
-                  if (granted) {
-                      const start = startOfDay(new Date(dateStr));
-                      const end = endOfDay(new Date(dateStr));
-                      // 取得這段時間的步數
-                      const result = await Pedometer.getStepCountAsync(start, end);
-                      if (result) {
-                          totalSteps = result.steps;
-                          usedSource = "Pedometer (Motion)";
+              // [修正 2] 增加 Android 防呆，因為 Expo Android Pedometer 不支援 getStepCountAsync
+              if (Platform.OS === 'android') {
+                  // Android 備案：在此處可以選擇不做任何事，或者僅 alert 提示
+                  // Alert.alert(t('tip', lang), "Step history syncing requires Health Connect on Android.");
+                  console.log("Skipping Pedometer history sync on Android (Not supported)");
+              } else {
+                  // iOS 或其他支援平台
+                  const isAvailable = await Pedometer.isAvailableAsync();
+                  if (isAvailable) {
+                      const perm = await Pedometer.getPermissionsAsync();
+                      let granted = perm.granted;
+                      if (!granted && perm.canAskAgain) {
+                          const newPerm = await Pedometer.requestPermissionsAsync();
+                          granted = newPerm.granted;
                       }
-                  } else {
-                      Alert.alert(t('tip', lang), t('permission_denied', lang) || "Physical Activity Permission Denied");
+
+                      if (granted) {
+                          const start = startOfDay(new Date(dateStr));
+                          const end = endOfDay(new Date(dateStr));
+                          const result = await Pedometer.getStepCountAsync(start, end);
+                          if (result) {
+                              totalSteps = result.steps;
+                              usedSource = "Pedometer (Motion)";
+                          }
+                      } else {
+                          Alert.alert(t('tip', lang), t('permission_denied', lang) || "Physical Activity Permission Denied");
+                      }
                   }
               }
           }

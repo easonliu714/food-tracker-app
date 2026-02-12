@@ -1,13 +1,13 @@
-// [修正] 加入 useRef
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { ScrollView, StyleSheet, View, Dimensions, TouchableOpacity, ActivityIndicator, Modal, Pressable, Vibration, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BarChart } from "react-native-gifted-charts";
+// [修正 3] 移除 date-fns 裡的 lte, gte
 import { format, subDays, differenceInDays, eachDayOfInterval } from "date-fns";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { GestureHandlerRootView, PinchGestureHandler } from "react-native-gesture-handler";
-import { useFocusEffect } from "expo-router"; // 確保有引入
+import { useFocusEffect } from "expo-router";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -15,14 +15,15 @@ import { useThemeColor } from "@/hooks/use-theme-color";
 import { t, useLanguage } from "@/lib/i18n";
 import { db } from "@/lib/db"; 
 import { dailyMetrics, foodLogs, activityLogs, userProfiles } from "@/drizzle/schema";
-import { gte, lte, and } from "drizzle-orm";
+// [修正 3] 將 lte, gte 加入 drizzle-orm
+import { and, lte, gte } from "drizzle-orm";
 import { getAnalysisGrid, saveAnalysisGrid } from "@/lib/storage"; 
 
-// [修改] 引入 TutorialContext 中需要的 onScrollRequest 與 TutorialTarget
+// [Tutorial]
 import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
-import { getTutorialSteps } from '@/constants/tutorial-steps'; // [新增] 引入集中管理的步驟
+import { getTutorialSteps } from '@/constants/tutorial-steps';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const VISIBLE_CHART_WIDTH = SCREEN_WIDTH - 30;
@@ -44,6 +45,92 @@ const ALL_STATS: { key: StatKey; labelKey: string; unit: string; color?: string 
     { key: 'avgSod', labelKey: 'sodium', unit: 'mg' },
 ];
 
+// [Helper] 將數值對映到圖表 Y 軸範圍 (全範圍動態對映)
+const mapValueToChart = (val: number, dataMin: number, dataMax: number, chartMin: number, chartMax: number) => {
+    if (dataMax === dataMin) return (chartMax + chartMin) / 2; // 若數值無變化，置中顯示
+    const percentage = (val - dataMin) / (dataMax - dataMin);
+    
+    // 預留上下 1% 的緩衝空間，避免折線貼死邊界
+    const buffer = (chartMax - chartMin) * 0.01;
+    const targetMin = chartMin + buffer;
+    const targetMax = chartMax - buffer;
+    
+    return targetMin + percentage * (targetMax - targetMin);
+};
+
+// [Helper] 處理折線數據：填補空缺並執行對映
+const processLineData = (
+    dataArray: number[], 
+    color: string, 
+    dataMin: number, 
+    dataMax: number, 
+    chartMin: number, 
+    chartMax: number
+) => {
+    const result: any[] = [];
+    const len = dataArray.length;
+    const validIndices: number[] = [];
+
+    // 找出所有有數值的 index
+    dataArray.forEach((val, idx) => {
+        if (val > 0) validIndices.push(idx);
+    });
+
+    if (validIndices.length === 0) {
+        return dataArray.map(() => ({ value: 0, hideDataPoint: true, dataPointText: '' }));
+    }
+
+    for (let i = 0; i < len; i++) {
+        const currentVal = dataArray[i];
+        let displayVal = 0;
+
+        if (currentVal > 0) {
+            // 有數值：進行對映
+            displayVal = mapValueToChart(currentVal, dataMin, dataMax, chartMin, chartMax);
+            
+            result.push({
+                value: displayVal, 
+                dataPointText: String(currentVal), // 顯示「原始數值」而非對映後的座標值
+                textColor: color,
+                textShiftY: -8, 
+                textShiftX: -10,
+                textFontSize: 10,
+                dataPointColor: color,
+                hideDataPoint: false,
+                customDataPoint: undefined
+            });
+        } else {
+            // 無數值：計算線性插值
+            const prevIdx = validIndices.filter(idx => idx < i).pop();
+            const nextIdx = validIndices.find(idx => idx > i);
+
+            let calculatedRawVal = 0;
+
+            if (prevIdx !== undefined && nextIdx !== undefined) {
+                const startVal = dataArray[prevIdx];
+                const endVal = dataArray[nextIdx];
+                const steps = nextIdx - prevIdx;
+                const stepVal = (endVal - startVal) / steps;
+                calculatedRawVal = startVal + (stepVal * (i - prevIdx));
+            } else if (prevIdx !== undefined) {
+                calculatedRawVal = dataArray[prevIdx];
+            } else if (nextIdx !== undefined) {
+                calculatedRawVal = dataArray[nextIdx];
+            }
+            
+            // 將計算出的插值也進行對映
+            displayVal = mapValueToChart(calculatedRawVal, dataMin, dataMax, chartMin, chartMax);
+
+            result.push({
+                value: displayVal,
+                hideDataPoint: true, 
+                dataPointText: ''    
+            });
+        }
+    }
+    return result;
+};
+
 export default function AnalysisScreen() {
   const lang = useLanguage();
   const theme = {
@@ -58,15 +145,11 @@ export default function AnalysisScreen() {
   const secondaryColor = '#AF52DE';
   const weightColor = '#007AFF';
 
-  // [修改] 取得導覽 Context
-  // [修改] 取得導覽 Context
-  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial(); // [新增] activeScenario
-  
-  // [新增] ScrollView Ref 與位置紀錄 (現在 useRef 已被正確引入)
+  // [Tutorial]
+  const { startScenario, userName, activeScenario, onScrollRequest } = useTutorial();
   const scrollViewRef = useRef<ScrollView>(null); 
   const targetPositions = useRef<Record<string, number>>({}); 
 
-// [修改] 捲動處理函式
   const handleScrollRequest = useCallback((targetKey: string) => {
       const y = targetPositions.current[targetKey];
       if (y !== undefined && scrollViewRef.current) {
@@ -76,24 +159,17 @@ export default function AnalysisScreen() {
       }
   }, []);
 
-  // [修改] 統一使用 useFocusEffect 管理導覽與捲動註冊
   useFocusEffect(
     useCallback(() => {
-        // 1. 註冊捲動函式
         onScrollRequest(handleScrollRequest);
-
-        // 2. 強制捲動至頂部
         if (activeScenario === 'ANALYSIS_GUIDE') {
              setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: false }), 100);
         }
-
-        // 3. 檢查導覽狀態 (備援邏輯)
         async function check() {
            const seen = await getTutorialState(TUTORIAL_KEYS.HAS_SEEN_ANALYSIS);
            const isFirst = await getTutorialState(TUTORIAL_KEYS.IS_FIRST_LAUNCH);
-           
            if (isFirst && !seen) {
-               // Logic handled by context or menu
+                // 自動啟動邏輯可在此實作
            }
         }
         check();
@@ -134,8 +210,9 @@ export default function AnalysisScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [targetAddIndex, setTargetAddIndex] = useState<number | null>(null);
 
+  // 用於控制 BarChart 顯示範圍 (熱量軸)
   const [axisConfig, setAxisConfig] = useState({
-      maxCal: 2500, minCal: -500, maxWeight: 100, minWeight: 0
+      maxCal: 2500, minCal: -500
   });
   
   const [barWidth, setBarWidth] = useState(16);
@@ -143,66 +220,6 @@ export default function AnalysisScreen() {
   const [zoomScale, setZoomScale] = useState(1);
   const [chartScrollable, setChartScrollable] = useState(false); 
 
-  // [Helper] 插值與縮放函數
-  const interpolateAndScaleData = (dataArray: number[], color: string, scalingFactor: number) => {
-      const result: any[] = [];
-      const len = dataArray.length;
-
-      // 找出所有有數值的 index
-      const validIndices: number[] = [];
-      dataArray.forEach((val, idx) => {
-          if (val > 0) validIndices.push(idx);
-      });
-
-      if (validIndices.length === 0) {
-          return dataArray.map(() => ({ value: 0, hideDataPoint: true, dataPointText: '' }));
-      }
-
-      for (let i = 0; i < len; i++) {
-          const currentVal = dataArray[i];
-
-          if (currentVal > 0) {
-              // 有數值：放大 value 以匹配高度，但顯示原始數值文字
-              result.push({
-                  value: currentVal * scalingFactor, // [關鍵] 視覺高度放大
-                  dataPointText: String(currentVal), // [關鍵] 顯示原始數值
-                  textColor: color,
-                  textShiftY: -6, 
-                  textShiftX: i === len - 1 ? -20 : -10,
-                  textFontSize: 10,
-                  dataPointColor: color,
-                  hideDataPoint: false
-              });
-          } else {
-              // 無數值：計算插值並放大
-              const prevIdx = validIndices.filter(idx => idx < i).pop();
-              const nextIdx = validIndices.find(idx => idx > i);
-
-              let calculatedVal = 0;
-
-              if (prevIdx !== undefined && nextIdx !== undefined) {
-                  const startVal = dataArray[prevIdx];
-                  const endVal = dataArray[nextIdx];
-                  const steps = nextIdx - prevIdx;
-                  const stepVal = (endVal - startVal) / steps;
-                  calculatedVal = startVal + (stepVal * (i - prevIdx));
-              } else if (prevIdx !== undefined) {
-                  calculatedVal = dataArray[prevIdx];
-              } else if (nextIdx !== undefined) {
-                  calculatedVal = dataArray[nextIdx];
-              }
-
-              result.push({
-                  value: calculatedVal * scalingFactor, // [關鍵] 視覺高度放大
-                  hideDataPoint: true, 
-                  dataPointText: ''    
-              });
-          }
-      }
-      return result;
-  };
-
-  // [修正 4] 圖表渲染邏輯修正
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -213,10 +230,9 @@ export default function AnalysisScreen() {
 
       const daysDiff = differenceInDays(new Date(endStr), new Date(startStr)) + 1;
 
-      // [修正 4] 計算寬度時，預留更多 endSpacing 空間
-      // 減少 calculatedWidth 的係數，讓 bar 稍微窄一點，避免擠出去
+      // 動態計算 Bar 寬度與間距
       const calculatedWidth = Math.floor((VISIBLE_CHART_WIDTH - 40) / (daysDiff * 1.5)); 
-      const finalBarWidth = Math.max(4, Math.min(24, calculatedWidth)); // 縮小 max bar width
+      const finalBarWidth = Math.max(4, Math.min(24, calculatedWidth)); 
       const finalSpacing = Math.max(2, Math.floor(finalBarWidth * 0.5));
       
       setBarWidth(finalBarWidth);
@@ -242,14 +258,11 @@ export default function AnalysisScreen() {
       let logs: any[] = [];
       let acts: any[] = [];
       let metrics: any[] = [];
-      
       try {
           logs = await db.select().from(foodLogs).where(and(gte(foodLogs.date, startStr), lte(foodLogs.date, endStr)));
           acts = await db.select().from(activityLogs).where(and(gte(activityLogs.date, startStr), lte(activityLogs.date, endStr)));
           metrics = await db.select().from(dailyMetrics).where(and(gte(dailyMetrics.date, startStr), lte(dailyMetrics.date, endStr)));
-      } catch (dbErr) {
-          console.error("DB Fetch Error (Analysis):", dbErr);
-      }
+      } catch (dbErr) { console.error("DB Fetch Error:", dbErr); }
 
       if (!logs) logs = [];
       if (!acts) acts = [];
@@ -264,65 +277,48 @@ export default function AnalysisScreen() {
           });
       });
 
-      logs.forEach(l => {
-          const d = dateMap.get(l.date);
-          if(d) {
-              d.intake += l.totalCalories || 0; d.pro += l.totalProteinG || 0; d.fat += l.totalFatG || 0; d.carb += l.totalCarbsG || 0; d.sod += l.totalSodiumMg || 0;
-              d.hasFood = true;
-          }
-      });
-      acts.forEach(a => {
-          const d = dateMap.get(a.date);
-          if(d) {
-              d.burned += a.caloriesBurned || 0; d.steps += a.steps || 0; d.duration += a.durationMinutes || 0;
-              d.hasAct = true;
-          }
-      });
-      metrics.forEach(m => {
-          const d = dateMap.get(m.date);
-          if(d) {
-              if (m.weightKg) { d.weight = m.weightKg; d.hasMetric = true; }
-              if (m.bodyFatPercentage) { d.bodyFat = m.bodyFatPercentage; }
-          }
-      });
+      logs.forEach(l => { const d = dateMap.get(l.date); if(d) { d.intake += l.totalCalories || 0; d.pro += l.totalProteinG || 0; d.fat += l.totalFatG || 0; d.carb += l.totalCarbsG || 0; d.sod += l.totalSodiumMg || 0; d.hasFood = true; } });
+      acts.forEach(a => { const d = dateMap.get(a.date); if(d) { d.burned += a.caloriesBurned || 0; d.steps += a.steps || 0; d.duration += a.durationMinutes || 0; d.hasAct = true; } });
+      metrics.forEach(m => { const d = dateMap.get(m.date); if(d) { if (m.weightKg) { d.weight = m.weightKg; d.hasMetric = true; } if (m.bodyFatPercentage) { d.bodyFat = m.bodyFatPercentage; } } });
 
-      // 1. 先遍歷一次數據找出最大最小值，以決定座標軸
-      let maxCal = 2000, minCal = -500;
-      let minWeight = 1000, maxWeight = 60; 
-      let minBodyFat = 100, maxBodyFat = 0;
+      // [核心修改] 分別計算熱量、體重、體脂的 Min/Max
+      let maxCal = 1000, minCal = 0; 
+      // 使用 Infinity 確保能抓到真實最小值
+      let minWeight = Infinity, maxWeight = -Infinity; 
+      let minBodyFat = Infinity, maxBodyFat = -Infinity;
 
-      // 用來暫存數據進行統計
       const tempSortedData = Array.from(dateMap.values()).sort((a:any, b:any) => a.date.getTime() - b.date.getTime());
 
       tempSortedData.forEach((d: any) => {
+          // 熱量 (Bar Chart)
           if (d.intake > maxCal) maxCal = d.intake;
-          if (-d.burned < minCal) minCal = -d.burned;
+          if (-d.burned < minCal) minCal = -d.burned; 
 
+          // 體重
           if (d.weight > 0) {
               if (d.weight < minWeight) minWeight = d.weight;
               if (d.weight > maxWeight) maxWeight = d.weight;
           }
-           if (d.bodyFat > 0) {
+          // 體脂
+          if (d.bodyFat > 0) {
               if (d.bodyFat < minBodyFat) minBodyFat = d.bodyFat;
               if (d.bodyFat > maxBodyFat) maxBodyFat = d.bodyFat;
           }
       });
 
-      const finalMaxCal = Math.ceil(maxCal / 500) * 500;
-      const finalMinCal = Math.floor(minCal / 500) * 500;
+      // 防呆預設值
+      if (minWeight === Infinity) { minWeight = user.currentWeightKg || 60; maxWeight = minWeight + 10; }
+      if (minWeight === maxWeight) { minWeight -= 2; maxWeight += 2; }
       
-      const yMinW = minWeight === 1000 ? 0 : Math.max(0, Math.floor(minWeight - 5));
-      const yMaxW = maxWeight === 0 ? 100 : Math.ceil(maxWeight + 5);
+      if (minBodyFat === Infinity) { minBodyFat = 20; maxBodyFat = 30; }
+      if (minBodyFat === maxBodyFat) { minBodyFat -= 2; maxBodyFat += 2; }
+
+      // 決定圖表 Y 軸的物理邊界 (以熱量為準)
+      const chartTop = Math.ceil(maxCal / 500) * 500;
+      const chartBottom = Math.floor(minCal / 500) * 500; 
       
-      setAxisConfig({
-          maxCal: finalMaxCal, minCal: finalMinCal, 
-          maxWeight: yMaxW, minWeight: yMinW
-      });
+      setAxisConfig({ maxCal: chartTop, minCal: chartBottom });
 
-      // 2. 計算縮放倍率 (Scaling Factor)
-      const scalingFactor = finalMaxCal / yMaxW;
-
-      // 3. 生成圖表數據
       const newChartData: any[] = [];
       const rawWeights: number[] = [];
       const rawBodyFats: number[] = [];
@@ -346,33 +342,32 @@ export default function AnalysisScreen() {
           if (d.weight > 0) { sumWeight += d.weight; countWeight++; }
           if (d.bodyFat > 0) { sumBodyFat += d.bodyFat; countBodyFat++; }
 
-          // [修正] 生成 Chart Data 時，確保 stack 結構單純，減少 offset 造成的長條圖偏移
           newChartData.push({
               value: d.intake, 
               stacks: [
                   { value: d.intake, color: '#34C759', marginBottom: 1 },
-                  { value: -d.burned, color: '#FF9500' } // 負值往下長
+                  { value: -d.burned, color: '#FF9500' } 
               ],
               label: format(d.date, "MM/dd"),
-              labelTextStyle: { color: '#888', fontSize: 10, width: 30, textAlign: 'center' }, // 限制 label 寬度
-
+              labelTextStyle: { color: '#888', fontSize: 10, width: 30, textAlign: 'center' },
               customData: {
                   dateStr: format(d.date, "yyyy-MM-dd"),
                   intake: d.intake, burned: d.burned, net: d.intake - d.burned,
                   weight: d.weight || '--', bodyFat: d.bodyFat || '--',
-                  idx: idx,
-                  totalItems: daysDiff 
+                  idx: idx, totalItems: daysDiff 
               }
           });
       });
 
-      // 4. 生成折線數據 (套用插值與縮放)
-      const interpolatedWeights = interpolateAndScaleData(rawWeights, weightColor, scalingFactor);
-      const interpolatedBodyFats = interpolateAndScaleData(rawBodyFats, secondaryColor, scalingFactor);
+      // [核心修改] 獨立對映折線數據
+      // 體重: MinWeight -> ChartBottom, MaxWeight -> ChartTop
+      const processedWeights = processLineData(rawWeights, weightColor, minWeight, maxWeight, chartBottom, chartTop);
+      // 體脂: MinBodyFat -> ChartBottom, MaxBodyFat -> ChartTop
+      const processedBodyFats = processLineData(rawBodyFats, secondaryColor, minBodyFat, maxBodyFat, chartBottom, chartTop);
 
       setChartData(newChartData);
-      setLineDataWeight(interpolatedWeights);
-      setLineDataFat(interpolatedBodyFats);
+      setLineDataWeight(processedWeights);
+      setLineDataFat(processedBodyFats);
 
       setSummaryValues({
           avgIntake: countIntake > 0 ? Math.round(sumIntake / countIntake) : 0,
@@ -418,12 +413,9 @@ export default function AnalysisScreen() {
   const onPinchEvent = (event: any) => {
       const scale = event.nativeEvent.scale;
       if (!scale || isNaN(scale)) return;
-
       const newScale = Math.max(0.5, Math.min(zoomScale * scale, 3.0)); 
-      
       const newBarWidth = Math.max(4, Math.min(50, barWidth * scale)); 
       const newSpacing = Math.max(2, Math.min(40, spacing * scale));
-      
       setZoomScale(newScale);
       setBarWidth(newBarWidth);
       setSpacing(newSpacing);
@@ -502,24 +494,19 @@ export default function AnalysisScreen() {
                   <ThemedText style={[styles.ttLabel, {color:'#34C759'}]}>{t('intake', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{Math.round(d.intake)}</ThemedText>
               </View>
-              
               <View style={styles.rowBetween}>
                   <ThemedText style={[styles.ttLabel, {color:'#FF9500'}]}>{t('burned', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{Math.round(d.burned)}</ThemedText>
               </View>
-              
               <View style={styles.rowBetween}>
                   <ThemedText style={[styles.ttLabel, {color:'#ccc'}]}>{t('net_intake', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{Math.round(d.net)}</ThemedText>
               </View>
-              
               <View style={{height:1, backgroundColor:'#555', marginVertical:4}}/>
-              
               <View style={styles.rowBetween}>
                   <ThemedText style={[styles.ttLabel, {color:theme.tint}]}>{t('weight', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{d.weight} kg</ThemedText>
               </View>
-              
               <View style={styles.rowBetween}>
                   <ThemedText style={[styles.ttLabel, {color:secondaryColor}]}>{t('body_fat', lang)}</ThemedText>
                   <ThemedText style={styles.ttVal}>{d.bodyFat} %</ThemedText>
@@ -532,7 +519,6 @@ export default function AnalysisScreen() {
       const statDef = key ? ALL_STATS.find(s => s.key === key) : null;
       const val = key ? summaryValues[key] : 0;
       const isSelected = selectedSlotIndex === index;
-
       let isOver = false;
       if (key === 'avgIntake' && goals.calories > 0 && val > goals.calories) isOver = true;
       if (key === 'avgPro' && goals.protein > 0 && val > goals.protein) isOver = true;
@@ -557,7 +543,6 @@ export default function AnalysisScreen() {
                       <Ionicons name="close" size={12} color="white" />
                   </TouchableOpacity>
               )}
-              
               {key && statDef ? (
                   <>
                     <ThemedText style={{fontSize: 10, color: '#888', marginBottom: 4}}>{t(statDef.labelKey, lang) || statDef.labelKey}</ThemedText>
@@ -588,7 +573,6 @@ export default function AnalysisScreen() {
               <TouchableOpacity onPress={()=>setShowEndDatePicker(true)} style={[styles.dateBtn, {borderColor: theme.text}]}>
                   <ThemedText>{format(customEnd, "yyyy-MM-dd")}</ThemedText>
               </TouchableOpacity>
-              
               {showStartDatePicker && <DateTimePicker value={customStart} mode="date" onChange={onStartDateChange} />}
               {showEndDatePicker && <DateTimePicker value={customEnd} mode="date" onChange={onEndDateChange} />}
           </View>
@@ -600,7 +584,7 @@ export default function AnalysisScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView ref={scrollViewRef} contentContainerStyle={{padding: 16}} scrollEnabled={true}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={{padding: 5}} scrollEnabled={true}>
         <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom: 16}}>
               <ThemedText type="title">{t('analysis', lang)}</ThemedText>
               {isEditMode && (
@@ -610,8 +594,7 @@ export default function AnalysisScreen() {
               )}
         </View>
         
-        {/* 2. 週期選擇區塊 (analysis_period) */}
-        <TutorialTarget targetKey="analysis_period" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['analysis_period'] = y} adjustment={{offsetY: 20}}>
+        <TutorialTarget targetKey="analysis_period" style={{ padding: 5 }} onMeasure={(y) => targetPositions.current['analysis_period'] = y}>
             <View style={{flexDirection:'row', backgroundColor: theme.card, padding:4, borderRadius:8, marginBottom:16}}>
                 {['week', 'month', 'custom'].map((p) => (
                     <TouchableOpacity key={p} onPress={() => setPeriod(p as any)} style={{flex: 1, paddingVertical: 6, alignItems:'center', borderRadius:6, backgroundColor: period === p ? theme.tint : 'transparent'}}>
@@ -623,22 +606,19 @@ export default function AnalysisScreen() {
             </View>
         </TutorialTarget>
 
-        {/* 3. 日期範圍區塊 (analysis_range) */}
-        <TutorialTarget targetKey="analysis_range" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['analysis_range'] = y} adjustment={{offsetY: 10}}>
+        <TutorialTarget targetKey="analysis_range" style={{ padding: 5 }} onMeasure={(y) => targetPositions.current['analysis_range'] = y}>
             {renderCustomRangePicker()}
         </TutorialTarget>
 
         {isEditMode && <ThemedText style={{fontSize:12, color:'#FF9500', marginBottom:8, textAlign:'center'}}>{t('tap_msg', lang)}</ThemedText>}
         
-        {/* 4. 統計數據區塊 (analysis_grid) */}
-        <TutorialTarget targetKey="analysis_grid"  style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['analysis_grid'] = y} adjustment={{offsetY: -50}}>
+        <TutorialTarget targetKey="analysis_grid"  style={{ padding: 5 }} onMeasure={(y) => targetPositions.current['analysis_grid'] = y}>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16}}>
                 {gridSlots.map((key, index) => renderGridItem(key, index))}
             </View>
         </TutorialTarget>
 
-        {/* 5. 趨勢圖表區塊 (analysis_chart) */}
-        <TutorialTarget targetKey="analysis_chart" style={{ padding: 10 }} onMeasure={(y) => targetPositions.current['analysis_chart'] = y} adjustment={{padding: 5}}>
+        <TutorialTarget targetKey="analysis_chart" style={{ padding: 5 }} onMeasure={(y) => targetPositions.current['analysis_chart'] = y}>
             <ThemedView style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom: 16}}>
                     <ThemedText type="subtitle">{t('trend_analysis', lang)}</ThemedText>
@@ -657,8 +637,8 @@ export default function AnalysisScreen() {
                                 stackData={chartData}
                                 barWidth={barWidth}
                                 spacing={spacing}
-                                initialSpacing={15} // [修正 4] 增加初始間距
-                                endSpacing={30}     // [修正 4] 增加結尾間距，防止最後一筆資料被截斷
+                                initialSpacing={15}
+                                endSpacing={30}
                                 noOfSections={5}
                                 
                                 yAxisThickness={0}
@@ -666,14 +646,8 @@ export default function AnalysisScreen() {
                                 maxValue={axisConfig.maxCal}
                                 minValue={axisConfig.minCal}
                                 
-                                showSecondaryYAxis
-                                secondaryYAxisConfig={{
-                                    showYAxisIndices: true,
-                                    yAxisTextStyle: {color: weightColor, fontSize: 10},
-                                    maxValue: axisConfig.maxWeight,
-                                    minValue: axisConfig.minWeight,
-                                    noOfSections: 5,
-                                }}
+                                // 隱藏次要 Y 軸，因為點已經手動計算過，不需要再顯示刻度以免混淆
+                                showSecondaryYAxis={false}
 
                                 showLine
                                 connectPoints={true} 
@@ -682,13 +656,13 @@ export default function AnalysisScreen() {
                                 lineConfig={{ 
                                     color: weightColor, 
                                     thickness: 3, 
-                                    curved: false, 
+                                    curved: true, 
                                     hideDataPoints: false, 
                                     dataPointsColor: weightColor,
                                     textFontSize: 10, 
                                     textShiftY: -12, 
                                     textColor: weightColor, 
-                                    startIndex: 0, // [修正 4] 確保折線圖從第 0 筆開始對齊
+                                    startIndex: 0,
                                     endIndex: chartData.length - 1
                                 }}
                                 
@@ -696,7 +670,7 @@ export default function AnalysisScreen() {
                                 lineConfig2={{ 
                                     color: secondaryColor, 
                                     thickness: 3, 
-                                    curved: false, 
+                                    curved: true, 
                                     hideDataPoints: false, 
                                     dataPointsColor: secondaryColor, 
                                     textFontSize: 10, 
@@ -711,8 +685,8 @@ export default function AnalysisScreen() {
                                 rulesColor={theme.border} 
                                 rulesType="solid"
                                 height={280}
-                                width={VISIBLE_CHART_WIDTH - 10} // [修正 4] 稍微縮減寬度以配合 container padding
-                                scrollable={true} // [修正 4] 既然有截斷問題，建議預設開啟 scrollable 或由 zoomScale 決定
+                                width={VISIBLE_CHART_WIDTH - 10}
+                                scrollable={true}
                                 renderTooltip={renderTooltip}
                             />
                             <View style={{marginTop: 10, alignItems: 'center'}}>
@@ -750,7 +724,7 @@ export default function AnalysisScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  chartCard: { padding: 16, borderRadius: 16, marginBottom: 16, overflow: 'hidden' },
+  chartCard: { padding: 10, borderRadius: 10, marginBottom: 10, overflow: 'hidden' },
   dateBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   tooltipRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   ttLabel: { fontSize:11 },
