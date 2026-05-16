@@ -52,6 +52,8 @@ export type HealthDataReadResult = {
       rawCount: number;
       selectedOrigin: string;
       originHours: Record<string, number>;
+      windowStartTime: string;
+      windowEndTime: string;
     };
   };
 };
@@ -101,6 +103,21 @@ const pickPreferredOrigin = (totals: Record<string, number>): string | null => {
   // This prevents double counting when Health Connect contains the same metric from
   // Fitbit, Google Fit, phone sensor, and derived/merged sources at the same time.
   return origins.sort((a, b) => totals[b] - totals[a])[0];
+};
+
+const buildLocalSleepWindow = (targetDayStart: Date) => {
+  // Fitbit usually attributes a sleep session to the wake-up date. For the selected
+  // date D, query the local overnight window from D-1 22:00 to D 10:00.
+  // Using local setHours keeps the boundary aligned to the device timezone
+  // (Taipei on the user's Pixel), while Health Connect receives ISO instants.
+  const windowStart = new Date(targetDayStart);
+  windowStart.setDate(windowStart.getDate() - 1);
+  windowStart.setHours(22, 0, 0, 0);
+
+  const windowEnd = new Date(targetDayStart);
+  windowEnd.setHours(10, 0, 0, 0);
+
+  return { windowStart, windowEnd };
 };
 
 const recordOverlapHours = (record: any, start: Date, end: Date): number => {
@@ -298,6 +315,8 @@ export async function initHealthConnectDetailed(): Promise<HealthConnectInitResu
 }
 
 export async function getHealthData(start: Date, end: Date): Promise<HealthDataReadResult> {
+  const { windowStart: sleepWindowStart, windowEnd: sleepWindowEnd } = buildLocalSleepWindow(start);
+
   if (Platform.OS !== 'android') {
     return {
       steps: [],
@@ -305,7 +324,13 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
       errors: [],
       diagnostics: {
         steps: { rawCount: 0, selectedOrigin: 'unsupported', originTotals: {} },
-        sleep: { rawCount: 0, selectedOrigin: 'unsupported', originHours: {} },
+        sleep: {
+          rawCount: 0,
+          selectedOrigin: 'unsupported',
+          originHours: {},
+          windowStartTime: sleepWindowStart.toISOString(),
+          windowEndTime: sleepWindowEnd.toISOString(),
+        },
       },
     };
   }
@@ -333,8 +358,8 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
     const sleepResult = await readRecords('SleepSession', {
       timeRangeFilter: {
         operator: 'between',
-        startTime: start.toISOString(),
-        endTime: end.toISOString(),
+        startTime: sleepWindowStart.toISOString(),
+        endTime: sleepWindowEnd.toISOString(),
       },
     });
     rawSleep = sleepResult.records || [];
@@ -345,10 +370,18 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
   }
 
   const stepSelection = selectStepRecords(rawSteps);
-  const sleepSelection = selectSleepRecords(rawSleep, start, end);
+  const sleepSelection = selectSleepRecords(rawSleep, sleepWindowStart, sleepWindowEnd);
 
   console.log('[HealthConnect] Steps origin totals:', stepSelection.originTotals, 'selected:', stepSelection.selectedOrigin);
-  console.log('[HealthConnect] Sleep origin hours:', sleepSelection.originHours, 'selected:', sleepSelection.selectedOrigin);
+  console.log(
+    '[HealthConnect] Sleep window:',
+    sleepWindowStart.toISOString(),
+    sleepWindowEnd.toISOString(),
+    'origin hours:',
+    sleepSelection.originHours,
+    'selected:',
+    sleepSelection.selectedOrigin,
+  );
 
   return {
     steps: stepSelection.selected,
@@ -364,6 +397,8 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
         rawCount: rawSleep.length,
         selectedOrigin: sleepSelection.selectedOrigin,
         originHours: sleepSelection.originHours,
+        windowStartTime: sleepWindowStart.toISOString(),
+        windowEndTime: sleepWindowEnd.toISOString(),
       },
     },
   };
