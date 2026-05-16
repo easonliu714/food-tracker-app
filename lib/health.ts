@@ -4,7 +4,6 @@ import {
   readRecords,
   getGrantedPermissions,
   getSdkStatus,
-  SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 import { Permission } from 'react-native-health-connect/lib/typescript/types';
 import { Platform, Alert, Linking } from 'react-native';
@@ -13,6 +12,14 @@ const PERMISSIONS: Permission[] = [
   { accessType: 'read', recordType: 'Steps' },
   { accessType: 'read', recordType: 'SleepSession' },
   { accessType: 'read', recordType: 'ExerciseSession' },
+];
+
+const SOURCE_PRIORITY = [
+  'fitbit',
+  'com.fitbit',
+  'com.fitbit.fitbitmobile',
+  'google.android.apps.fitness',
+  'com.google.android.apps.fitness',
 ];
 
 export type HealthConnectInitResult = {
@@ -35,6 +42,18 @@ export type HealthDataReadResult = {
   steps: any[];
   sleep: any[];
   errors: string[];
+  diagnostics: {
+    steps: {
+      rawCount: number;
+      selectedOrigin: string;
+      originTotals: Record<string, number>;
+    };
+    sleep: {
+      rawCount: number;
+      selectedOrigin: string;
+      originHours: Record<string, number>;
+    };
+  };
 };
 
 const hasPermission = (permissions: Permission[], recordType: Permission['recordType']) => {
@@ -53,6 +72,101 @@ const buildPermissionState = (permissions: Permission[]) => {
       !sleep ? 'SleepSession' : null,
       !exercise ? 'ExerciseSession' : null,
     ].filter(Boolean) as string[],
+  };
+};
+
+const getOrigin = (record: any): string => {
+  const candidates = [
+    record?.metadata?.dataOrigin?.packageName,
+    record?.metadata?.dataOrigin,
+    record?.metadata?.clientRecordId,
+    record?.metadata?.device?.manufacturer,
+    record?.metadata?.device?.model,
+  ];
+
+  const found = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
+  return (found || 'unknown').toString().toLowerCase();
+};
+
+const pickPreferredOrigin = (totals: Record<string, number>): string | null => {
+  const origins = Object.keys(totals).filter((origin) => totals[origin] > 0);
+  if (origins.length === 0) return null;
+
+  for (const keyword of SOURCE_PRIORITY) {
+    const matched = origins.find((origin) => origin.includes(keyword));
+    if (matched) return matched;
+  }
+
+  // Fallback: choose the largest single source rather than summing across all sources.
+  // This prevents double counting when Health Connect contains the same metric from
+  // Fitbit, Google Fit, phone sensor, and derived/merged sources at the same time.
+  return origins.sort((a, b) => totals[b] - totals[a])[0];
+};
+
+const recordOverlapHours = (record: any, start: Date, end: Date): number => {
+  const recordStart = new Date(record.startTime).getTime();
+  const recordEnd = new Date(record.endTime).getTime();
+  const windowStart = start.getTime();
+  const windowEnd = end.getTime();
+  const overlapStart = Math.max(recordStart, windowStart);
+  const overlapEnd = Math.min(recordEnd, windowEnd);
+  if (!Number.isFinite(overlapStart) || !Number.isFinite(overlapEnd) || overlapEnd <= overlapStart) {
+    return 0;
+  }
+  return (overlapEnd - overlapStart) / (1000 * 60 * 60);
+};
+
+const clipSleepRecord = (record: any, start: Date, end: Date) => {
+  const recordStart = new Date(record.startTime).getTime();
+  const recordEnd = new Date(record.endTime).getTime();
+  const overlapStart = Math.max(recordStart, start.getTime());
+  const overlapEnd = Math.min(recordEnd, end.getTime());
+
+  return {
+    ...record,
+    startTime: new Date(overlapStart).toISOString(),
+    endTime: new Date(overlapEnd).toISOString(),
+  };
+};
+
+const selectStepRecords = (records: any[]) => {
+  const originTotals: Record<string, number> = {};
+  for (const record of records) {
+    const origin = getOrigin(record);
+    originTotals[origin] = (originTotals[origin] || 0) + (Number(record.count) || 0);
+  }
+
+  const selectedOrigin = pickPreferredOrigin(originTotals);
+  if (!selectedOrigin) {
+    return { selected: [], selectedOrigin: 'none', originTotals };
+  }
+
+  return {
+    selected: records.filter((record) => getOrigin(record) === selectedOrigin),
+    selectedOrigin,
+    originTotals,
+  };
+};
+
+const selectSleepRecords = (records: any[], start: Date, end: Date) => {
+  const originHours: Record<string, number> = {};
+  for (const record of records) {
+    const origin = getOrigin(record);
+    originHours[origin] = (originHours[origin] || 0) + recordOverlapHours(record, start, end);
+  }
+
+  const selectedOrigin = pickPreferredOrigin(originHours);
+  if (!selectedOrigin) {
+    return { selected: [], selectedOrigin: 'none', originHours };
+  }
+
+  return {
+    selected: records
+      .filter((record) => getOrigin(record) === selectedOrigin)
+      .map((record) => clipSleepRecord(record, start, end))
+      .filter((record) => new Date(record.endTime).getTime() > new Date(record.startTime).getTime()),
+    selectedOrigin,
+    originHours,
   };
 };
 
@@ -184,11 +298,21 @@ export async function initHealthConnectDetailed(): Promise<HealthConnectInitResu
 }
 
 export async function getHealthData(start: Date, end: Date): Promise<HealthDataReadResult> {
-  if (Platform.OS !== 'android') return { steps: [], sleep: [], errors: [] };
+  if (Platform.OS !== 'android') {
+    return {
+      steps: [],
+      sleep: [],
+      errors: [],
+      diagnostics: {
+        steps: { rawCount: 0, selectedOrigin: 'unsupported', originTotals: {} },
+        sleep: { rawCount: 0, selectedOrigin: 'unsupported', originHours: {} },
+      },
+    };
+  }
 
   const errors: string[] = [];
-  let steps: any[] = [];
-  let sleep: any[] = [];
+  let rawSteps: any[] = [];
+  let rawSleep: any[] = [];
 
   try {
     const stepsResult = await readRecords('Steps', {
@@ -198,7 +322,7 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
         endTime: end.toISOString(),
       },
     });
-    steps = stepsResult.records || [];
+    rawSteps = stepsResult.records || [];
   } catch (e: any) {
     const message = e?.message || String(e);
     console.log('[HealthConnect] Read steps error:', message);
@@ -213,14 +337,36 @@ export async function getHealthData(start: Date, end: Date): Promise<HealthDataR
         endTime: end.toISOString(),
       },
     });
-    sleep = sleepResult.records || [];
+    rawSleep = sleepResult.records || [];
   } catch (e: any) {
     const message = e?.message || String(e);
     console.log('[HealthConnect] Read sleep error:', message);
     errors.push(`SleepSession: ${message}`);
   }
 
-  return { steps, sleep, errors };
+  const stepSelection = selectStepRecords(rawSteps);
+  const sleepSelection = selectSleepRecords(rawSleep, start, end);
+
+  console.log('[HealthConnect] Steps origin totals:', stepSelection.originTotals, 'selected:', stepSelection.selectedOrigin);
+  console.log('[HealthConnect] Sleep origin hours:', sleepSelection.originHours, 'selected:', sleepSelection.selectedOrigin);
+
+  return {
+    steps: stepSelection.selected,
+    sleep: sleepSelection.selected,
+    errors,
+    diagnostics: {
+      steps: {
+        rawCount: rawSteps.length,
+        selectedOrigin: stepSelection.selectedOrigin,
+        originTotals: stepSelection.originTotals,
+      },
+      sleep: {
+        rawCount: rawSleep.length,
+        selectedOrigin: sleepSelection.selectedOrigin,
+        originHours: sleepSelection.originHours,
+      },
+    },
+  };
 }
 
 export const connectHealthConnect = initHealthConnect;
