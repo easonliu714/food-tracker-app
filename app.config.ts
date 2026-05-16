@@ -7,6 +7,7 @@ import { withAndroidManifest, ConfigPlugin } from "@expo/config-plugins";
 const bundleId = "space.manus.nutrition_tracker.t20251217000540";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
+const appVersion = "1.0.21";
 
 const env = {
   appName: 'Nomi',
@@ -42,7 +43,7 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   owner: "easonliu714s-personal-trainer",
-  version: "1.0.20",
+  version: appVersion,
   orientation: "portrait",
   scheme: "nourish_me", 
   updates: {
@@ -91,12 +92,6 @@ const config: ExpoConfig = {
         autoVerify: true,
         data: [ { scheme: env.scheme, host: "*" } ],
         category: ["BROWSABLE", "DEFAULT"],
-      },
-      // [新增] 確保 Health Connect 權限請求畫面能正確回調
-      {
-        action: "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE",
-        data: [ { scheme: env.scheme, host: "*" } ], // 注意：這裡通常不需要 data，但為了與插件相容保留
-        category: ["DEFAULT"],
       }
     ],
   },
@@ -105,21 +100,19 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
   },
   plugins: [
-    // 應用我們剛剛寫的 queries 修補
     withHealthConnectQueries,
-    
     ["react-native-health-connect", { 
         "rationaleActivityClassName": `${bundleId}.MainActivity`
     }],
-    "./plugins/withHealthConnectFix", // 你的修正檔可以保留，作為雙重保險
+    "./plugins/withHealthConnectFix",
     "./plugins/withDisableLinting",
     [
       "expo-build-properties",
       {
         android: {
-          minSdkVersion: 26,     
-          compileSdkVersion: 35, 
-          targetSdkVersion: 35,
+          minSdkVersion: 26,
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
         },
       },
     ],
