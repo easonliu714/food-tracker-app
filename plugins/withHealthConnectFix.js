@@ -3,23 +3,18 @@ const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins'
 /**
  * Health Connect compatibility patch for Expo prebuild.
  *
- * Why this exists:
- * - Expo's generic android.permissions field does not always materialize Android 14+
- *   Health Connect runtime permissions in the generated AndroidManifest.xml.
- * - If the final manifest does not explicitly declare health permissions, Android's
- *   Health Connect settings screen may not list the sideloaded APK as a health app,
- *   so users cannot grant Steps / Sleep access.
- * - This plugin makes the generated native project deterministic for APK testing.
+ * V1.0.22 update:
+ * - Android 14+ Health Connect expects apps to expose a VIEW_PERMISSION_USAGE
+ *   entry point protected by android.permission.START_VIEW_PERMISSION_USAGE.
+ * - Without this activity-alias, a sideloaded APK can fail to appear in the
+ *   Health Connect app permission list even when READ_STEPS / READ_SLEEP are
+ *   declared in the manifest.
  */
 module.exports = function withHealthConnectFix(config) {
-  // 1. Patch AndroidManifest.xml.
   config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults.manifest;
     const app = manifest.application[0];
 
-    // -------------------------------------------------------------------------
-    // A. Force Health Connect permissions into the manifest root.
-    // -------------------------------------------------------------------------
     const requiredPermissions = [
       'android.permission.ACTIVITY_RECOGNITION',
       'android.permission.health.READ_STEPS',
@@ -45,9 +40,6 @@ module.exports = function withHealthConnectFix(config) {
       }
     }
 
-    // -------------------------------------------------------------------------
-    // B. Make Health Connect package visible to this app.
-    // -------------------------------------------------------------------------
     if (!manifest.queries) {
       manifest.queries = [];
     }
@@ -64,9 +56,6 @@ module.exports = function withHealthConnectFix(config) {
       });
     }
 
-    // -------------------------------------------------------------------------
-    // C. Add Health Connect rationale intent filter to MainActivity.
-    // -------------------------------------------------------------------------
     const mainActivity = app.activity.find((a) => {
       return a.$['android:name'].includes('MainActivity');
     });
@@ -78,37 +67,53 @@ module.exports = function withHealthConnectFix(config) {
         mainActivity['intent-filter'] = [];
       }
 
-      const correctAction = 'androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE';
+      const rationaleAction = 'androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE';
 
-      // Remove old / wrong rationale filters first to avoid duplicate or malformed filters.
       mainActivity['intent-filter'] = mainActivity['intent-filter'].filter((filter) => {
         if (!filter.action) return true;
         return !filter.action.some((action) => {
           const actionName = action?.$?.['android:name'] || '';
-          return actionName.includes('ACTION_SHOW_PERMISSIONS_RATIONALE') && actionName !== correctAction;
+          return actionName.includes('ACTION_SHOW_PERMISSIONS_RATIONALE') && actionName !== rationaleAction;
         });
       });
 
-      const targetFilter = mainActivity['intent-filter'].find((filter) => {
-        return filter.action && filter.action.some((a) => a.$['android:name'] === correctAction);
+      const rationaleFilter = mainActivity['intent-filter'].find((filter) => {
+        return filter.action && filter.action.some((a) => a.$['android:name'] === rationaleAction);
       });
 
-      if (targetFilter) {
-        console.log('[HealthConnectFix] Correct rationale intent filter already exists. Verifying category.');
-        if (!targetFilter.category) {
-          targetFilter.category = [];
-        }
-        const hasDefaultCategory = targetFilter.category.some((c) => {
-          return c.$['android:name'] === 'android.intent.category.DEFAULT';
-        });
-        if (!hasDefaultCategory) {
-          targetFilter.category.push({ $: { 'android:name': 'android.intent.category.DEFAULT' } });
-        }
-      } else {
-        console.log('[HealthConnectFix] Rationale intent filter missing. Injecting.');
+      if (!rationaleFilter) {
+        console.log('[HealthConnectFix] Injecting Android 13- rationale intent filter.');
         mainActivity['intent-filter'].push({
-          action: [{ $: { 'android:name': correctAction } }],
+          action: [{ $: { 'android:name': rationaleAction } }],
           category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+        });
+      }
+
+      // Android 14+ Health Connect permission management entry point.
+      if (!app['activity-alias']) {
+        app['activity-alias'] = [];
+      }
+
+      const aliasName = '.ViewPermissionUsageActivity';
+      const hasHealthUsageAlias = app['activity-alias'].some((alias) => {
+        return alias?.$?.['android:name'] === aliasName;
+      });
+
+      if (!hasHealthUsageAlias) {
+        console.log('[HealthConnectFix] Injecting Android 14+ Health Connect activity-alias.');
+        app['activity-alias'].push({
+          $: {
+            'android:name': aliasName,
+            'android:exported': 'true',
+            'android:targetActivity': mainActivity.$['android:name'],
+            'android:permission': 'android.permission.START_VIEW_PERMISSION_USAGE',
+          },
+          'intent-filter': [
+            {
+              action: [{ $: { 'android:name': 'android.intent.action.VIEW_PERMISSION_USAGE' } }],
+              category: [{ $: { 'android:name': 'android.intent.category.HEALTH_PERMISSIONS' } }],
+            },
+          ],
         });
       }
     } else {
@@ -118,7 +123,6 @@ module.exports = function withHealthConnectFix(config) {
     return config;
   });
 
-  // 2. Patch MainActivity.kt to register the native permission delegate.
   config = withMainActivity(config, async (config) => {
     let src = config.modResults.contents;
     const packageMatch = src.match(/package\s+[\w.]+/);
