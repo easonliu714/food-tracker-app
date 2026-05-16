@@ -1,108 +1,148 @@
 const { withMainActivity, withAndroidManifest } = require('@expo/config-plugins');
 
+/**
+ * Health Connect compatibility patch for Expo prebuild.
+ *
+ * Why this exists:
+ * - Expo's generic android.permissions field does not always materialize Android 14+
+ *   Health Connect runtime permissions in the generated AndroidManifest.xml.
+ * - If the final manifest does not explicitly declare health permissions, Android's
+ *   Health Connect settings screen may not list the sideloaded APK as a health app,
+ *   so users cannot grant Steps / Sleep access.
+ * - This plugin makes the generated native project deterministic for APK testing.
+ */
 module.exports = function withHealthConnectFix(config) {
-  
-  // 1. 針對 AndroidManifest.xml 進行強制修正
+  // 1. Patch AndroidManifest.xml.
   config = withAndroidManifest(config, async (config) => {
     const manifest = config.modResults.manifest;
     const app = manifest.application[0];
 
-    // 尋找 MainActivity (支援 .MainActivity 或 完整路徑)
-    const mainActivity = app.activity.find(
-      (a) => a.$['android:name'].includes('MainActivity')
-    );
+    // -------------------------------------------------------------------------
+    // A. Force Health Connect permissions into the manifest root.
+    // -------------------------------------------------------------------------
+    const requiredPermissions = [
+      'android.permission.ACTIVITY_RECOGNITION',
+      'android.permission.health.READ_STEPS',
+      'android.permission.health.READ_SLEEP',
+      'android.permission.health.READ_EXERCISE',
+      'android.permission.health.WRITE_STEPS',
+    ];
+
+    if (!manifest['uses-permission']) {
+      manifest['uses-permission'] = [];
+    }
+
+    for (const permissionName of requiredPermissions) {
+      const exists = manifest['uses-permission'].some((entry) => {
+        return entry?.$?.['android:name'] === permissionName;
+      });
+
+      if (!exists) {
+        console.log(`[HealthConnectFix] Adding uses-permission: ${permissionName}`);
+        manifest['uses-permission'].push({
+          $: { 'android:name': permissionName },
+        });
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // B. Make Health Connect package visible to this app.
+    // -------------------------------------------------------------------------
+    if (!manifest.queries) {
+      manifest.queries = [];
+    }
+
+    const healthConnectPackageName = 'com.google.android.apps.healthdata';
+    const hasQuery = manifest.queries.some((q) => {
+      return q.package && q.package.some((p) => p.$ && p.$['android:name'] === healthConnectPackageName);
+    });
+
+    if (!hasQuery) {
+      console.log('[HealthConnectFix] Adding <queries> tag for Health Connect.');
+      manifest.queries.push({
+        package: [{ $: { 'android:name': healthConnectPackageName } }],
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // C. Add Health Connect rationale intent filter to MainActivity.
+    // -------------------------------------------------------------------------
+    const mainActivity = app.activity.find((a) => {
+      return a.$['android:name'].includes('MainActivity');
+    });
 
     if (mainActivity) {
-      console.log("[HealthConnectFix] Found MainActivity:", mainActivity.$['android:name']);
+      console.log('[HealthConnectFix] Found MainActivity:', mainActivity.$['android:name']);
 
       if (!mainActivity['intent-filter']) {
         mainActivity['intent-filter'] = [];
       }
 
-      // 定義正確的 Action
-      // 注意：這是 Health SDK 用來啟動你的 App 權限說明頁面的 Action
-      const correctAction = "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE";
-      
-      // 檢查是否已經存在正確的 Filter
-      const hasCorrectFilter = mainActivity['intent-filter'].some(filter => 
-        filter.action && filter.action.some(a => a.$['android:name'] === correctAction)
-      );
+      const correctAction = 'androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE';
 
-      if (hasCorrectFilter) {
-        console.log("[HealthConnectFix] Correct Intent Filter already exists. Verifying category...");
-        // 確保該 Filter 也有 DEFAULT category
-        const targetFilter = mainActivity['intent-filter'].find(filter => 
-            filter.action && filter.action.some(a => a.$['android:name'] === correctAction)
-        );
-        if (targetFilter && !targetFilter.category) {
-             targetFilter.category = [];
+      // Remove old / wrong rationale filters first to avoid duplicate or malformed filters.
+      mainActivity['intent-filter'] = mainActivity['intent-filter'].filter((filter) => {
+        if (!filter.action) return true;
+        return !filter.action.some((action) => {
+          const actionName = action?.$?.['android:name'] || '';
+          return actionName.includes('ACTION_SHOW_PERMISSIONS_RATIONALE') && actionName !== correctAction;
+        });
+      });
+
+      const targetFilter = mainActivity['intent-filter'].find((filter) => {
+        return filter.action && filter.action.some((a) => a.$['android:name'] === correctAction);
+      });
+
+      if (targetFilter) {
+        console.log('[HealthConnectFix] Correct rationale intent filter already exists. Verifying category.');
+        if (!targetFilter.category) {
+          targetFilter.category = [];
         }
-        if (targetFilter && !targetFilter.category.some(c => c.$['android:name'] === "android.intent.category.DEFAULT")) {
-             targetFilter.category.push({ $: { "android:name": "android.intent.category.DEFAULT" } });
-             console.log("[HealthConnectFix] Added missing DEFAULT category.");
+        const hasDefaultCategory = targetFilter.category.some((c) => {
+          return c.$['android:name'] === 'android.intent.category.DEFAULT';
+        });
+        if (!hasDefaultCategory) {
+          targetFilter.category.push({ $: { 'android:name': 'android.intent.category.DEFAULT' } });
         }
       } else {
-        console.log("[HealthConnectFix] Intent Filter missing. FORCING injection.");
-        
-        // 移除所有可能錯誤的舊設定 (包含 android.intent.action... 開頭的錯誤版本)
-        mainActivity['intent-filter'] = mainActivity['intent-filter'].filter(filter => {
-            if (!filter.action) return true;
-            const actionName = filter.action[0].$['android:name'];
-            // 移除任何看似 Health Rationale 但不是正確 androidx 的設定
-            return !actionName.includes("ACTION_SHOW_PERMISSIONS_RATIONALE");
-        });
-
-        // 注入正確的設定
+        console.log('[HealthConnectFix] Rationale intent filter missing. Injecting.');
         mainActivity['intent-filter'].push({
-          action: [{ $: { "android:name": correctAction } }],
-          category: [{ $: { "android:name": "android.intent.category.DEFAULT" } }]
+          action: [{ $: { 'android:name': correctAction } }],
+          category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
         });
       }
     } else {
-      console.error("[HealthConnectFix] ⚠️ Could not find MainActivity in Manifest!");
-    }
-    
-    // 確保 <queries> 存在
-    if (!manifest.queries) {
-      manifest.queries = [];
-    }
-    const healthConnectPackageName = "com.google.android.apps.healthdata";
-    const hasQuery = manifest.queries.some(q => 
-      q.package && q.package.some(p => p.$ && p.$["android:name"] === healthConnectPackageName)
-    );
-    if (!hasQuery) {
-      console.log("[HealthConnectFix] Adding <queries> tag for Health Connect.");
-      manifest.queries.push({
-        package: [{ $: { "android:name": healthConnectPackageName } }]
-      });
+      console.error('[HealthConnectFix] Could not find MainActivity in Manifest.');
     }
 
     return config;
   });
 
-  // 2. MainActivity.kt 程式碼修正 (這部分通常沒問題，保持原樣)
+  // 2. Patch MainActivity.kt to register the native permission delegate.
   config = withMainActivity(config, async (config) => {
     let src = config.modResults.contents;
     const packageMatch = src.match(/package\s+[\w.]+/);
-    
+
     if (packageMatch) {
       const packageLine = packageMatch[0];
       const neededImports = [
-          'android.os.Bundle',
-          'dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate'
+        'android.os.Bundle',
+        'dev.matinzd.healthconnect.permissions.HealthConnectPermissionDelegate',
       ];
-      let importsToAdd = [];
+      const importsToAdd = [];
+
       for (const imp of neededImports) {
-          if (!src.includes(`import ${imp}`)) {
-              importsToAdd.push(`import ${imp}`);
-          }
+        if (!src.includes(`import ${imp}`)) {
+          importsToAdd.push(`import ${imp}`);
+        }
       }
+
       if (importsToAdd.length > 0) {
-          src = src.replace(packageLine, `${packageLine}\n${importsToAdd.join('\n')}`);
+        src = src.replace(packageLine, `${packageLine}\n${importsToAdd.join('\n')}`);
       }
     }
 
-    const delegateCode = `HealthConnectPermissionDelegate.setPermissionDelegate(this)`;
+    const delegateCode = 'HealthConnectPermissionDelegate.setPermissionDelegate(this)';
     if (!src.includes(delegateCode)) {
       const superOnCreateRegex = /super\.onCreate\([^)]*\)/;
       if (src.includes('fun onCreate')) {
@@ -124,6 +164,7 @@ module.exports = function withHealthConnectFix(config) {
         }
       }
     }
+
     config.modResults.contents = src;
     return config;
   });
