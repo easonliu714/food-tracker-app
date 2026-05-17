@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Apply pre-build i18n patches
+        run: node scripts/patch-activity-editor-i18n.js
+
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
