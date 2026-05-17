@@ -42,6 +42,7 @@ import { useTutorial } from '@/context/TutorialContext';
 import { TutorialTarget } from '@/components/TutorialTarget';
 import { getTutorialState, TUTORIAL_KEYS } from '@/lib/tutorial-storage';
 import { getTutorialSteps } from '@/constants/tutorial-steps';
+import { dailyStepsNameVariants, healthActivityText, isHealthDailyStepsName, localizeActivityName } from '@/lib/activity-localization';
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEAL_ORDER = ["breakfast", "lunch", "afternoon_tea", "dinner", "late_night"];
@@ -88,8 +89,7 @@ const formatTimeInput = (text: string) => {
 
     // 如果輸入 3 位數 (例如 652)，且第一位數字大於 2 (代表不可能是 65:xx)，自動補 0
     // 或者單純使用者打完 3 碼，我們就暫時不格式化，等到第 4 碼或 onBlur (這裡簡化處理)
-    // 這裡採用: 當長度為 3 且使用者停止輸入時的邏輯比較難在 onChangeText 實作
-    // 改為：只要長度為 3，嘗試解析。若是 "652"，我們假設是 "0652"
+    // 這裡採用: 當長度為 3，嘗試解析。若是 "652"，我們假設是 "0652"
     if (cleaned.length === 3) {
         // 簡單判斷：如果前兩碼大於 23 (小時)，那很有可能是少打 0
         const potentialHour = parseInt(cleaned.substring(0, 2));
@@ -221,7 +221,7 @@ export default function HomeScreen() {
       } catch(e) { console.error(e); }
   };
 
-  // [修改] 強化的數據同步邏輯：Health Connect -> 失敗 -> Pedometer
+  // [V1.0.27] 強化的數據同步邏輯：Health Connect -> 失敗 -> Pedometer，並統一多國語名稱
   const syncHealthData = async (dateStr: string) => {
       if (isSyncing) return;
       setIsSyncing(true);
@@ -243,13 +243,13 @@ export default function HomeScreen() {
                   const durationMs = new Date(s.endTime).getTime() - new Date(s.startTime).getTime();
                   totalSleepHours += durationMs / (1000 * 60 * 60);
               });
-              usedSource = "Health Connect";
+              usedSource = healthActivityText('health_connect_source', lang);
           } else {
               // 2. Health Connect 失敗，改用 Expo Sensors Pedometer (僅步數)
               // [修正 2] 增加 Android 防呆，因為 Expo Android Pedometer 不支援 getStepCountAsync
               if (Platform.OS === 'android') {
                   // Android 備案：在此處可以選擇不做任何事，或者僅 alert 提示
-                  Alert.alert(t('tip', lang), "Step history syncing requires Health Connect on Android.");
+                  Alert.alert(t('tip', lang), healthActivityText('step_history_requires_health_connect', lang));
                   console.log("Skipping Pedometer history sync on Android (Not supported)");
               } else {
                   // iOS 或其他支援平台
@@ -268,7 +268,7 @@ export default function HomeScreen() {
                           const result = await Pedometer.getStepCountAsync(start, end);
                           if (result) {
                               totalSteps = result.steps;
-                              usedSource = "Pedometer (Motion)";
+                              usedSource = healthActivityText('pedometer_source', lang);
                           }
                       } else {
                           Alert.alert(t('tip', lang), t('permission_denied', lang) || "Physical Activity Permission Denied");
@@ -280,18 +280,26 @@ export default function HomeScreen() {
           // 3. 寫入資料庫邏輯 (通用)
           if (totalSteps > 0) {
               setHealthSteps(totalSteps);
-              const existingSteps = await db.select().from(activityLogs).where(and(eq(activityLogs.date, dateStr), eq(activityLogs.activityName, "Daily Steps")));
+              const dateActivities = await db.select().from(activityLogs).where(eq(activityLogs.date, dateStr));
+              const existingSteps = dateActivities.filter((act) => isHealthDailyStepsName(act.activityName) || isHealthDailyStepsName(act.category));
               
               const calBurned = totalSteps * 0.04; // 簡單估算
+              const localizedDailyStepsName = healthActivityText('health_daily_steps', lang);
+              const localizedDailyStepsCategory = healthActivityText('health_daily_steps_category', lang);
               
               if (existingSteps.length > 0) {
-                  await db.update(activityLogs).set({ steps: totalSteps, caloriesBurned: calBurned }).where(eq(activityLogs.id, existingSteps[0].id));
+                  await db.update(activityLogs).set({
+                      activityName: localizedDailyStepsName,
+                      category: localizedDailyStepsCategory,
+                      steps: totalSteps,
+                      caloriesBurned: calBurned
+                  }).where(eq(activityLogs.id, existingSteps[0].id));
               } else {
                   await db.insert(activityLogs).values({
                       date: dateStr,
                       loggedAt: new Date(),
-                      activityName: "Daily Steps",
-                      category: "walking",
+                      activityName: localizedDailyStepsName,
+                      category: localizedDailyStepsCategory,
                       durationMinutes: 0,
                       caloriesBurned: calBurned,
                       steps: totalSteps
@@ -312,14 +320,14 @@ export default function HomeScreen() {
           }
           
           if (totalSteps > 0 || totalSleepHours > 0) {
-             Alert.alert(t('success', lang), `${t('sync_success', lang)} (${usedSource})`);
+             Alert.alert(t('success', lang), `${healthActivityText('sync_success', lang)} (${usedSource})`);
           } else {
-             Alert.alert(t('tip', lang), "No new data found");
+             Alert.alert(t('tip', lang), healthActivityText('no_new_health_data', lang));
           }
 
       } catch (e: any) {
           console.log("Sync Error:", e);
-          Alert.alert("Sync Error", e.message);
+          Alert.alert(healthActivityText('sync_error', lang), e.message);
       } finally {
           setIsSyncing(false);
           loadData(); 
@@ -414,7 +422,7 @@ export default function HomeScreen() {
       setDailyActivities(activityRes);
       
       const dbSteps = activityRes.reduce((sum, act) => sum + (act.steps || 0), 0);
-      const healthConnectLog = activityRes.find(a => a.activityName === "Daily Steps");
+      const healthConnectLog = activityRes.find(a => isHealthDailyStepsName(a.activityName) || isHealthDailyStepsName(a.category));
       const healthStepsVal = healthConnectLog ? (healthConnectLog.steps || 0) : 0;
       setHealthSteps(healthStepsVal > 0 ? healthStepsVal : dbSteps);
 
@@ -432,7 +440,8 @@ export default function HomeScreen() {
       setRecentFoods(frequentFoodsRes);
 
       const acts = await getFrequentActivities();
-      setFrequentActivities(acts);
+      const normalizedActs = acts.map((name: string) => localizeActivityName(name, lang));
+      setFrequentActivities(Array.from(new Set(normalizedActs)));
 
     } catch (e) { console.error(e); } finally { setIsLoading(false); setRefreshing(false); }
   };
@@ -497,8 +506,11 @@ export default function HomeScreen() {
   };
 
   const getActivityIconInfo = (name: string) => {
+    if (isHealthDailyStepsName(name)) {
+        return { icon: 'walk', library: 'MaterialCommunityIcons' };
+    }
     for (const cat of ACTIVITY_RAW) {
-        const item = cat.items.find(i => t(i.id, lang) === name);
+        const item = cat.items.find(i => t(i.id, lang) === name || i.id === name);
         if (item) {
             return { icon: item.icon, library: item.library };
         }
@@ -891,10 +903,11 @@ return (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 8, minHeight: 40}}>
                         {frequentActivities.length > 0 ? frequentActivities.map((name, idx) => {
                             const { icon, library } = getActivityIconInfo(name);
+                            const displayName = localizeActivityName(name, lang);
                             return (
-                                <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: name } })}>
+                                <TouchableOpacity key={idx} style={[styles.quickChip, {borderColor: theme.icon, flexDirection:'row', alignItems:'center'}]} onPress={() => router.push({ pathname: "/activity-editor", params: { activityName: displayName } })}>
                                     <ActivityIcon library={library} name={icon} size={16} color={theme.text} style={{marginRight: 4}} />
-                                    <ThemedText>{name}</ThemedText>
+                                    <ThemedText>{displayName}</ThemedText>
                                 </TouchableOpacity>
                             );
                         }) : (
@@ -908,7 +921,7 @@ return (
                         <ThemedText type="defaultSemiBold">{t('exercise', lang)}</ThemedText>
                         <ThemedText style={{fontSize:12, color:'#FF9500'}}>-{Math.round(burnedCalories)} kcal</ThemedText>
                     </View>
-                    {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{act.activityName}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} min</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
+                    {dailyActivities.length === 0 ? <View style={styles.emptyLogPlaceholder}><ThemedText style={{color:theme.icon, fontSize:13}}>{t('no_records', lang)}</ThemedText></View> : dailyActivities.map(act => (<Swipeable key={act.id} renderRightActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#FF3B30', width: 70}]} onPress={async()=>{await db.delete(activityLogs).where(eq(activityLogs.id, act.id)); loadData();}}><Ionicons name="trash" size={24} color="white"/></TouchableOpacity>} renderLeftActions={()=><TouchableOpacity style={[styles.actionBtnBase, {backgroundColor: '#34C759', width: 70}]} onPress={() => router.push({ pathname: "/activity-editor", params: { logId: act.id } })}><Ionicons name="create" size={24} color="white"/></TouchableOpacity>}><View style={[styles.logItem, {backgroundColor: theme.background}]}><View><ThemedText>{localizeActivityName(act.activityName, lang)}</ThemedText><ThemedText style={{fontSize:12, color:theme.icon}}>{act.durationMinutes} {healthActivityText('duration_min', lang)}</ThemedText></View><ThemedText style={{color:'#FF9500'}}>-{Math.round(act.caloriesBurned)} kcal</ThemedText></View></Swipeable>))}
                 </View>
             </View>
         </TutorialTarget>
