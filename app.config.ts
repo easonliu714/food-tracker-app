@@ -7,7 +7,7 @@ import { withAndroidManifest, ConfigPlugin } from "@expo/config-plugins";
 const bundleId = "space.manus.nutrition_tracker.t20251217000540";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
-const appVersion = "1.0.26";
+const appVersion = "1.0.27";
 
 const env = {
   appName: 'Nomi',
